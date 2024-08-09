@@ -46,7 +46,6 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const REDIS_POOL_SIZE = 5;
 const MAX_CACHE_USAGE = 0.9;
 const MAX_PROCESSING_TIME = 59 * 1000; // 59 секунд
-const ADMIN_NOTIFICATION_THRESHOLD = 0.2; // Порог уверенности для уведомления админа
 const CHECK_MSG_TIMEOUT = 55000; // 55 секунд
 
 
@@ -883,11 +882,6 @@ async function checkGPT(messages: Api.Message[], sysInfo: SysInfo): Promise<Chec
 
     const response = deepCheckResult.isSpam ? '😡 SPAM' : '😌 NO';
     await saveToCache(messages[0], response, deepCheckResult.spamScore);
-
-    // Проверка на низкую уверенность и уведомление админа
-    if (Math.abs(deepCheckResult.spamScore - 10) < ADMIN_NOTIFICATION_THRESHOLD * 10) {
-      await notifyAdmin(`Low confidence classification for report ${sysInfo.reportId}. Score: ${deepCheckResult.spamScore}`);
-    }
 
     return {
       isSpam: deepCheckResult.isSpam,
