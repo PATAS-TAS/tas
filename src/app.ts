@@ -885,7 +885,7 @@ async function checkGPT(messages: Api.Message[], sysInfo: SysInfo): Promise<Chec
     await saveToCache(messages[0], response, deepCheckResult.spamScore);
 
     // Проверка на низкую уверенность и уведомление админа
-    if (Math.abs(deepCheckResult.spamScore - 50) < ADMIN_NOTIFICATION_THRESHOLD * 50) {
+    if (Math.abs(deepCheckResult.spamScore - 10) < ADMIN_NOTIFICATION_THRESHOLD * 10) {
       await notifyAdmin(`Low confidence classification for report ${sysInfo.reportId}. Score: ${deepCheckResult.spamScore}`);
     }
 
