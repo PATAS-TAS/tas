@@ -46,6 +46,8 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const REDIS_POOL_SIZE = 5;
 const MAX_CACHE_USAGE = 0.9;
 const MAX_PROCESSING_TIME = 59 * 1000; // 59 секунд
+const ADMIN_NOTIFICATION_THRESHOLD = 0.2; // Порог уверенности для уведомления админа
+const CHECK_MSG_TIMEOUT = 55000; // 55 секунд
 
 
 let recoveryTimer: NodeJS.Timeout | null = null;
@@ -57,6 +59,8 @@ let isProcessing = false;
 let isVisionEnabled = true; // переключатель анализа медиа
 let enabledChecks = new Set(['cache', 'obvious', 'gpt']); // список включенных проверок
 let processingStartTime: number | null = null;
+let lastCheckMsgTime = Date.now();
+let checkMsgTimeoutTimer: NodeJS.Timeout | null = null;
 
 
 // INTERFACES
@@ -318,6 +322,15 @@ ID: ${message.id}
 Text: ${message.message?.substring(0, 100) || '[No text content]'}${message.message && message.message.length > 100 ? '...' : ''}
 Media: ${message.media ? getMediaType(message.media) : 'No'}
 `);
+
+      // Обновляем время последнего полученного checkMsg
+      lastCheckMsgTime = Date.now();
+
+      // Сбрасываем существующий таймер и устанавливаем новый
+      if (checkMsgTimeoutTimer) {
+        clearTimeout(checkMsgTimeoutTimer);
+      }
+      checkMsgTimeoutTimer = setTimeout(handleCheckMsgTimeout, CHECK_MSG_TIMEOUT);
     }
   } catch (error) {
     console.error("Error handling check message:", error);
@@ -871,6 +884,11 @@ async function checkGPT(messages: Api.Message[], sysInfo: SysInfo): Promise<Chec
     const response = deepCheckResult.isSpam ? '😡 SPAM' : '😌 NO';
     await saveToCache(messages[0], response, deepCheckResult.spamScore);
 
+    // Проверка на низкую уверенность и уведомление админа
+    if (Math.abs(deepCheckResult.spamScore - 50) < ADMIN_NOTIFICATION_THRESHOLD * 50) {
+      await notifyAdmin(`Low confidence classification for report ${sysInfo.reportId}. Score: ${deepCheckResult.spamScore}`);
+    }
+
     return {
       isSpam: deepCheckResult.isSpam,
       layer: 5,
@@ -1313,6 +1331,15 @@ async function cacheResult(messages: Api.Message[], result: ResultInfo): Promise
   }
 }
 
+async function handleCheckMsgTimeout(): Promise<void> {
+  const timeSinceLastCheckMsg = Date.now() - lastCheckMsgTime;
+  if (timeSinceLastCheckMsg >= CHECK_MSG_TIMEOUT) {
+    console.log("No checkMsg received for 55 seconds");
+    await notifyAdmin("No checkMsg received for 55 seconds");
+    await client.sendMessage(botId, { message: "/undo" });
+  }
+}
+
 // CACHE MANAGEMENT
 //--------------------------------------------------
 async function saveToCache(message: Api.Message, response: string, gptScore?: number): Promise<void> {
@@ -1493,6 +1520,10 @@ async function main() {
     console.log("Bot is ready...");
     await client.connect();
     setInterval(processBuffer, 1000);
+    
+    // Инициализируем первый таймер для checkMsg
+    checkMsgTimeoutTimer = setTimeout(handleCheckMsgTimeout, CHECK_MSG_TIMEOUT);
+    
     await notifyAdmin("✅");
 
   } catch (error) {
