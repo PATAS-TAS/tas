@@ -1097,6 +1097,10 @@ Spam indicators (treat these more strictly):
 - Invitations for private meetings or services without clear context
 - Use of excessive emojis or symbols to bypass text filters
 - Messages encouraging users to search for specific terms or usernames
+- Promises of easy money or quick returns on investment
+- Claims of working alongside studies or current job with minimal effort
+- Requests to contact specific usernames for more information about earning opportunities
+- Messages in languages different from the group's primary language, especially if promoting financial opportunities
 
 Non-spam indicators:
 - Simple greetings or introductions (e.g., "Hi", "Hello", "Good morning")
@@ -1119,8 +1123,8 @@ Ambiguous cases:
 - For political or controversial content, prioritize free speech unless clearly harmful
 - Err on the side of caution for explicit invitations or offers, but allow implicit or ambiguous content if not clearly spam
 
-Consider the message content first, then the group context "${sysInfo.source}". Be cautious of commercial spam and explicit content, but allow for normal greetings and short social interactions, even in groups with suspicious names.
-IMPORTANT: Simple greetings or short, neutral messages should not be classified as spam solely based on the group's name or context. Even in groups with suspicious names, allow for the possibility of normal social interactions unless there's clear evidence of spam behavior.
+Consider the message content first, then the group context. Be cautious of commercial spam and explicit content, but allow for normal greetings and short social interactions, even in groups with suspicious names.
+IMPORTANT: Simple greetings or short, neutral messages should not be classified as spam solely based on the group's name or context. Even in groups with suspicious names, allow for the possibility of normal social interactions unless there's clear evidence of spam behavior. However, be extra vigilant about messages promising easy money or quick returns, especially if they're in a language different from the group's primary language.
 `;
 
   const userPrompt = `Analyze:
