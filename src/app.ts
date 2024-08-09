@@ -1107,7 +1107,9 @@ Ambiguous cases:
 - For political or controversial content, prioritize free speech unless clearly harmful
 - Err on the side of caution for explicit invitations or offers, but allow implicit or ambiguous content if not clearly spam
 
-IMPORTANT: Simple greetings or short, neutral messages should not be classified as spam solely based on the group's name or context. Even in groups with suspicious names, allow for the possibility of normal social interactions unless there's clear evidence of spam behavior.`;
+Consider the message content first, then the group context "${sysInfo.source}". Be cautious of commercial spam and explicit content, but allow for normal greetings and short social interactions, even in groups with suspicious names.
+IMPORTANT: Simple greetings or short, neutral messages should not be classified as spam solely based on the group's name or context. Even in groups with suspicious names, allow for the possibility of normal social interactions unless there's clear evidence of spam behavior.
+`;
 
   const userPrompt = `Analyze:
 Message: "${message}"
@@ -1116,8 +1118,6 @@ Source: ${sysInfo.source}
 Sender: ${sysInfo.sender}
 Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
 Telegram Spam Probability: ${sysInfo.telegramSpamProbability}
-
-Consider the message content first, then the group context "${sysInfo.source}". Be cautious of commercial spam and explicit content, but allow for normal greetings and short social interactions, even in groups with suspicious names. A simple "Hi" is very likely not spam unless part of a clear pattern of suspicious behavior.
 
 Respond with JSON only:
 {
@@ -1129,7 +1129,7 @@ Respond with JSON only:
   try {
     const response = await retryGptRequest(
       () => openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4o-2024-08-06",
         messages: [
           { role: "system", content: gptPrompt },
           { role: "user", content: userPrompt }
