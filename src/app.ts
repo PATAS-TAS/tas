@@ -52,7 +52,7 @@ const CHECK_MSG_TIMEOUT = 55000; // 55 секунд
 let recoveryTimer: NodeJS.Timeout | null = null;
 let nextTimer: NodeJS.Timeout | null = null;
 let client: TelegramClient;
-let processInterval = 1000;
+let processInterval = 300;
 let isAutoMode = true; // переключатель авто режима
 let isProcessing = false;
 let isVisionEnabled = true; // переключатель анализа медиа
@@ -1146,13 +1146,13 @@ Respond with JSON only:
   try {
     const response = await retryGptRequest(
       () => openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         messages: [
           { role: "system", content: gptPrompt },
           { role: "user", content: userPrompt }
         ],
         max_tokens: 1000,
-        temperature: 0.2,
+        temperature: 0.1,
       }),
       2,
       50000,
