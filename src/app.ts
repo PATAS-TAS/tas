@@ -154,7 +154,8 @@ class ObviousChecker extends SpamChecker {
 
 class GPTChecker extends SpamChecker {
   check: CheckFunction = async (messages, sysInfo) => {
-    return checkGPT(messages, sysInfo);
+    const { preprocessedMessage, visionResults } = await preprocessAndAnalyze(messages);
+    return checkGPT(messages, sysInfo, preprocessedMessage, visionResults);
   }
 }
 
@@ -369,7 +370,10 @@ async function sysMsg(event: NewMessageEvent): Promise<void> {
 
     // Стандартная обработка системной информации
     const complaintMatch = message.match(/😱(\d+)/);
-    if (!complaintMatch) return;
+    if (!complaintMatch) {
+      console.log("Message doesn't contain complaint count, skipping system info processing");
+      return;
+    }
 
     let sysInfo: SysInfo = {
       hasLink: '',
@@ -534,15 +538,15 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
 
       if ((!result || result.isSpam === undefined) && enabledChecks.has('gpt')) {
         try {
-          const { preprocessedMessage, visionResults } = await preprocessAndAnalyze(messages);
-          result = await checkGPT(messages, sysInfo);
+          result = await gptChecker.check(messages, sysInfo);
           if (result) console.log("GPT check result:", result);
         } catch (error) {
-          if (error instanceof Error && error.message === 'Vision API analysis failed') {
-            console.log("Vision API analysis failed, /undo already sent");
-            return;
-          }
-          throw error;
+          console.error("Error in GPT check:", error);
+          result = { 
+            isSpam: undefined,
+            layer: 5, 
+            reason: "Error in GPT check, undo required",
+          };
         }
       }
     }
@@ -568,7 +572,6 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
     } else {
       await notifyAdmin(`Error processing report: ${String(error)}`);
     }
-    // В случае ошибки также отправляем /undo, если это еще не было сделано
     await client.sendMessage(botId, { message: "/undo" });
     startRecovery();
   } finally {
@@ -908,9 +911,12 @@ async function checkObvious(messages: Api.Message[], sysInfo: SysInfo): Promise<
 
 //--------------------------------------------------
 
-async function checkGPT(messages: Api.Message[], sysInfo: SysInfo): Promise<CheckResult> {
-  const { preprocessedMessage, visionResults } = await preprocessAndAnalyze(messages);
-
+async function checkGPT(
+  messages: Api.Message[], 
+  sysInfo: SysInfo, 
+  preprocessedMessage: string, 
+  visionResults: VisionResult[]
+): Promise<CheckResult> {
   try {
     isProcessing = true;
 
@@ -1103,7 +1109,6 @@ async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionRes
 
   let partialResult: Partial<VisionResult> = { type: mediaType, labels: [], safeSearch: {} };
 
-  // Обрабатываем текст, если он есть
   if (mediaMessage.message) {
     partialResult.textAnnotations = [{ description: mediaMessage.message }];
   }
@@ -1116,50 +1121,20 @@ async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionRes
   let imageBuffer: Buffer | null = null;
 
   try {
-    if (mediaMessage.media instanceof Api.MessageMediaPhoto) {
-      imageBuffer = await client.downloadMedia(mediaMessage.media) as Buffer;
-    } else if (mediaMessage.media instanceof Api.MessageMediaDocument) {
-      const document = mediaMessage.media.document;
-      if (document instanceof Api.Document) {
-        const mimeType = document.mimeType;
-        if (mimeType.startsWith('image/') || mimeType === 'application/x-tgsticker') {
-          imageBuffer = await client.downloadMedia(mediaMessage.media) as Buffer;
-        } else if (mimeType.startsWith('video/')) {
-          const thumbnail = document.thumbs?.find(thumb => thumb instanceof Api.PhotoSize) as Api.PhotoSize | undefined;
-          if (thumbnail) {
-            imageBuffer = await client.downloadMedia(mediaMessage.media, { thumb: 0 }) as Buffer;
-          }
-        }
-      }
-    } else if (mediaMessage.media instanceof Api.MessageMediaStory) {
-      imageBuffer = await client.downloadMedia(mediaMessage.media) as Buffer;
-    }
-
+    imageBuffer = await client.downloadMedia(mediaMessage.media!) as Buffer;
     if (imageBuffer) {
       console.log(`Successfully downloaded media, size: ${imageBuffer.length} bytes`);
-      try {
-        const { labels, safeSearch, textAnnotations } = await analyzeImageWithVision(imageBuffer);
-        partialResult = { ...partialResult, labels, safeSearch, textAnnotations: [...(partialResult.textAnnotations || []), ...(textAnnotations || [])] };
-      } catch (visionError) {
-        console.error(`Error in Vision API analysis:`, visionError);
-        // Не отправляем /undo, если есть текст
-        if (!mediaMessage.message) {
-          await client.sendMessage(botId, { message: "/undo" });
-          throw new Error('Vision API analysis failed');
-        }
-      }
+      const { labels, safeSearch, textAnnotations } = await analyzeImageWithVision(imageBuffer);
+      partialResult = { ...partialResult, labels, safeSearch, textAnnotations: [...(partialResult.textAnnotations || []), ...(textAnnotations || [])] };
     }
   } catch (error) {
     console.error(`Error downloading or processing media:`, error);
-    // Не отправляем /undo, если есть текст
-    if (!mediaMessage.message) {
-      await client.sendMessage(botId, { message: "/undo" });
-      throw error;
-    }
+    // Не отправляем /undo здесь, это будет обработано в вызывающей функции
   }
 
   return partialResult as VisionResult;
 }
+
 
 // GPT PROMPTS AND FUNCTIONS
 //--------------------------------------------------
