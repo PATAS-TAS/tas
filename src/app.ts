@@ -1115,7 +1115,7 @@ Analyze the given message and classify it as spam (1) or not spam (0). Provide a
 
 Consider: Message intent, group context. A single complaint or the presence of emojis/short text does NOT automatically indicate spam. Err on the side of caution - if in doubt, classify as not spam.
 
-Output: JSON with classification, category, and confidence score.`;
+Output: JSON with classification, category, and confidence score. Do not use markdown formatting or JSON code blocks in your response.`;
 
   const userPrompt = `Analyze:
 Message: "${message}"
@@ -1151,7 +1151,17 @@ Respond with JSON:
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error('Empty GPT-4o response');
 
-    const result = JSON.parse(content);
+    // Удаляем возможные markdown-теги JSON
+    const cleanedContent = content.replace(/```json\n?|\n?```/g, '').trim();
+    
+    let result;
+    try {
+      result = JSON.parse(cleanedContent);
+    } catch (parseError) {
+      console.error('Error parsing GPT response:', parseError);
+      console.log('Raw GPT response:', content);
+      throw new Error('Invalid GPT response structure');
+    }
     
     if (typeof result.classification !== 'number' || 
         typeof result.category !== 'string' ||
@@ -1186,7 +1196,7 @@ async function performSimplifiedCheck(message: string): Promise<{
   category: string;
 }> {
   try {
-    const simplePrompt = "Is this message spam? Answer with JSON: {\"isSpam\": boolean, \"category\": string}\n\n" + message;
+    const simplePrompt = "Is this message spam? Answer with JSON: {\"isSpam\": boolean, \"category\": string}. Do not use markdown formatting or JSON code blocks in your response.\n\n" + message;
     const simpleResponse = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: simplePrompt }],
@@ -1194,7 +1204,23 @@ async function performSimplifiedCheck(message: string): Promise<{
       temperature: 0.0,
     });
     const simpleAnswer = simpleResponse.choices[0]?.message?.content || '{}';
-    const result = JSON.parse(simpleAnswer);
+    
+    // Удаляем возможные markdown-теги JSON
+    const cleanedAnswer = simpleAnswer.replace(/```json\n?|\n?```/g, '').trim();
+    
+    let result;
+    try {
+      result = JSON.parse(cleanedAnswer);
+    } catch (parseError) {
+      console.error('Error parsing simplified GPT response:', parseError);
+      console.log('Raw simplified GPT response:', simpleAnswer);
+      return {
+        isSpam: false,
+        spamScore: 50,
+        category: '0.0'
+      };
+    }
+    
     return {
       isSpam: result.isSpam || false,
       spamScore: result.isSpam ? 80 : 20,
