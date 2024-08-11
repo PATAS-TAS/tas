@@ -1100,7 +1100,8 @@ Analyze the given message and classify it as spam (1) or not spam (0). Provide a
 1.5. Crypto/Financial: Unrealistic investment promises, obvious quick money schemes
 1.6. Deceptive: Obvious impersonation, very misleading information
 1.7. Unwanted: Excessive invites, clear chain messages
-1.8. Any message with clear spam indicators 
+1.8. Any message with clear spam indicators
+1.9 Asks to subrscribe/follow/donate
 
 ## 0 - Not Spam (default for most messages):
 0.1. Normal conversations: Any casual chat, greetings, emoji usage
@@ -1303,7 +1304,7 @@ async function saveToCache(message: Api.Message, response: string, gptScore?: nu
   const mediaType = message.media ? getMediaType(message.media) : 'None';
   const mediaHash = message.media ? getMediaHash(message.media) : '';
   const entry: CacheEntry = {
-    message: message.message || '',
+    message: message.message?.slice(0, 100) || '', // Ограничиваем длину сохраняемого сообщения
     mediaType,
     mediaHash,
     response,
@@ -1311,13 +1312,21 @@ async function saveToCache(message: Api.Message, response: string, gptScore?: nu
     gptScore
   };
   
+  await redis.set(key, JSON.stringify(entry), 'EX', CACHE_TTL);
+  
   if (gptScore !== undefined) {
     const contentKey = `gpt:${crypto.createHash('md5').update(message.message || '').digest('hex')}`;
-    await redis.set(contentKey, JSON.stringify({ response, gptScore, mediaType, mediaHash }), 'EX', CACHE_TTL);
+    await redis.set(contentKey, JSON.stringify({ response, gptScore }), 'EX', CACHE_TTL);
   }
 
-  await redis.set(key, JSON.stringify(entry), 'EX', CACHE_TTL);
-  await checkCacheUsage();
+  // Асинхронная проверка использования кэша
+  setImmediate(async () => {
+    try {
+      await checkCacheUsage();
+    } catch (error) {
+      console.error('Error in checkCacheUsage:', error);
+    }
+  });
 }
 
 async function getFromCache(message: Api.Message): Promise<CacheEntry | null> {
@@ -1339,22 +1348,12 @@ async function checkCacheUsage(): Promise<void> {
 async function clearOldCache(): Promise<void> {
   const redis = getRedisConnection();
   const keys = await redis.keys('msg:*');
-  const toDelete = Math.floor(keys.length * 0.1);
+  const toDelete = Math.floor(keys.length * 0.2); // Увеличиваем количество удаляемых ключей
   
-  const entries = await Promise.all(
-    keys.slice(0, toDelete).map(async (key: string) => {
-      const value = await redis.get(key);
-      return value ? JSON.parse(value) as CacheEntry : null;
-    })
-  );
-
-  const sortedKeys = entries
-    .filter((entry): entry is CacheEntry => entry !== null)
-    .sort((a, b) => a.timestamp - b.timestamp)
-    .map((_, index) => keys[index]);
-  
-  if (sortedKeys.length > 0) {
-    await redis.del(...sortedKeys);
+  if (toDelete > 0) {
+    const pipeline = redis.pipeline();
+    keys.slice(0, toDelete).forEach(key => pipeline.del(key));
+    await pipeline.exec();
   }
 }
 
