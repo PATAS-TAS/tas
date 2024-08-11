@@ -526,14 +526,22 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
       }
 
       if ((!result || result.isSpam === undefined) && enabledChecks.has('gpt')) {
-        result = await checkGPT(messages, sysInfo);
-        if (result) console.log("GPT check result:", result);
+        try {
+          const { preprocessedMessage, visionResults } = await preprocessAndAnalyze(messages);
+          result = await checkGPT(messages, sysInfo, visionResults);
+          if (result) console.log("GPT check result:", result);
+        } catch (error) {
+          if (error instanceof Error && error.message === 'Vision API analysis failed') {
+            console.log("Vision API analysis failed, /undo already sent");
+            return;
+          }
+          throw error;
+        }
       }
     }
 
     if (result) {
       if (result.isSpam === undefined) {
-        // Если результат неопределенный, отправляем /undo
         console.log("Undefined result, sending /undo");
         await client.sendMessage(botId, { message: "/undo" });
       } else {
@@ -553,7 +561,7 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
     } else {
       await notifyAdmin(`Error processing report: ${String(error)}`);
     }
-    // В случае ошибки также отправляем /undo
+    // В случае ошибки также отправляем /undo, если это еще не было сделано
     await client.sendMessage(botId, { message: "/undo" });
     startRecovery();
   } finally {
@@ -1092,6 +1100,7 @@ async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionRes
   }
 
   let imageBuffer: Buffer | null = null;
+  let partialResult: Partial<VisionResult> = { type: mediaType, labels: [], safeSearch: {} };
 
   try {
     if (mediaMessage.media instanceof Api.MessageMediaPhoto) {
@@ -1115,14 +1124,24 @@ async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionRes
 
     if (imageBuffer) {
       console.log(`Successfully downloaded media, size: ${imageBuffer.length} bytes`);
-      const { labels, safeSearch, textAnnotations } = await analyzeImageWithVision(imageBuffer);
-      return { type: mediaType, labels, safeSearch, textAnnotations };
+      try {
+        const { labels, safeSearch, textAnnotations } = await analyzeImageWithVision(imageBuffer);
+        partialResult = { ...partialResult, labels, safeSearch, textAnnotations };
+      } catch (visionError) {
+        console.error(`Error in Vision API analysis:`, visionError);
+        // Отправляем /undo боту при ошибке Vision API
+        await client.sendMessage(botId, { message: "/undo" });
+        throw new Error('Vision API analysis failed');
+      }
     }
   } catch (error) {
-    console.error(`Error analyzing media: ${error}`);
+    console.error(`Error downloading or processing media:`, error);
+    // Отправляем /undo боту при любой ошибке в обработке медиа
+    await client.sendMessage(botId, { message: "/undo" });
+    throw error;
   }
 
-  return { type: mediaType, labels: [], safeSearch: {} };
+  return partialResult as VisionResult;
 }
 
 // GPT PROMPTS AND FUNCTIONS
@@ -1135,31 +1154,42 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
 }> {
   const gptPrompt = `# Telegram Spam Detection
 
-Analyze the given message and classify it as spam (1) or not spam (0). Provide a detailed category and confidence score. Consider the Telegram context, where users can send text, media, and links in group chats or private messages in any language. Be cautious about classifying messages as spam, especially short or emoji-only messages, or messages that could be jokes or casual conversation.
+Analyze the given message and classify it as spam (1) or not spam (0). Provide a detailed category and confidence score. Consider the Telegram context, where users can send text, media, and links in group chats or private messages in any language. Be very cautious about classifying messages as spam, especially short or emoji-only messages.
 
 ## 1 - Spam (only if very clear and obvious):
 1.1. Commercial: Unsolicited ads, aggressive promotions
 1.2. Scams: Clear phishing attempts, obvious fake giveaways
 1.3. Malicious: Explicit mentions of malware or viruses
-1.4. Adult: Explicit pornography, unsolicited adult services
+1.4. Adult: Explicit pornography, unsolicited adult services, private meetings/calls
 1.5. Crypto/Financial: Unrealistic investment promises, obvious quick money schemes
 1.6. Deceptive: Obvious impersonation, very misleading information
 1.7. Unwanted: Excessive invites, clear chain messages
-1.8. Illegal: Offering fake documents, licenses, or other illegal services
+1.8. Any message with clear spam indicators
+1.9 Asks to subscribe/follow/donate
+1.10 Illegal Services: Offering fake documents, licenses, or other illegal services
 
 ## 0 - Not Spam (default for most messages):
 0.1. Normal conversations: Any casual chat, greetings, emoji usage
 0.2. Short messages: Single words, numbers, or emojis
 0.3. Group-related content: Any message that could be relevant to a group
-0.4. Opinions or reactions: Personal views, emotional responses, jokes
+0.4. Opinions or reactions: Personal views, emotional responses
 0.5. Questions or responses: Any form of inquiry or reply
 0.6. Sharing of information: Links, news, or any shared content
 0.7. Business or financial discussions: Unless clearly a scam
 0.8. Insults, arguments, or disagreements: Unless very offensive or aggressive
+0.9. Any message without clear spam indicators
 
-Consider: Message intent, group context, and media content. A single complaint or the presence of emojis/short text does NOT automatically indicate spam. Err on the side of caution - if in doubt, classify as not spam. Pay attention to the actual content of the message rather than relying heavily on usernames or channel names.
+Consider: Message intent, group context, and media content. A single complaint or the presence of emojis/short text does NOT automatically indicate spam. Err on the side of caution - if in doubt, classify as not spam.
 
-Output: JSON with classification, category, confidence score, and reasoning. Do not use markdown formatting or JSON code blocks in your response.`;
+Output: JSON with classification, category, and confidence score. Do not use markdown formatting or JSON code blocks in your response.`;
+
+  const visionAnalysis = visionResults.length > 0
+    ? visionResults.map(vr => 
+        `${vr.type} - Labels: ${vr.labels.join(', ')}, ` +
+        `SafeSearch: ${JSON.stringify(vr.safeSearch)}, ` +
+        `Text: ${vr.textAnnotations ? vr.textAnnotations[0]?.description : 'N/A'}`
+      ).join(' | ')
+    : 'Vision analysis unavailable';
 
   const userPrompt = `Analyze:
 Message: "${message}"
@@ -1168,14 +1198,13 @@ Source: ${sysInfo.source}
 Sender: ${sysInfo.sender}
 Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
 Telegram Spam Probability: ${sysInfo.telegramSpamProbability}
-Vision Analysis: ${visionResults.map(vr => `${vr.type} - Labels: ${vr.labels.join(', ')}, SafeSearch: ${JSON.stringify(vr.safeSearch)}`).join(' | ')}
+Vision Analysis: ${visionAnalysis}
 
 Respond with JSON:
 {
   "classification": number (0 or 1),
   "category": string (e.g., "1.2" or "0.3"),
-  "confidence": number (0-100),
-  "reasoning": string (brief explanation)
+  "confidence": number (0-100)
 }`;
 
   try {
@@ -1210,8 +1239,7 @@ Respond with JSON:
     
     if (typeof result.classification !== 'number' || 
         typeof result.category !== 'string' ||
-        typeof result.confidence !== 'number' ||
-        typeof result.reasoning !== 'string') {
+        typeof result.confidence !== 'number') {
       throw new Error('Invalid GPT response structure');
     }
 
@@ -1240,7 +1268,7 @@ Respond with JSON:
 
     spamScore = Math.min(100, spamScore);
 
-    console.log(`GPT Deep Analysis - Category: ${result.category}, Confidence: ${result.confidence}, Reasoning: ${result.reasoning}`);
+    console.log(`GPT Deep Analysis - Category: ${result.category}, Confidence: ${result.confidence}`);
 
     return {
       isSpam: spamScore > 85,
