@@ -1170,6 +1170,7 @@ Analyze the given message and classify it as spam (1) or not spam (0). Provide a
 0.7. Business or financial discussions: Unless clearly a scam
 0.8. Insults, arguments, or disagreements: Unless very offensive or aggressive
 0.9. Any message without clear spam indicators
+0.10 Commands "/" to bots
 
 Consider: Message intent, group context, and media content. A single complaint or the presence of emojis/short text does NOT automatically indicate spam. Err on the side of caution - if in doubt, classify as not spam.
 
