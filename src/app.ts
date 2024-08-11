@@ -507,10 +507,8 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
     let result: CheckResult = null;
 
     if (enabledChecks.has('mod')) {
-      // Если включена проверка модераторов, выполняем только её
       result = await checkModerators(messages, sysInfo);
     } else {
-      // Иначе выполняем стандартные проверки
       if (enabledChecks.has('cache')) {
         result = await checkCache(messages);
         if (result) console.log("Cache check result:", result);
@@ -533,8 +531,14 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
       }
     }
 
-    if (result && result.isSpam !== undefined) {
-      await handleResult(result, messages);
+    if (result) {
+      if (result.isSpam === undefined) {
+        // Если результат неопределенный, отправляем /undo
+        console.log("Undefined result, sending /undo");
+        await client.sendMessage(botId, { message: "/undo" });
+      } else {
+        await handleResult(result, messages);
+      }
     } else {
       console.log("No definitive result after all checks");
       if (isAutoMode) {
@@ -549,6 +553,8 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
     } else {
       await notifyAdmin(`Error processing report: ${String(error)}`);
     }
+    // В случае ошибки также отправляем /undo
+    await client.sendMessage(botId, { message: "/undo" });
     startRecovery();
   } finally {
     isProcessing = false;
@@ -557,7 +563,6 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
 
     console.log("Processing ended at:", new Date().toISOString());
 
-    // Обрабатываем следующее сообщение сразу после завершения текущего
     setImmediate(() => {
       if (reportBuffer.messages.length > 0 && reportBuffer.sysInfo) {
         processBuffer().catch(error => {
@@ -891,10 +896,11 @@ async function checkGPT(messages: Api.Message[], sysInfo: SysInfo): Promise<Chec
 
   } catch (error) {
     console.error('Error in GPT check:', error);
+    // Вместо возврата false, возвращаем специальный результат
     return { 
-      isSpam: false,
+      isSpam: undefined,
       layer: 5, 
-      reason: "Error in GPT check, manual review required",
+      reason: "Error in GPT check, undo required",
     };
   } finally {
     isProcessing = false;
@@ -1071,62 +1077,36 @@ async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionRes
 async function gptDeep(message: string, sysInfo: SysInfo): Promise<{ 
   isSpam: boolean; 
   spamScore: number; 
+  category: string;
   reasons: string[];
 }> {
-  const gptPrompt = `Analyze multilingual Telegram messages for spam. Prioritize protecting users from scams, unsolicited commercial offers, and genuinely harmful content while allowing normal social interactions. Consider all context provided, but prioritize the actual content of the message. Output JSON only.
+  const gptPrompt = `# Telegram Spam Detection
 
-Key factors (importance order):
-1. Message content and intent (any language)
-2. User behavior and message pattern
-3. Source relevance and group context
-4. Links/media presence and nature
-5. Complaint count and Telegram's spam probability (consider context)
+Analyze the given message and classify it as spam (1) or not spam (0). Provide a detailed category and confidence score. Consider the Telegram context, where users can send text, media, and links in group chats or private messages.
 
-Spam indicators (treat these more strictly):
-- Any job offers
-- Unsolicited commercial offers (e.g., crypto, investments, jobs, adult services)
-- Scams, phishing, deceptive practices, get-rich-quick schemes
-- Attempts to move conversations to private channels or external links for commercial purposes
-- Excessive/shortened URLs unrelated to ongoing discussions
-- Repetitive or bot-like behavior across multiple messages
-- Unsolicited financial advice or investment opportunities
-- Self-promotion for unrelated channels/groups
-- Promises of unrealistic profits or returns
-- Urgency in financial decisions or investments
-- Mentioning specific usernames for financial services
-- Explicit sexual content or services
-- Invitations for private meetings or services without clear context
-- Use of excessive emojis or symbols to bypass text filters
-- Messages encouraging users to search for specific terms or usernames
-- Promises of easy money or quick returns on investment
-- Claims of working alongside studies or current job with minimal effort
-- Requests to contact specific usernames for more information about earning opportunities
-- Messages in languages different from the group's primary language, especially if promoting financial opportunities
+## 1 - Spam:
+1.1. Commercial: Ads, promotions, unsolicited offers
+1.2. Scams: Phishing, fake giveaways, pyramid schemes
+1.3. Malicious: Malware, viruses, suspicious links
+1.4. Adult: Pornography, escort services, private meetings
+1.5. Crypto/Financial: Unrealistic investments, quick money schemes
+1.6. Bulk/Automated: Mass messages, bot activity
+1.7. Deceptive: Fake news, impersonation, clickbait
+1.8. Unwanted: Excessive invites, chain messages
 
-Non-spam indicators:
-- Simple greetings or introductions (e.g., "Hi", "Hello", "Good morning")
-- Short, neutral messages without suspicious content
-- Political discussions or opinions, even if controversial
-- Use of strong language or profanity within context of discussion
-- Group-relevant content (unless clearly violating community standards)
-- Legitimate discussions on current events or social issues
-- Standard bot commands/interactions
+Keywords: buy, discount, win, click here, hot singles, earn fast, bitcoin, join now, limited time, verify account, available
 
-Weighting:
-- Very High: Actual content of the message
-- High: User behavior pattern (if known)
-- Medium: Group context and complaint count
-- Low: Telegram's spam probability for isolated messages
+## 0 - Not Spam:
+0.1. Normal conversations: Greetings, casual chat
+0.2. Legitimate questions or responses
+0.3. Sharing of relevant information or news
+0.4. Group-related announcements or discussions
+0.5. Personal opinions or experiences
+0.6. Humor or memes (unless offensive/harmful)
 
-Ambiguous cases:
-- For short messages or greetings, prioritize the actual content over group context
-- Consider if the message could be a normal social interaction, even in groups with suspicious names
-- For political or controversial content, prioritize free speech unless clearly harmful
-- Err on the side of caution for explicit invitations or offers, but allow implicit or ambiguous content if not clearly spam
+Consider: Message intent, user behavior, group context, complaint count
 
-Consider the message content first, then the group context. Be cautious of commercial spam and explicit content, but allow for normal greetings and short social interactions, even in groups with suspicious names.
-IMPORTANT: Simple greetings or short, neutral messages should not be classified as spam solely based on the group's name or context. Even in groups with suspicious names, allow for the possibility of normal social interactions unless there's clear evidence of spam behavior. However, be extra vigilant about messages promising easy money or quick returns, especially if they're in a language different from the group's primary language.
-`;
+Output: JSON with classification, category, and confidence score.`;
 
   const userPrompt = `Analyze:
 Message: "${message}"
@@ -1136,23 +1116,24 @@ Sender: ${sysInfo.sender}
 Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
 Telegram Spam Probability: ${sysInfo.telegramSpamProbability}
 
-Respond with JSON only:
+Respond with JSON:
 {
-  "isSpam": boolean,
-  "spamScore": number (0-100),
-  "reasons": string[] (max 3 items)
+  "classification": number (0 or 1),
+  "category": string (e.g., "1.2" or "0.3"),
+  "confidence": number (0-100),
+  "reason": string (brief explanation)
 }`;
 
   try {
     const response = await retryGptRequest(
       () => openai.chat.completions.create({
-        model: "gpt-4o-2024-08-06",
+        model: "gpt-4o-mini",
         messages: [
           { role: "system", content: gptPrompt },
           { role: "user", content: userPrompt }
         ],
-        max_tokens: 1000,
-        temperature: 0.1,
+        max_tokens: 250,
+        temperature: 0.2,
       }),
       2,
       50000,
@@ -1167,57 +1148,29 @@ Respond with JSON only:
 
     let result = JSON.parse(jsonMatch[0]);
     
-    if (typeof result.isSpam !== 'boolean' || 
-        typeof result.spamScore !== 'number' || 
-        !Array.isArray(result.reasons)) {
+    if (typeof result.classification !== 'number' || 
+        typeof result.category !== 'string' ||
+        typeof result.confidence !== 'number' ||
+        typeof result.reason !== 'string') {
       throw new Error('Invalid GPT response structure');
     }
 
-    result.spamScore = Math.max(0, Math.min(100, result.spamScore));
-    result.reasons = result.reasons.slice(0, 3);
-    if (result.reasons.length === 0) result.reasons.push('No specific reason provided');
+    const isSpam = result.classification === 1;
+    let spamScore = result.confidence;
 
-    // Adjust the spam score based on message content and other factors
-    const messageContentWeight = 0.6;  // Increased from 0.5
-    const telegramWeight = 0.15;  // Decreased from 0.2
-    const complaintWeight = 0.15;  // Increased from 0.1
-    const groupContextWeight = 0.1;  // Decreased from 0.2
+    // Adjust the spam score based on other factors
+    spamScore += Math.min(20, sysInfo.complaintCount * 2);
+    spamScore += sysInfo.telegramSpamProbability * 30;
+    if (sysInfo.hasLink) spamScore += 5;
+    
+    spamScore = Math.min(100, spamScore);
 
-    const messageContentScore = result.spamScore;
-    const complaintScore = Math.min(100, sysInfo.complaintCount * 15);  // Increased multiplier
-    const groupContextScore = sysInfo.source.toLowerCase().includes('hookup') ? 70 : 0;
-
-    let adjustedScore = (messageContentWeight * messageContentScore) + 
-                        (telegramWeight * (sysInfo.telegramSpamProbability * 100)) +
-                        (complaintWeight * complaintScore) +
-                        (groupContextWeight * groupContextScore);
-
-    // Additional checks
-    if (/🔞|xxx|porn|sex/i.test(message)) adjustedScore += 20;
-    if (/\b(crypto|bitcoin|ethereum|invest|earn)\b/i.test(message)) adjustedScore += 15;
-    if (/(\p{Emoji_Presentation}|\p{Extended_Pictographic}){5,}/u.test(message)) adjustedScore += 10;
-    if (/\b(vip|premium|exclusive)\b/i.test(message)) adjustedScore += 10;
-    if (/\b(urgent|hurry|limited time)\b/i.test(message)) adjustedScore += 10;
-    if (/\b(dm|pm|private message)\b/i.test(message)) adjustedScore += 10;
-    if (/\b(guarantee|proven|tested)\b/i.test(message)) adjustedScore += 10;
-    if (/\b(search for|find me at)\b/i.test(message)) adjustedScore += 15;
-
-    result.spamScore = Math.round(Math.min(100, adjustedScore));
-
-    // Adjust the final decision based on the new score, with a higher threshold for short messages
-    const isShortMessage = message.length <= 10;
-    const spamThreshold = isShortMessage ? 70 : 55;  // Lowered thresholds
-    result.isSpam = result.spamScore > spamThreshold;
-
-    // Override for very short, neutral greetings
-    if (isShortMessage && /^(hi|hello|hey)$/i.test(message.trim())) {
-      result.isSpam = false;
-      result.spamScore = Math.min(result.spamScore, 30);
-      result.reasons = ['Short neutral greeting'];
-    }
-
-    console.log(`GPT result: isSpam: ${result.isSpam}, spamScore: ${result.spamScore}`);
-    return result;
+    return {
+      isSpam: spamScore > 60,
+      spamScore: spamScore,
+      category: result.category,
+      reasons: [result.reason]
+    };
 
   } catch (error) {
     console.error('Error in gptDeep:', error);
@@ -1228,32 +1181,38 @@ Respond with JSON only:
 async function performSimplifiedCheck(message: string, reason: string): Promise<{
   isSpam: boolean;
   spamScore: number;
+  category: string;
   reasons: string[];
 }> {
   try {
-    const simplePrompt = "Is this message spam? Answer 'yes' or 'no':\n\n" + message;
+    const simplePrompt = "Is this message spam? Answer 'yes' or 'no' and provide a brief reason:\n\n" + message;
     const simpleResponse = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: simplePrompt }],
-      max_tokens: 100,
+      max_tokens: 50,
       temperature: 0.0,
     });
     const simpleAnswer = simpleResponse.choices[0]?.message?.content?.toLowerCase() || '';
     const isSpam = simpleAnswer.includes('yes');
+    const simplifiedReason = simpleAnswer.split('.')[1]?.trim() || 'No specific reason provided';
     return {
       isSpam: isSpam,
-      spamScore: isSpam ? 90 : 10,
-      reasons: [reason]
+      spamScore: isSpam ? 80 : 20,
+      category: isSpam ? '1.0' : '0.0', // Generic spam or not spam category
+      reasons: [reason, simplifiedReason]
     };
   } catch (simpleError) {
     console.error('Error in simplified GPT check:', simpleError);
     return {
       isSpam: false,
       spamScore: 50,
-      reasons: ['Error in both main and simplified GPT analysis']
+      category: '0.0',
+      reasons: ['Error in both main and simplified GPT analysis', 'Defaulting to not spam']
     };
   }
 }
+
+// Предполагается, что функция retryGptRequest определена где-то в другом месте кода
 
 async function retryGptRequest<T>(
   requestFunc: () => Promise<T>,
