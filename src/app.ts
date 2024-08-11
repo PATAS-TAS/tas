@@ -52,7 +52,7 @@ const CHECK_MSG_TIMEOUT = 55000; // 55 секунд
 let recoveryTimer: NodeJS.Timeout | null = null;
 let nextTimer: NodeJS.Timeout | null = null;
 let client: TelegramClient;
-let processInterval = 300;
+let processInterval = 200;
 let isAutoMode = true; // переключатель авто режима
 let isProcessing = false;
 let isVisionEnabled = true; // переключатель анализа медиа
@@ -1082,33 +1082,33 @@ async function gptDeep(message: string, sysInfo: SysInfo): Promise<{
 }> {
   const gptPrompt = `# Telegram Spam Detection
 
-Analyze the given message and classify it as spam (1) or not spam (0). Provide a detailed category and confidence score. Consider the Telegram context, where users can send text, media, and links in group chats or private messages.
+Analyze the given message and classify it as spam (1) or not spam (0). Provide a detailed category and confidence score. Consider the Telegram context, where users can send text, media, and links in group chats or private messages. Be very cautious about classifying messages as spam, especially short or emoji-only messages.
 
-## 1 - Spam:
-1.1. Commercial: Ads, promotions, unsolicited offers
-1.2. Scams: Phishing, fake giveaways, pyramid schemes
-1.3. Malicious: Malware, viruses, suspicious links
-1.4. Adult: Pornography, escort services, private meetings
-1.5. Crypto/Financial: Unrealistic investments, quick money schemes
-1.6. Bulk/Automated: Mass messages, bot activity
-1.7. Deceptive: Fake news, impersonation, clickbait
-1.8. Unwanted: Excessive invites, chain messages
+## 1 - Spam (only if very clear and obvious):
+1.1. Commercial: Unsolicited ads, aggressive promotions
+1.2. Scams: Clear phishing attempts, obvious fake giveaways
+1.3. Malicious: Explicit mentions of malware or viruses
+1.4. Adult: Explicit pornography, unsolicited adult services, priveate meetings/calls
+1.5. Crypto/Financial: Unrealistic investment promises, obvious quick money schemes
+1.6. Deceptive: Obvious impersonation, very misleading information
+1.7. Unwanted: Excessive invites, clear chain messages
+1.8. Any message with clear spam indicators 
 
-Keywords: buy, discount, win, click here, hot singles, earn fast, bitcoin, join now, limited time, verify account, available
+## 0 - Not Spam (default for most messages):
+0.1. Normal conversations: Any casual chat, greetings, emoji usage
+0.2. Short messages: Single words, numbers, or emojis
+0.3. Group-related content: Any message that could be relevant to a group
+0.4. Opinions or reactions: Personal views, emotional responses
+0.5. Questions or responses: Any form of inquiry or reply
+0.6. Sharing of information: Links, news, or any shared content
+0.7. Business or financial discussions: Unless clearly a scam
+0.8. Any message without clear spam indicators
 
-## 0 - Not Spam:
-0.1. Normal conversations: Greetings, casual chat
-0.2. Legitimate questions or responses
-0.3. Sharing of relevant information or news
-0.4. Group-related announcements or discussions
-0.5. Personal opinions or experiences
-0.6. Humor or memes (unless offensive/harmful)
-
-Consider: Message intent, user behavior, group context, complaint count
+Consider: Message intent, group context. A single complaint or the presence of emojis/short text does NOT automatically indicate spam. Err on the side of caution - if in doubt, classify as not spam.
 
 Output: JSON with classification, category, and confidence score.`;
 
-  const userPrompt = `Analyze:
+const userPrompt = `Analyze:
 Message: "${message}"
 Complaints: ${sysInfo.complaintCount}
 Source: ${sysInfo.source}
@@ -1156,17 +1156,18 @@ Respond with JSON:
     }
 
     const isSpam = result.classification === 1;
-    let spamScore = result.confidence;
+    let spamScore = isSpam ? result.confidence : 100 - result.confidence;
 
-    // Adjust the spam score based on other factors
-    spamScore += Math.min(20, sysInfo.complaintCount * 2);
-    spamScore += sysInfo.telegramSpamProbability * 30;
-    if (sysInfo.hasLink) spamScore += 5;
+    // Более мягкая корректировка спам-оценки
+    spamScore += Math.min(5, sysInfo.complaintCount);
+    spamScore += sysInfo.telegramSpamProbability * 10;
+    if (sysInfo.hasLink) spamScore += 2;
     
     spamScore = Math.min(100, spamScore);
 
+    // Значительно повышенный порог для определения спама
     return {
-      isSpam: spamScore > 60,
+      isSpam: spamScore > 85,  // Очень высокий порог
       spamScore: spamScore,
       category: result.category,
       reasons: [result.reason]
