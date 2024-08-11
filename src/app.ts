@@ -1133,7 +1133,7 @@ Respond with JSON:
           { role: "user", content: userPrompt }
         ],
         max_tokens: 250,
-        temperature: 0.2,
+        temperature: 0.1,
       }),
       2,
       50000,
