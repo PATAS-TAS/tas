@@ -353,6 +353,13 @@ async function sysMsg(event: NewMessageEvent): Promise<void> {
       return;
     }
 
+    if (message === "Nothing to undo.\nSend /next for a new spam report.") {
+      console.log("Nothing to undo, sending /next...");
+      await client.sendMessage(botId, { message: "/next" });
+      resetRecoveryTimers();
+      return;
+    }
+
     if (message === "No Reports Found" || message === "Please select 😡 BAN or 😌 NO." || message.includes("Sorry, an error has occurred during your request. Please try again later.")) {
       console.log("No reports or error occurred. Sending /undo...");
       await client.sendMessage(botId, { message: "/undo" });
@@ -1094,13 +1101,19 @@ async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionRes
   
   console.log(`Analyzing media: ${mediaType}, size: ${fileSize} bytes`);
 
+  let partialResult: Partial<VisionResult> = { type: mediaType, labels: [], safeSearch: {} };
+
+  // Обрабатываем текст, если он есть
+  if (mediaMessage.message) {
+    partialResult.textAnnotations = [{ description: mediaMessage.message }];
+  }
+
   if (fileSize > MAX_FILE_SIZE) {
     console.log(`Skipping Vision analysis for large file (${fileSize} bytes)`);
-    return { type: mediaType, labels: [], safeSearch: {} };
+    return partialResult as VisionResult;
   }
 
   let imageBuffer: Buffer | null = null;
-  let partialResult: Partial<VisionResult> = { type: mediaType, labels: [], safeSearch: {} };
 
   try {
     if (mediaMessage.media instanceof Api.MessageMediaPhoto) {
@@ -1126,19 +1139,23 @@ async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionRes
       console.log(`Successfully downloaded media, size: ${imageBuffer.length} bytes`);
       try {
         const { labels, safeSearch, textAnnotations } = await analyzeImageWithVision(imageBuffer);
-        partialResult = { ...partialResult, labels, safeSearch, textAnnotations };
+        partialResult = { ...partialResult, labels, safeSearch, textAnnotations: [...(partialResult.textAnnotations || []), ...(textAnnotations || [])] };
       } catch (visionError) {
         console.error(`Error in Vision API analysis:`, visionError);
-        // Отправляем /undo боту при ошибке Vision API
-        await client.sendMessage(botId, { message: "/undo" });
-        throw new Error('Vision API analysis failed');
+        // Не отправляем /undo, если есть текст
+        if (!mediaMessage.message) {
+          await client.sendMessage(botId, { message: "/undo" });
+          throw new Error('Vision API analysis failed');
+        }
       }
     }
   } catch (error) {
     console.error(`Error downloading or processing media:`, error);
-    // Отправляем /undo боту при любой ошибке в обработке медиа
-    await client.sendMessage(botId, { message: "/undo" });
-    throw error;
+    // Не отправляем /undo, если есть текст
+    if (!mediaMessage.message) {
+      await client.sendMessage(botId, { message: "/undo" });
+      throw error;
+    }
   }
 
   return partialResult as VisionResult;
