@@ -1333,7 +1333,7 @@ Not Spam (0) for:
 0.9. Bot commands: Standard interactions
 0.10. Political content: Discussions, opinions (unless harmful)
 0.11. Strong language: Within context of discussion
-0.12 Scam mentions: Warning about scams, not promoting them
+0.12. Scam mentions: Warning about scams, not promoting them
 
 Key factors (importance order):
 1. Message content and intent (any language)
