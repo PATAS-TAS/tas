@@ -1297,10 +1297,10 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
   spamScore: number; 
 }> {
   // Оптимизированный промпт для GPT
-  const gptPrompt = `Analyze multilingual Telegram messages for spam. Classify as spam (1) or not spam (0). Prioritize protecting users from scams and harmful content while allowing normal interactions. Consider all context, but prioritize message content. Be cautious with short or emoji messages.
+  const gptPrompt = `Analyze multilingual Telegram messages for spam. Classify as spam (1) or not spam (0). Prioritize protecting users from scams, unsolicited advertisements, and harmful content while allowing normal interactions. Consider all context, but prioritize message content. Be cautious with short or emoji messages.
 
 Spam (1) if clear:
-1.1. Commercial: Unsolicited ads, aggressive promotions
+1.1. Commercial: Unsolicited ads, aggressive promotions, subtle marketing
 1.2. Scams: Phishing, fake giveaways, get-rich-quick schemes
 1.3. Malicious: Malware, viruses
 1.4. Adult: Explicit content, unsolicited services
@@ -1308,7 +1308,7 @@ Spam (1) if clear:
 1.6. Deceptive: Impersonation, misleading info
 1.7. Unwanted: Excessive invites, chain messages
 1.8. Job offers: Unsolicited or suspicious
-1.9. Self-promotion: Unrelated channels/groups
+1.9. Self-promotion: Unrelated channels/groups, subtle channel promotions
 1.10. Urgent financial decisions: Pressuring users
 1.11. Private channels: Attempts to move conversations for commercial purposes
 1.12. Excessive URLs: Especially shortened/unrelated to discussion
@@ -1318,15 +1318,17 @@ Spam (1) if clear:
 1.16. Easy money promises: Including minimal effort claims
 1.17. Language mismatch: Different from group's primary, especially if promotional
 1.18. Illegal services: Fake documents, licenses
+1.19. Disguised promotions: Informative-looking messages with channel links
+1.20. Emoji abuse: Excessive use of emojis, especially at the start of each line
 
 Not Spam (0) for:
 0.1. Normal chat: Greetings, casual conversation
-0.2. Short messages: Single words, numbers, emojis
+0.2. Short messages: Single words, numbers, emojis (unless part of a pattern)
 0.3. Group-related: Content relevant to the group
 0.4. Opinions/reactions: Personal views, responses
 0.5. Questions/replies: Any inquiry or response
-0.6. Information sharing: Links, news (unless clearly spam)
-0.7. Business talk: Unless clearly a scam
+0.6. Information sharing: Links, news (unless clearly promotional)
+0.7. Business talk: Unless clearly a scam or unsolicited promotion
 0.8. Arguments: Unless extremely offensive
 0.9. Bot commands: Standard interactions
 0.10. Political content: Discussions, opinions (unless harmful)
@@ -1335,16 +1337,19 @@ Not Spam (0) for:
 Key factors (importance order):
 1. Message content and intent (any language)
 2. User behavior and message pattern
-3. Source relevance and group context
-4. Links/media presence and nature
-5. Complaint count and Telegram's spam probability (consider context)
+3. Presence of calls to action or channel promotions
+4. Source relevance and group context
+5. Links/media presence and nature
+6. Complaint count and Telegram's spam probability (consider context)
+7. Emoji usage patterns
 
 Ambiguous cases:
-- Prioritize message content over group context for short/greeting messages
-- Allow normal interactions even in suspiciously named groups
-- Favor free speech for political/controversial content unless clearly harmful
-- Cautious with explicit invitations, allow ambiguous if not clearly spam
-- Extra vigilant about easy money promises, especially in mismatched language
+- Scrutinize informative-looking messages that end with channel promotions
+- Be wary of messages using emojis excessively, especially at line starts
+- Consider the overall structure and formatting of the message
+- Check for subtle calls to action or invitations to join channels
+- Analyze the relevance of any included links or channel mentions
+- Be cautious of messages that seem to provide value but ultimately promote something
 
 Output: Single digit (0 or 1) followed by brief reasoning (max 10 words).`;
 
