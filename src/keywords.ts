@@ -50,7 +50,7 @@ export const spamPhrases = [
 ];
 
 export const shortSpamPhrases = [
-  "cp", "цп", "ск", "gv", "tn", "open vcs", "card", "beetles", "vc", "v c", "c p", "liichkamga"
+  "cp", "цп", "ск", "gv", "tn", "open vcs", "card", "beetles", "vc", "v c", "c p", "liichkamga", "SL", "Tn", "Tf", "GV"
 ];
 
 export const adKeywordsAndDomains = [
