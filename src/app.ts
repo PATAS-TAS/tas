@@ -1019,13 +1019,15 @@ async function checkGPT(
 
     const deepCheckResult = await gptDeep(preprocessedMessage, sysInfo, visionResults);
 
-    const response = deepCheckResult.isSpam ? '😡 SPAM' : '😌 NO';
+    // Используем порог в 70 для определения спама
+    const isSpamResult = deepCheckResult.spamScore > 70;
+    const response = isSpamResult ? '😡 SPAM' : '😌 NO';
     await saveToCache(messages[0], response, deepCheckResult.spamScore);
 
-    console.log(`GPT Check Result - Spam Score: ${deepCheckResult.spamScore}`);
+    console.log(`GPT Check Result - Spam Score: ${deepCheckResult.spamScore}, Classification: ${isSpamResult ? 'SPAM' : 'NOT SPAM'}`);
 
     return {
-      isSpam: deepCheckResult.isSpam,
+      isSpam: isSpamResult,
       layer: 5,
       reason: `GPT Spam Score: ${deepCheckResult.spamScore.toFixed(2)}`
     };
@@ -1273,55 +1275,55 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
   // Оптимизированный промпт для GPT
   const gptPrompt = `Analyze multilingual Telegram messages for spam. Classify as spam (1) or not spam (0). Prioritize protecting users from scams and harmful content while allowing normal interactions. Consider all context, but prioritize message content. Be cautious with short or emoji messages.
 
-  Spam (1) if clear:
-  1.1. Commercial: Unsolicited ads, aggressive promotions
-  1.2. Scams: Phishing, fake giveaways, get-rich-quick schemes
-  1.3. Malicious: Malware, viruses
-  1.4. Adult: Explicit content, unsolicited services
-  1.5. Crypto/Financial: Unrealistic promises, quick money schemes
-  1.6. Deceptive: Impersonation, misleading info
-  1.7. Unwanted: Excessive invites, chain messages
-  1.8. Job offers: Unsolicited or suspicious
-  1.9. Self-promotion: Unrelated channels/groups
-  1.10. Urgent financial decisions: Pressuring users
-  1.11. Private channels: Attempts to move conversations for commercial purposes
-  1.12. Excessive URLs: Especially shortened/unrelated to discussion
-  1.13. Bot-like behavior: Repetitive messages
-  1.14. Specific usernames: Mentioned for financial services
-  1.15. Bypass attempts: Excessive emojis/symbols to avoid filters
-  1.16. Easy money promises: Including minimal effort claims
-  1.17. Language mismatch: Different from group's primary, especially if promotional
-  1.18. Illegal services: Fake documents, licenses
-  
-  Not Spam (0) for:
-  0.1. Normal chat: Greetings, casual conversation
-  0.2. Short messages: Single words, numbers, emojis
-  0.3. Group-related: Content relevant to the group
-  0.4. Opinions/reactions: Personal views, responses
-  0.5. Questions/replies: Any inquiry or response
-  0.6. Information sharing: Links, news (unless clearly spam)
-  0.7. Business talk: Unless clearly a scam
-  0.8. Arguments: Unless extremely offensive
-  0.9. Bot commands: Standard interactions
-  0.10. Political content: Discussions, opinions (unless harmful)
-  0.11. Strong language: Within context of discussion
-  
-  Key factors (importance order):
-  1. Message content and intent (any language)
-  2. User behavior and message pattern
-  3. Source relevance and group context
-  4. Links/media presence and nature
-  5. Complaint count and Telegram's spam probability (consider context)
-  
-  Ambiguous cases:
-  - Prioritize message content over group context for short/greeting messages
-  - Allow normal interactions even in suspiciously named groups
-  - Favor free speech for political/controversial content unless clearly harmful
-  - Cautious with explicit invitations, allow ambiguous if not clearly spam
-  - Extra vigilant about easy money promises, especially in mismatched language
-  
-  Output: Single digit (0 or 1) followed by brief reasoning (max 10 words).`;
-  
+Spam (1) if clear:
+1.1. Commercial: Unsolicited ads, aggressive promotions
+1.2. Scams: Phishing, fake giveaways, get-rich-quick schemes
+1.3. Malicious: Malware, viruses
+1.4. Adult: Explicit content, unsolicited services
+1.5. Crypto/Financial: Unrealistic promises, quick money schemes
+1.6. Deceptive: Impersonation, misleading info
+1.7. Unwanted: Excessive invites, chain messages
+1.8. Job offers: Unsolicited or suspicious
+1.9. Self-promotion: Unrelated channels/groups
+1.10. Urgent financial decisions: Pressuring users
+1.11. Private channels: Attempts to move conversations for commercial purposes
+1.12. Excessive URLs: Especially shortened/unrelated to discussion
+1.13. Bot-like behavior: Repetitive messages
+1.14. Specific usernames: Mentioned for financial services
+1.15. Bypass attempts: Excessive emojis/symbols to avoid filters
+1.16. Easy money promises: Including minimal effort claims
+1.17. Language mismatch: Different from group's primary, especially if promotional
+1.18. Illegal services: Fake documents, licenses
+
+Not Spam (0) for:
+0.1. Normal chat: Greetings, casual conversation
+0.2. Short messages: Single words, numbers, emojis
+0.3. Group-related: Content relevant to the group
+0.4. Opinions/reactions: Personal views, responses
+0.5. Questions/replies: Any inquiry or response
+0.6. Information sharing: Links, news (unless clearly spam)
+0.7. Business talk: Unless clearly a scam
+0.8. Arguments: Unless extremely offensive
+0.9. Bot commands: Standard interactions
+0.10. Political content: Discussions, opinions (unless harmful)
+0.11. Strong language: Within context of discussion
+
+Key factors (importance order):
+1. Message content and intent (any language)
+2. User behavior and message pattern
+3. Source relevance and group context
+4. Links/media presence and nature
+5. Complaint count and Telegram's spam probability (consider context)
+
+Ambiguous cases:
+- Prioritize message content over group context for short/greeting messages
+- Allow normal interactions even in suspiciously named groups
+- Favor free speech for political/controversial content unless clearly harmful
+- Cautious with explicit invitations, allow ambiguous if not clearly spam
+- Extra vigilant about easy money promises, especially in mismatched language
+
+Output: Single digit (0 or 1) followed by brief reasoning (max 10 words).`;
+
   // Формирование строки с результатами анализа изображений
   const visionAnalysis = visionResults.length > 0
     ? visionResults.map(vr => 
@@ -1332,18 +1334,18 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
         (vr.textAnnotations ? ` Text: ${vr.textAnnotations[0]?.description.slice(0, 50)}` : '')
       ).join(' | ')
     : 'No vision data';
-  
+
   // Формирование промпта для пользователя
   const userPrompt = `Analyze:
-  "${message}"
-  Complaints: ${sysInfo.complaintCount}
-  Source: ${sysInfo.source}
-  Sender: ${sysInfo.sender}
-  Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
-  Spam Prob: ${sysInfo.telegramSpamProbability}
-  Vision: ${visionAnalysis}
-  
-  Classification (0/1) and brief reason:`;
+"${message}"
+Complaints: ${sysInfo.complaintCount}
+Source: ${sysInfo.source}
+Sender: ${sysInfo.sender}
+Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
+Spam Prob: ${sysInfo.telegramSpamProbability}
+Vision: ${visionAnalysis}
+
+Classification (0/1) and brief reason:`;
 
   try {
     const response = await retryGptRequest(
@@ -1353,7 +1355,7 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
           { role: "system", content: gptPrompt },
           { role: "user", content: userPrompt }
         ],
-        max_tokens: 30,  // Увеличено количество токенов
+        max_tokens: 30,
         temperature: 0.1,
       }),
       2,
