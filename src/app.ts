@@ -1273,7 +1273,7 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
   // Промпт для GPT, описывающий задачу и критерии классификации спама
   const gptPrompt = `# Telegram Spam Detection
 
-Analyze the given message and classify it as spam (1) or not spam (0). Provide a confidence score. Consider the Telegram context, where users can send text, media, and links in group chats or private messages in any language. Be very cautious about classifying messages as spam, especially short or emoji-only messages.
+Analyze the given message and classify it as spam (1) or not spam (0). Consider the Telegram context, where users can send text, media, and links in group chats or private messages in any language. Be very cautious about classifying messages as spam, especially short or emoji-only messages.
 
 ## 1 - Spam (only if very clear and obvious):
 - Commercial: Unsolicited ads, aggressive promotions
@@ -1301,7 +1301,7 @@ Analyze the given message and classify it as spam (1) or not spam (0). Provide a
 
 Consider: Message intent, group context, and media content. A single complaint or the presence of emojis/short text does NOT automatically indicate spam. Err on the side of caution - if in doubt, classify as not spam.
 
-Output: JSON with classification and confidence score. Do not use markdown formatting or JSON code blocks in your response.`;
+Output: JSON with classification only. Do not use markdown formatting or JSON code blocks in your response.`;
 
   // Формирование строки с результатами анализа изображений
   const visionAnalysis = visionResults.length > 0
@@ -1324,8 +1324,7 @@ Vision Analysis: ${visionAnalysis}
 
 Respond with JSON:
 {
-  "classification": number (0 or 1),
-  "confidence": number (0-100)
+  "classification": number (0 or 1)
 }`;
 
   try {
@@ -1337,7 +1336,7 @@ Respond with JSON:
           { role: "system", content: gptPrompt },
           { role: "user", content: userPrompt }
         ],
-        max_tokens: 150,
+        max_tokens: 100,
         temperature: 0.1,
       }),
       2,
@@ -1361,13 +1360,12 @@ Respond with JSON:
     }
     
     // Проверка структуры ответа GPT
-    if (typeof result.classification !== 'number' || 
-        typeof result.confidence !== 'number') {
+    if (typeof result.classification !== 'number') {
       throw new Error('Invalid GPT response structure');
     }
 
     const isSpam = result.classification === 1;
-    let spamScore = isSpam ? result.confidence : 100 - result.confidence;
+    let spamScore = isSpam ? 75 : 25;  // Базовая оценка
 
     // Корректировка оценки спама на основе системной информации
     spamScore += Math.min(5, sysInfo.complaintCount);
@@ -1391,7 +1389,7 @@ Respond with JSON:
 
     spamScore = Math.min(100, spamScore);
 
-    console.log(`GPT Deep Analysis - Confidence: ${result.confidence}, Adjusted Spam Score: ${spamScore}`);
+    console.log(`GPT Deep Analysis - Classification: ${isSpam ? 'SPAM' : 'NOT SPAM'}, Adjusted Spam Score: ${spamScore}`);
 
     return {
       isSpam: spamScore > 85,
@@ -1410,11 +1408,11 @@ async function performSimplifiedCheck(message: string): Promise<{
   spamScore: number;
 }> {
   try {
-    const simplePrompt = "Is this message spam? Answer with JSON: {\"isSpam\": boolean}. Do not use markdown formatting or JSON code blocks in your response.\n\n" + message;
+    const simplePrompt = "Is this message spam? Answer with JSON: {\"classification\": number (0 or 1)}. Do not use markdown formatting or JSON code blocks in your response.\n\n" + message;
     const simpleResponse = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: simplePrompt }],
-      max_tokens: 30,
+      max_tokens: 20,
       temperature: 0.0,
     });
     const simpleAnswer = simpleResponse.choices[0]?.message?.content || '{}';
@@ -1434,9 +1432,12 @@ async function performSimplifiedCheck(message: string): Promise<{
       };
     }
     
+    const isSpam = result.classification === 1;
+    const spamScore = isSpam ? 75 : 25;
+
     return {
-      isSpam: result.isSpam || false,
-      spamScore: result.isSpam ? 80 : 20
+      isSpam,
+      spamScore
     };
   } catch (simpleError) {
     console.error('Error in simplified GPT check:', simpleError);
