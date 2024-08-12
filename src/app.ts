@@ -579,51 +579,34 @@ async function processReport(messages: Api.Message[], sysInfo: SysInfo): Promise
     processingStartTime = Date.now();
     isProcessing = true;
 
-    const mediaTypes = messages.map(m => m.media ? getMediaType(m.media) : 'None');
-    console.log(`
-Processing Report: ${sysInfo.reportId}
-Number of Messages: ${messages.length}
-Media Types: ${mediaTypes.join(', ')}
-Complaint Count: ${sysInfo.complaintCount}
-Source: ${sysInfo.source}
-Sender: ${sysInfo.sender}
-Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
-`);
+    console.log(`Processing Report: ${sysInfo.reportId}`);
 
     let result: CheckResult = null;
 
     if (enabledChecks.has('mod')) {
       result = await checkModerators(messages, sysInfo);
     } else {
+      // Последовательная проверка с ранним выходом
       if (enabledChecks.has('cache')) {
         result = await checkCache(messages);
-        if (result) console.log("Cache check result:", result);
+        if (result) {
+          console.log("Cache hit:", result);
+          return; // Ранний выход при наличии результата в кэше
+        }
       }
 
       if (!result && enabledChecks.has('obvious')) {
         result = await checkObvious(messages, sysInfo);
-        if (result) {
-          if (result.isSpam === undefined) {
-            console.log("Obvious check result (requires further checking):", result);
-          } else {
-            console.log("Obvious check result:", result);
-          }
+        if (result && result.isSpam !== undefined) {
+          console.log("Obvious check result:", result);
+          return; // Ранний выход при очевидном результате
         }
       }
 
       if ((!result || result.isSpam === undefined) && enabledChecks.has('gpt')) {
-        try {
-          const { preprocessedMessage, visionResults, isSpam } = await preprocessAndAnalyze(messages);
-          result = await checkGPT(messages, sysInfo, preprocessedMessage, visionResults, isSpam);
-          if (result) console.log("GPT check result:", result);
-        } catch (error) {
-          console.error("Error in GPT check:", error);
-          result = { 
-            isSpam: undefined,
-            layer: 5, 
-            reason: "Error in GPT check, undo required",
-          };
-        }
+        const { preprocessedMessage, visionResults, isSpam } = await preprocessAndAnalyze(messages);
+        result = await checkGPT(messages, sysInfo, preprocessedMessage, visionResults, isSpam);
+        if (result) console.log("GPT check result:", result);
       }
     }
 
@@ -645,20 +628,14 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
     if (result && result.isSpam !== undefined) {
       setImmediate(() => {
         messages.forEach(message => {
-          saveToCache(message, result.isSpam ? '😡 SPAM' : '😌 NO', result.gptScore).catch(error => {
-            console.error('Error in delayed caching:', error);
-          });
+          saveToCache(message, result.isSpam ? '😡 SPAM' : '😌 NO', result.gptScore).catch(console.error);
         });
       });
     }
 
-  } catch (error: unknown) {
+  } catch (error) {
     console.error("Error processing report:", error);
-    if (error instanceof Error) {
-      await notifyAdmin(`Error processing report: ${error.message}`);
-    } else {
-      await notifyAdmin(`Error processing report: ${String(error)}`);
-    }
+    await notifyAdmin(`Error processing report: ${error instanceof Error ? error.message : String(error)}`);
     await client.sendMessage(botId, { message: "/undo" });
     startRecovery();
   } finally {
@@ -670,9 +647,7 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
 
     setImmediate(() => {
       if (reportBuffer.messages.length > 0 && reportBuffer.sysInfo) {
-        processBuffer().catch(error => {
-          console.error("Error processing buffer after ending previous processing:", error);
-        });
+        processBuffer().catch(console.error);
       }
     });
   }
@@ -802,14 +777,10 @@ async function waitForBotResponse(expectedResponse: string | RegExp, timeout = 1
 
 // Функция для проверки кэша
 async function checkCache(messages: Api.Message[]): Promise<CheckResult> {
-  const redis = getRedisConnection();
-  
   // Создаем массив промисов для каждого сообщения
   const cachePromises = messages.map(async (message) => {
-    const key = `msg:${message.id}`;
-    const cachedData = await redis.get(key);
-    if (cachedData) {
-      const cachedEntry: CacheEntry = JSON.parse(cachedData);
+    const cachedEntry = await getFromCache(message);
+    if (cachedEntry) {
       if (message.message === cachedEntry.message && 
           (message.media ? getMediaHash(message.media) : '') === cachedEntry.mediaHash) {
         const isSpam = cachedEntry.response === '😡 SPAM';
@@ -1571,35 +1542,31 @@ async function saveToCache(message: Api.Message, response: string, gptScore?: nu
   const key = `msg:${message.id}`;
   const mediaType = message.media ? getMediaType(message.media) : 'None';
   const mediaHash = message.media ? getMediaHash(message.media) : '';
-  const entry: CacheEntry = {
+  
+  const entry = JSON.stringify({
     message: message.message?.slice(0, 100) || '',
     mediaType,
     mediaHash,
     response,
     timestamp: Date.now(),
     gptScore
-  };
-
-  // Асинхронная запись в кеш
-  redis.set(key, JSON.stringify(entry), 'EX', CACHE_TTL).catch(error => {
-    console.error('Error saving to cache:', error);
   });
+
+  // Используем pipeline для выполнения нескольких операций за один раз
+  const pipeline = redis.pipeline();
+  pipeline.set(key, entry, 'EX', CACHE_TTL);
 
   if (gptScore !== undefined) {
     const contentKey = `gpt:${crypto.createHash('md5').update(message.message || '').digest('hex')}`;
-    redis.set(contentKey, JSON.stringify({ response, gptScore }), 'EX', CACHE_TTL).catch(error => {
-      console.error('Error saving GPT score to cache:', error);
-    });
+    pipeline.set(contentKey, JSON.stringify({ response, gptScore }), 'EX', CACHE_TTL);
   }
 
-  // Асинхронная проверка использования кэша
-  setImmediate(async () => {
-    try {
-      await checkCacheUsage();
-    } catch (error) {
-      console.error('Error in checkCacheUsage:', error);
-    }
+  pipeline.exec().catch(error => {
+    console.error('Error saving to cache:', error);
   });
+
+  // Асинхронная проверка использования кэша
+  setImmediate(checkCacheUsage);
 }
 
 // Функция для получения результата из кэша
@@ -1648,68 +1615,23 @@ return redisPool[Math.floor(Math.random() * REDIS_POOL_SIZE)];
 
 // Функция для запуска процесса восстановления
 async function startRecovery(): Promise<void> {
-if (isProcessing) {
-  if (processingStartTime && Date.now() - processingStartTime > MAX_PROCESSING_TIME) {
-    console.log("Processing timeout reached, starting recovery");
-    isProcessing = false;
-    processingStartTime = null;
-  } else {
+  if (isProcessing) {
     console.log("Recovery skipped: message is still being processed");
     return;
   }
-}
 
-if (recoveryTimer) clearTimeout(recoveryTimer);
-if (nextTimer) clearTimeout(nextTimer);
-
-recoveryTimer = setTimeout(async () => {
-  if (isProcessing) {
-    console.log("Recovery canceled: message processing completed");
-    return;
-  }
-
+  console.log("Starting recovery process");
+  
   try {
     await client.sendMessage(botId, { message: '/undo' });
-    
-    const previousMessage = await new Promise<Api.Message>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Timeout waiting for previous message')), 10000);
-      
-      const eventBuilder = new NewMessage({});
-      const handler = (event: NewMessageEvent) => {
-        if (event.message instanceof Api.Message && event.message.senderId && event.message.senderId.toJSNumber() === botId) {
-          clearTimeout(timeout);
-          client.removeEventHandler(handler, eventBuilder);
-          resolve(event.message);
-        }
-      };
-
-      client.addEventHandler(handler, eventBuilder);
-    });
-
-    if (previousMessage) {
-      await processReport([previousMessage], { hasLink: '', reportId: '', complaintCount: 0, source: '', sender: '', crowdOpinions: [], telegramSpamProbability: 0 });
-      return;
-    }
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await client.sendMessage(botId, { message: '/next' });
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await client.sendMessage(botId, { message: '😌 NO' });
   } catch (error) {
     console.error('Error in recovery process:', error);
+    await notifyAdmin("Recovery process failed. Manual intervention may be required.");
   }
-
-  nextTimer = setTimeout(async () => {
-    await client.sendMessage(botId, { message: '/next' });
-    
-    setTimeout(async () => {
-      await client.sendMessage(botId, { message: '😌 NO' });
-      
-      const longRecoveryTimer = setInterval(async () => {
-        await client.sendMessage(botId, { message: '/next' });
-      }, 30 * 60 * 1000);
-      setTimeout(() => {
-        clearInterval(longRecoveryTimer);
-        notifyAdmin("Recovery process failed after multiple attempts.");
-      }, 5 * 60 * 60 * 1000);
-    }, 2000);
-  }, 6000);
-}, 20000);
 }
 
 // Функция для сброса таймеров восстановления
