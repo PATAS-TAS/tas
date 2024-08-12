@@ -1,6 +1,6 @@
 // app.ts
 
-// IMPORTS
+// Импорт необходимых модулей и типов
 import { NewMessage, NewMessageEvent } from 'telegram/events/NewMessage.js';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 import { StringSession } from 'telegram/sessions/index.js';
@@ -26,33 +26,65 @@ import {
   suspiciousPhrases
 } from './keywords.js';
 
+// Загрузка переменных окружения из файла .env
 dotenv.config();
 
-// CONFIGS
+// КОНФИГУРАЦИЯ
 //--------------------------------------------------
 
+// Инициализация Express приложения
 const app = express();
+
+// Создание мьютекса для синхронизации обработки сообщений
 const processingMutex = new Mutex();
+
+// Порт для запуска сервера (по умолчанию 3000)
 const port = process.env.PORT || 3000;
+
+// API хэш для Telegram API
 const apiHash = process.env.API_HASH!;
+
+// Номер телефона для авторизации в Telegram
 const phoneNumber = process.env.PHONE_NUMBER!;
+
+// API ID для Telegram API
 const apiId = parseInt(process.env.API_ID!);
+
+// ID бота, с которым взаимодействует система
 const botId = parseInt(process.env.BOT_ID!);
+
+// ID администратора системы
 const adminId = parseInt(process.env.ADMIN_ID!);
+
+// Инициализация клиента OpenAI API
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Время жизни кэша в секундах (по умолчанию 1 день)
 const CACHE_TTL = parseInt(process.env.CACHE_TTL || '86400', 10);
+
+// Инициализация клиента Google Cloud Vision API
 const visionClient = new ImageAnnotatorClient({projectId: process.env.GOOGLE_CLOUD_PROJECT,});
+
+// Максимальный размер файла для анализа (5 МБ)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+// Размер пула соединений Redis
 const REDIS_POOL_SIZE = 5;
+
+// Максимальное использование кэша (90%)
 const MAX_CACHE_USAGE = 0.9;
-const MAX_PROCESSING_TIME = 59 * 1000; // 59 секунд
-const CHECK_MSG_TIMEOUT = 55000; // 55 секунд
 
+// Максимальное время обработки сообщения (59 секунд)
+const MAX_PROCESSING_TIME = 59 * 1000;
 
+// Таймаут для проверки наличия новых сообщений (55 секунд)
+const CHECK_MSG_TIMEOUT = 55000;
+
+// Глобальные переменные для управления состоянием системы
 let recoveryTimer: NodeJS.Timeout | null = null;
 let nextTimer: NodeJS.Timeout | null = null;
 let client: TelegramClient;
-let processInterval = 162;
+let processInterval = 100;
 let isAutoMode = true; // переключатель авто режима
 let isProcessing = false;
 let isVisionEnabled = true; // переключатель анализа медиа
@@ -61,14 +93,16 @@ let processingStartTime: number | null = null;
 let lastCheckMsgTime = Date.now();
 let checkMsgTimeoutTimer: NodeJS.Timeout | null = null;
 
-
-// INTERFACES
+// ИНТЕРФЕЙСЫ
 //--------------------------------------------------
+
+// Интерфейс для информации о проверке
 interface CheckInfo {
   messages: Api.Message[];
   storyCaption?: string;
 }
 
+// Интерфейс для системной информации о сообщении
 interface SysInfo {
   hasLink: string;
   reportId: string;
@@ -79,6 +113,7 @@ interface SysInfo {
   telegramSpamProbability: number;
 }
 
+// Интерфейс для результата проверки
 interface ResultInfo {
   isSpam: boolean | undefined;
   layer: number;
@@ -88,6 +123,7 @@ interface ResultInfo {
   combinedMessage?: string;  
 }
 
+// Интерфейс для записи в кэше
 interface CacheEntry {
   message?: string;
   mediaHash?: string;
@@ -97,12 +133,14 @@ interface CacheEntry {
   response: string;
 }
 
+// Интерфейс для буфера отчетов
 interface ReportBuffer {
   messages: Api.Message[];
   sysInfo: SysInfo | null;
   lastUpdateTime: number;
 }
 
+// Интерфейс для результата анализа изображения
 interface VisionResult {
   type: string;
   labels: string[];
@@ -110,24 +148,31 @@ interface VisionResult {
   textAnnotations?: { description: string }[];
 }
 
+// Тип для результата проверки
 type CheckResult = ResultInfo | null;
 
+// Интерфейс для функции проверки
 interface CheckFunction {
   (messages: Api.Message[], sysInfo: SysInfo): Promise<CheckResult>;
 }
 
-// SPAM CHECKER CLASSES
+// КЛАССЫ ПРОВЕРКИ СПАМА
 //--------------------------------------------------
+
+// Абстрактный класс для проверки спама
 abstract class SpamChecker {
   protected next: SpamChecker | null = null;
 
+  // Метод для установки следующего проверяющего в цепочке
   setNext(checker: SpamChecker): SpamChecker {
     this.next = checker;
     return checker;
   }
 
+  // Абстрактный метод проверки, который должен быть реализован в подклассах
   abstract check(messages: Api.Message[], sysInfo: SysInfo): Promise<CheckResult>;
 
+  // Метод для обработки проверки и передачи результата следующему проверяющему
   async handleCheck(messages: Api.Message[], sysInfo: SysInfo): Promise<CheckResult | null> {
     const result = await this.check(messages, sysInfo);
     if (result) {
@@ -140,22 +185,25 @@ abstract class SpamChecker {
   }
 }
 
+// Класс для проверки кэша
 class CacheChecker extends SpamChecker {
   async check(messages: Api.Message[]): Promise<CheckResult> {
     return checkCache(messages);
   }
 }
 
+// Класс для проверки очевидного спама
 class ObviousChecker extends SpamChecker {
   check: CheckFunction = async (messages, sysInfo) => {
     return checkObvious(messages, sysInfo);
   }
 }
 
+// Класс для проверки с использованием GPT
 class GPTChecker extends SpamChecker {
   check: CheckFunction = async (messages, sysInfo) => {
-    const { preprocessedMessage, visionResults } = await preprocessAndAnalyze(messages);
-    return checkGPT(messages, sysInfo, preprocessedMessage, visionResults);
+    const { preprocessedMessage, visionResults, isSpam } = await preprocessAndAnalyze(messages);
+    return checkGPT(messages, sysInfo, preprocessedMessage, visionResults, isSpam);
   }
 }
 
@@ -168,16 +216,21 @@ cacheChecker
   .setNext(obviousChecker)
   .setNext(gptChecker);
 
-// CLIENT INITIALIZATION
+// ИНИЦИАЛИЗАЦИЯ КЛИЕНТА
 //--------------------------------------------------
+
+// Функция для инициализации клиента Telegram
 async function initClient(): Promise<TelegramClient> {
+  // Получение строки сессии из переменных окружения
   const sessionString = process.env.SESSION_STRING || "";
   const stringSession = new StringSession(sessionString);
   
+  // Создание клиента Telegram
   const client = new TelegramClient(stringSession, apiId, apiHash, {
     connectionRetries: 5,
   });
 
+  // Если строка сессии отсутствует, запускаем процесс авторизации
   if (!sessionString) {
     await client.start({
       phoneNumber: async () => phoneNumber,
@@ -186,22 +239,26 @@ async function initClient(): Promise<TelegramClient> {
       onError: (err) => console.log(err),
     });
 
+    // Сохранение новой строки сессии
     const newSessionString = stringSession.save();
     console.log("New session string:", newSessionString);
     console.log("Please set this as SESSION_STRING in your .env file");
     
     try {
+      // Обновление файла .env с новой строкой сессии
       await updateEnvFile("SESSION_STRING", newSessionString);
       console.log("SESSION_STRING has been updated in .env file");
     } catch (error) {
       console.error("Failed to update .env file. Please set SESSION_STRING manually.");
     }
   } else {
+    // Если строка сессии существует, просто подключаемся
     await client.connect();
   }
   return client;
 }
 
+// Функция для обновления файла .env
 async function updateEnvFile(key: string, value: string): Promise<void> {
   try {
     const envPath = path.resolve(process.cwd(), '.env');
@@ -220,6 +277,7 @@ async function updateEnvFile(key: string, value: string): Promise<void> {
   }
 }
 
+// Функция для запроса ввода от пользователя
 async function promptInput(inputType: string, isPassword: boolean = false): Promise<string> {
   const response = await prompts({
     type: isPassword ? 'password' : 'text',
@@ -230,8 +288,10 @@ async function promptInput(inputType: string, isPassword: boolean = false): Prom
   return response.value;
 }
 
-// ADMIN FUNCTIONS
+// ФУНКЦИИ АДМИНИСТРАТОРА
 //--------------------------------------------------
+
+// Функция для уведомления администратора
 async function notifyAdmin(message: string, error?: any): Promise<void> {
   try {
     let fullMessage = `TAS: ${message}`;
@@ -242,9 +302,11 @@ async function notifyAdmin(message: string, error?: any): Promise<void> {
   }
 }
 
+// Функция для обработки сообщений от администратора
 async function adminMsg(event: NewMessageEvent): Promise<void> {
   const message = event.message.message;
   if (message.startsWith('/time')) {
+    // Обработка команды установки интервала обработки
     const timeArg = message.split(' ')[1];
     if (timeArg !== undefined) {
       const time = parseFloat(timeArg);
@@ -259,12 +321,15 @@ async function adminMsg(event: NewMessageEvent): Promise<void> {
       await client.sendMessage(adminId, { message: "/time <секунды[.миллисекунды]>" });
     }
   } else if (message === '/start') {
+    // Включение автоматического режима
     isAutoMode = true;
     await client.sendMessage(adminId, { message: "🤖" });
   } else if (message === '/stop') {
+    // Выключение автоматического режима
     isAutoMode = false;
     await client.sendMessage(adminId, { message: "✋" });
   } else if (message.startsWith('/toggle')) {
+    // Переключение различных функций системы
     const [_, feature] = message.split(' ');
     switch (feature) {
       case 'vision':
@@ -302,14 +367,18 @@ async function adminMsg(event: NewMessageEvent): Promise<void> {
         await client.sendMessage(adminId, { message: "Invalid feature. Use: vision, cache, obvious, gpt, mod" });
     }
   } else {
+    // Вывод списка доступных команд
+    // Вывод списка доступных команд
     const commandList = "/start /stop /time /toggle <feature>";
     const featureList = "Available features: vision, cache, obvious, gpt, mod";
     await client.sendMessage(adminId, { message: `❓ - ${commandList}\n${featureList}` });
   }
 }
 
-// MESSAGE HANDLING
+// ОБРАБОТКА СООБЩЕНИЙ
 //--------------------------------------------------
+
+// Функция для обработки входящих сообщений для проверки
 async function checkMsg(event: NewMessageEvent): Promise<void> {
   try {
     if (event.message instanceof Api.Message) {
@@ -338,6 +407,7 @@ Media: ${message.media ? getMediaType(message.media) : 'No'}
   }
 }
 
+// Функция для обработки сообщений о следующем отчете
 async function handleNextReport(event: NewMessageEvent): Promise<void> {
   if (event.message instanceof Api.Message) {
     const message = event.message.message;
@@ -360,6 +430,7 @@ async function handleNextReport(event: NewMessageEvent): Promise<void> {
   }
 }
 
+// Функция для обработки системных сообщений
 async function sysMsg(event: NewMessageEvent): Promise<void> {
   try {
     const message = event.message.message;
@@ -417,6 +488,7 @@ async function sysMsg(event: NewMessageEvent): Promise<void> {
   }
 }
 
+// Функция для определения типа медиа-контента
 function getMediaType(media: Api.TypeMessageMedia): string {
   if (media instanceof Api.MessageMediaPhoto) return 'Photo';
   if (media instanceof Api.MessageMediaDocument) {
@@ -445,7 +517,7 @@ function getMediaType(media: Api.TypeMessageMedia): string {
   return 'Unknown';
 }
 
-// BUFFER HANDLING
+// ОБРАБОТКА БУФЕРА
 //--------------------------------------------------
 let reportBuffer: ReportBuffer = {
   messages: [],
@@ -453,6 +525,7 @@ let reportBuffer: ReportBuffer = {
   lastUpdateTime: Date.now()
 }
 
+// Функция для добавления сообщения в буфер
 function addToBuffer(checkInfo: CheckInfo): void {
   const newMessageIds = new Set(checkInfo.messages.map(m => m.id));
   
@@ -473,11 +546,13 @@ function addToBuffer(checkInfo: CheckInfo): void {
   }
 }
 
+// Функция для добавления системной информации в буфер
 function addSysInfoToBuffer(sysInfo: SysInfo): void {
   reportBuffer.sysInfo = sysInfo;
   reportBuffer.lastUpdateTime = Date.now();
 }
 
+// Функция для обработки буфера
 async function processBuffer(): Promise<void> {
   if (reportBuffer.messages.length > 0 && reportBuffer.sysInfo) {
     const messages = [...reportBuffer.messages];
@@ -496,9 +571,10 @@ async function processBuffer(): Promise<void> {
   }
 }
 
-// MAIN PROCESSING LOGIC
+// ОСНОВНАЯ ЛОГИКА ОБРАБОТКИ
 //--------------------------------------------------
 
+// Функция для обработки отчета о спаме
 async function processReport(messages: Api.Message[], sysInfo: SysInfo): Promise<void> {
   const release = await processingMutex.acquire();
   try {
@@ -591,9 +667,10 @@ Has Link: ${sysInfo.hasLink ? 'Yes' : 'No'}
   }
 }
 
-// CHECKING FUNCTIONS
+// ФУНКЦИИ ПРОВЕРКИ
 //--------------------------------------------------
 
+// Функция для проверки модераторами
 async function checkModerators(messages: Api.Message[], sysInfo: SysInfo): Promise<CheckResult> {
   const reportId = sysInfo.reportId;
   let originalCheckMsgHandler: ((event: NewMessageEvent) => Promise<void>) | null = checkMsg;
@@ -712,7 +789,7 @@ async function waitForBotResponse(expectedResponse: string | RegExp, timeout = 1
   });
 }
 
-//--------------------------------------------------
+// Функция для проверки кэша
 async function checkCache(messages: Api.Message[]): Promise<CheckResult> {
   for (const message of messages) {
     const cachedEntry = await getFromCache(message);
@@ -729,8 +806,7 @@ async function checkCache(messages: Api.Message[]): Promise<CheckResult> {
   return null;
 }
 
-//--------------------------------------------------
-
+// Функция для проверки очевидного спама
 async function checkObvious(messages: Api.Message[], sysInfo: SysInfo): Promise<CheckResult> {
   const mediaHashCounts = new Map<string, number>();
   const mediaTypeCounts = new Map<string, number>();
@@ -748,6 +824,7 @@ async function checkObvious(messages: Api.Message[], sysInfo: SysInfo): Promise<
     };
   }
 
+  // Проверка имени отправителя на наличие URL или подозрительных фраз
   if (sysInfo.sender) {
     const lowerSender = sysInfo.sender.toLowerCase();
     const urlsInSender = lowerSender.match(urlRegex);
@@ -760,10 +837,12 @@ async function checkObvious(messages: Api.Message[], sysInfo: SysInfo): Promise<
   }
 
   for (const message of messages) {
+    // Проверка на наличие Stories (считаются спамом по умолчанию)
     if (message.media instanceof Api.MessageMediaStory) {
       return { isSpam: true, layer: 2, reason: "Stories are considered spam by default" };
     }
 
+    // Проверка на наличие URL-кнопок
     if (message.replyMarkup instanceof Api.ReplyInlineMarkup) {
       for (const row of message.replyMarkup.rows) {
         for (const button of row.buttons) {
@@ -827,6 +906,7 @@ async function checkObvious(messages: Api.Message[], sysInfo: SysInfo): Promise<
         return { isSpam: true, layer: 2, reason: "Suspicious keywords detected" };
       }
       
+      // Проверка на наличие и дублирование ссылок
       const urls = cleanedMessage.match(urlRegex) || [];
       for (const url of urls) {
         if (linkCounts.set(url, (linkCounts.get(url) || 0) + 1).get(url)! > 1) {
@@ -837,6 +917,7 @@ async function checkObvious(messages: Api.Message[], sysInfo: SysInfo): Promise<
         }
       }
       
+      // Проверка на повторяющиеся символы
       const repeatingCharRegex = /(.)\1{50,}/;
       const repeatingCharMatch = cleanedMessage.match(repeatingCharRegex);
       if (repeatingCharMatch) {
@@ -847,29 +928,35 @@ async function checkObvious(messages: Api.Message[], sysInfo: SysInfo): Promise<
         }
       }
       
+      // Проверка на подозрительные фразы
       if (suspiciousPhrases.some(phrase => cleanedMessage.includes(phrase.toLowerCase()))) {
         return { isSpam: true, layer: 2, reason: "Suspicious phrase detected in message" };
       }
       
+      // Проверка на избыточную контактную информацию
       const contactInfoCount = (cleanedMessage.match(/\+?[0-9]{10,14}/g) || []).length + 
                                (cleanedMessage.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g) || []).length;
       if (contactInfoCount > 1) return { isSpam: true, layer: 2, reason: "Excessive contact information" };
     }
     
+    // Проверки для медиа-контента
     if (message.media) {
       const mediaType = getMediaType(message.media);
       const mediaHash = getMediaHash(message.media);
       
+      // Проверка на дубликаты медиа
       if (mediaHashCounts.set(mediaHash, (mediaHashCounts.get(mediaHash) || 0) + 1).get(mediaHash)! > 1) {
         return { isSpam: true, layer: 2, reason: `Duplicate ${mediaType} detected` };
       }
 
       mediaTypeCounts.set(mediaType, (mediaTypeCounts.get(mediaType) || 0) + 1);
 
+      // Проверка на чрезмерное количество медиа одного типа
       if (mediaTypeCounts.get(mediaType)! > 2) {
         return { isSpam: true, layer: 2, reason: `Excessive ${mediaType} content (${mediaTypeCounts.get(mediaType)} instances)` };
       }
       
+      // Проверка документов на дубликаты и потенциально опасные расширения
       if (mediaType === 'Document' && message.media instanceof Api.MessageMediaDocument && 
           message.media.document instanceof Api.Document) {
         const fileName = message.media.document.attributes
@@ -909,28 +996,38 @@ async function checkObvious(messages: Api.Message[], sysInfo: SysInfo): Promise<
   return null;
 }
 
-//--------------------------------------------------
-
+// Функция для проверки с использованием GPT
 async function checkGPT(
   messages: Api.Message[], 
   sysInfo: SysInfo, 
   preprocessedMessage: string, 
-  visionResults: VisionResult[]
+  visionResults: VisionResult[],
+  isSpam: boolean | undefined
 ): Promise<CheckResult> {
   try {
     isProcessing = true;
+
+    // Если isSpam уже определен (например, для одиночного GIF), возвращаем результат немедленно
+    if (isSpam !== undefined) {
+      console.log(`GPT Check skipped. Predefined result: ${isSpam ? 'SPAM' : 'NOT SPAM'}`);
+      return {
+        isSpam: isSpam,
+        layer: 5,
+        reason: `Predefined result for special case`
+      };
+    }
 
     const deepCheckResult = await gptDeep(preprocessedMessage, sysInfo, visionResults);
 
     const response = deepCheckResult.isSpam ? '😡 SPAM' : '😌 NO';
     await saveToCache(messages[0], response, deepCheckResult.spamScore);
 
-    console.log(`GPT Check Result - Category: ${deepCheckResult.category}, Spam Score: ${deepCheckResult.spamScore}`);
+    console.log(`GPT Check Result - Spam Score: ${deepCheckResult.spamScore}`);
 
     return {
       isSpam: deepCheckResult.isSpam,
       layer: 5,
-      reason: `GPT Category: ${deepCheckResult.category}`
+      reason: `GPT Spam Score: ${deepCheckResult.spamScore.toFixed(2)}`
     };
 
   } catch (error) {
@@ -945,19 +1042,34 @@ async function checkGPT(
   }
 }
 
-// PREPROCESSING AND ANALYSIS
+// ПРЕДОБРАБОТКА И АНАЛИЗ
 //--------------------------------------------------
-async function preprocessAndAnalyze(messages: Api.Message[]): Promise<{ preprocessedMessage: string, visionResults: VisionResult[] }> {
+
+// Функция для предобработки и анализа сообщений
+async function preprocessAndAnalyze(messages: Api.Message[]): Promise<{ preprocessedMessage: string, visionResults: VisionResult[], isSpam: boolean | undefined }> {
   const message = messages[0];
   const mediaTypes = messages.filter(m => m.media).map(m => getMediaType(m.media!));
   let visionResults: VisionResult[] = [];
+  let isSpam: boolean | undefined = undefined;
 
+  // Проверка на одиночный GIF-файл
+  if (messages.length === 1 && mediaTypes.length === 1 && mediaTypes[0] === 'GIF') {
+    console.log("Single GIF message detected, marking as not spam");
+    return {
+      preprocessedMessage: "[MEDIA: GIF]",
+      visionResults: [],
+      isSpam: false
+    };
+  }
+
+  // Если анализ изображений включен и есть медиа-контент, выполняем анализ
   if (isVisionEnabled && mediaTypes.length > 0) {
     const visionPromises = messages
       .filter(m => m.media)
       .map(analyzeMediaMessage);
     visionResults = await Promise.all(visionPromises);
     
+    // Формируем краткое описание результатов анализа изображений
     const visionSummary = visionResults
       .map(result => {
         let summary = `${result.type}: ${result.labels.slice(0, 3).join(', ')}`;
@@ -973,29 +1085,35 @@ async function preprocessAndAnalyze(messages: Api.Message[]): Promise<{ preproce
       })
       .join('. ');
     
+    // Предобрабатываем сообщение и добавляем результаты анализа изображений
     let preprocessedMessage = preprocessMessage(message.message || '', mediaTypes, visionResults);
     preprocessedMessage += ` Vision: ${visionSummary}`;
 
     // Ограничиваем длину preprocessedMessage
     preprocessedMessage = preprocessedMessage.slice(0, 1500);
 
-    return { preprocessedMessage, visionResults };
+    return { preprocessedMessage, visionResults, isSpam };
   }
 
+  // Если анализ изображений отключен, просто предобрабатываем текст сообщения
   return { 
     preprocessedMessage: preprocessMessage(message.message || '', mediaTypes), 
-    visionResults 
+    visionResults,
+    isSpam
   };
 }
 
-// HELPER FUNCTIONS
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 //--------------------------------------------------
+
+// Функция для проверки, является ли ссылка рекламной
 function isAdLink(url: string): boolean {
   const lowercaseUrl = url.toLowerCase();
   return adKeywordsAndDomains.some(item => lowercaseUrl.includes(item.toLowerCase())) ||
          urlShorteners.some(shortener => lowercaseUrl.includes(shortener));
 }
 
+// Функция для получения хэша медиа-контента
 function getMediaHash(media: Api.TypeMessageMedia): string {
   if (media instanceof Api.MessageMediaPhoto && media.photo)
     return `photo:${media.photo.id.toString()}`;
@@ -1022,24 +1140,28 @@ function getMediaHash(media: Api.TypeMessageMedia): string {
   return 'unknown_media';
 }
 
+// Функция для предобработки текста сообщения
 function preprocessMessage(message: string, mediaTypes: string[], visionResults?: VisionResult[]): string {
+  // Удаляем лишние пробелы и переносы строк, ограничиваем длину сообщения
   let processed = message
     .replace(/\n+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 500);  // Ограничиваем длину сообщения
+    .slice(0, 500);
 
+  // Заменяем персональные данные на маркеры
   processed = processed
     .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[EMAIL]')
     .replace(/\+?[0-9]{10,14}/g, '[PHONE]')
     .replace(/@(\w+)(?!bot\b)/g, '@[USERNAME]')
     .replace(/https?:\/\/\S+/g, '[URL]');
   
+  // Добавляем информацию о типах медиа-контента
   if (mediaTypes.length > 0) {
     processed += ` [MEDIA: ${mediaTypes.join(', ')}]`;
   }
 
-  // Добавляем обработку текста из результатов Vision API
+  // Добавляем текст, извлеченный из изображений (если есть)
   if (visionResults && visionResults.length > 0) {
     const textFromImages = visionResults
       .filter(result => result.textAnnotations && result.textAnnotations.length > 0)
@@ -1047,13 +1169,14 @@ function preprocessMessage(message: string, mediaTypes: string[], visionResults?
       .join(' ');
     
     if (textFromImages) {
-      processed += ` [TEXT_FROM_IMAGE: ${textFromImages.slice(0, 200)}]`; // Ограничиваем длину текста из изображения
+      processed += ` [TEXT_FROM_IMAGE: ${textFromImages.slice(0, 200)}]`;
     }
   }
 
   return processed;
 }
 
+// Функция для получения размера файла
 async function getFileSize(mediaMessage: Api.Message): Promise<number> {
   if (mediaMessage.media instanceof Api.MessageMediaPhoto) {
     const photo = mediaMessage.media.photo;
@@ -1082,6 +1205,7 @@ async function getFileSize(mediaMessage: Api.Message): Promise<number> {
   return 1 * 1024 * 1024; // 1 MB as a default fallback
 }
 
+// Функция для анализа изображения с помощью Google Vision API
 async function analyzeImageWithVision(imageBuffer: Buffer): Promise<{ labels: string[], safeSearch: any, textAnnotations?: { description: string }[] }> {
   const [result] = await visionClient.annotateImage({
     image: { content: imageBuffer },
@@ -1101,6 +1225,7 @@ async function analyzeImageWithVision(imageBuffer: Buffer): Promise<{ labels: st
   return { labels, safeSearch, textAnnotations };
 }
 
+// Функция для анализа медиа-сообщения
 async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionResult> {
   const fileSize = await getFileSize(mediaMessage);
   const mediaType = getMediaType(mediaMessage.media!);
@@ -1113,6 +1238,7 @@ async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionRes
     partialResult.textAnnotations = [{ description: mediaMessage.message }];
   }
 
+  // Пропускаем анализ больших файлов
   if (fileSize > MAX_FILE_SIZE) {
     console.log(`Skipping Vision analysis for large file (${fileSize} bytes)`);
     return partialResult as VisionResult;
@@ -1121,6 +1247,7 @@ async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionRes
   let imageBuffer: Buffer | null = null;
 
   try {
+    // Загружаем медиа-контент
     imageBuffer = await client.downloadMedia(mediaMessage.media!) as Buffer;
     if (imageBuffer) {
       console.log(`Successfully downloaded media, size: ${imageBuffer.length} bytes`);
@@ -1135,47 +1262,48 @@ async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionRes
   return partialResult as VisionResult;
 }
 
-
-// GPT PROMPTS AND FUNCTIONS
+// GPT ПРОМПТЫ И ФУНКЦИИ
 //--------------------------------------------------
 
+// Функция для глубокого анализа с помощью GPT
 async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionResult[]): Promise<{ 
   isSpam: boolean; 
   spamScore: number; 
-  category: string;
 }> {
+  // Промпт для GPT, описывающий задачу и критерии классификации спама
   const gptPrompt = `# Telegram Spam Detection
 
-Analyze the given message and classify it as spam (1) or not spam (0). Provide a detailed category and confidence score. Consider the Telegram context, where users can send text, media, and links in group chats or private messages in any language. Be very cautious about classifying messages as spam, especially short or emoji-only messages.
+Analyze the given message and classify it as spam (1) or not spam (0). Provide a confidence score. Consider the Telegram context, where users can send text, media, and links in group chats or private messages in any language. Be very cautious about classifying messages as spam, especially short or emoji-only messages.
 
 ## 1 - Spam (only if very clear and obvious):
-1.1. Commercial: Unsolicited ads, aggressive promotions
-1.2. Scams: Clear phishing attempts, obvious fake giveaways
-1.3. Malicious: Explicit mentions of malware or viruses
-1.4. Adult: Explicit pornography, unsolicited adult services, private meetings/calls
-1.5. Crypto/Financial: Unrealistic investment promises, obvious quick money schemes
-1.6. Deceptive: Obvious impersonation, very misleading information
-1.7. Unwanted: Excessive invites, clear chain messages
-1.8. Any message with clear spam indicators
-1.9 Asks to subscribe/follow/donate
-1.10 Illegal Services: Offering fake documents, licenses, or other illegal services
+- Commercial: Unsolicited ads, aggressive promotions
+- Scams: Clear phishing attempts, obvious fake giveaways
+- Malicious: Explicit mentions of malware or viruses
+- Adult: Explicit pornography, unsolicited adult services, private meetings/calls
+- Crypto/Financial: Unrealistic investment promises, obvious quick money schemes
+- Deceptive: Obvious impersonation, very misleading information
+- Unwanted: Excessive invites, clear chain messages
+- Any message with clear spam indicators
+- Asks to subscribe/follow/donate
+- Illegal Services: Offering fake documents, licenses, or other illegal services
 
 ## 0 - Not Spam (default for most messages):
-0.1. Normal conversations: Any casual chat, greetings, emoji usage
-0.2. Short messages: Single words, numbers, or emojis
-0.3. Group-related content: Any message that could be relevant to a group
-0.4. Opinions or reactions: Personal views, emotional responses
-0.5. Questions or responses: Any form of inquiry or reply
-0.6. Sharing of information: Links, news, or any shared content
-0.7. Business or financial discussions: Unless clearly a scam
-0.8. Insults, arguments, or disagreements: Unless very offensive or aggressive
-0.9. Any message without clear spam indicators
-0.10 Commands "/" to bots
+- Normal conversations: Any casual chat, greetings, emoji usage
+- Short messages: Single words, numbers, or emojis
+- Group-related content: Any message that could be relevant to a group
+- Opinions or reactions: Personal views, emotional responses
+- Questions or responses: Any form of inquiry or reply
+- Sharing of information: Links, news, or any shared content
+- Business or financial discussions: Unless clearly a scam
+- Insults, arguments, or disagreements: Unless very offensive or aggressive
+- Any message without clear spam indicators
+- Commands "/" to bots
 
 Consider: Message intent, group context, and media content. A single complaint or the presence of emojis/short text does NOT automatically indicate spam. Err on the side of caution - if in doubt, classify as not spam.
 
-Output: JSON with classification, category, and confidence score. Do not use markdown formatting or JSON code blocks in your response.`;
+Output: JSON with classification and confidence score. Do not use markdown formatting or JSON code blocks in your response.`;
 
+  // Формирование строки с результатами анализа изображений
   const visionAnalysis = visionResults.length > 0
     ? visionResults.map(vr => 
         `${vr.type} - Labels: ${vr.labels.join(', ')}, ` +
@@ -1184,6 +1312,7 @@ Output: JSON with classification, category, and confidence score. Do not use mar
       ).join(' | ')
     : 'Vision analysis unavailable';
 
+  // Формирование промпта для пользователя с учетом всей доступной информации
   const userPrompt = `Analyze:
 Message: "${message}"
 Complaints: ${sysInfo.complaintCount}
@@ -1196,11 +1325,11 @@ Vision Analysis: ${visionAnalysis}
 Respond with JSON:
 {
   "classification": number (0 or 1),
-  "category": string (e.g., "1.2" or "0.3"),
   "confidence": number (0-100)
 }`;
 
   try {
+    // Отправка запроса к GPT с возможностью повторных попыток
     const response = await retryGptRequest(
       () => openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -1208,7 +1337,7 @@ Respond with JSON:
           { role: "system", content: gptPrompt },
           { role: "user", content: userPrompt }
         ],
-        max_tokens: 250,
+        max_tokens: 150,
         temperature: 0.1,
       }),
       2,
@@ -1219,6 +1348,7 @@ Respond with JSON:
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error('Empty GPT-4o response');
 
+    // Очистка ответа от возможных markdown-тегов
     const cleanedContent = content.replace(/```json\n?|\n?```/g, '').trim();
     
     let result;
@@ -1230,8 +1360,8 @@ Respond with JSON:
       throw new Error('Invalid GPT response structure');
     }
     
+    // Проверка структуры ответа GPT
     if (typeof result.classification !== 'number' || 
-        typeof result.category !== 'string' ||
         typeof result.confidence !== 'number') {
       throw new Error('Invalid GPT response structure');
     }
@@ -1239,19 +1369,19 @@ Respond with JSON:
     const isSpam = result.classification === 1;
     let spamScore = isSpam ? result.confidence : 100 - result.confidence;
 
-    // Adjust score based on system info
+    // Корректировка оценки спама на основе системной информации
     spamScore += Math.min(5, sysInfo.complaintCount);
     spamScore += sysInfo.telegramSpamProbability * 10;
     if (sysInfo.hasLink) spamScore += 2;
     
-    // Adjust score based on vision analysis
+    // Корректировка оценки на основе анализа изображений
     const adultContent = visionResults.some(vr => vr.safeSearch && (vr.safeSearch.adult === 'LIKELY' || vr.safeSearch.adult === 'VERY_LIKELY'));
     if (adultContent) spamScore += 10;
 
     const violenceContent = visionResults.some(vr => vr.safeSearch && (vr.safeSearch.violence === 'LIKELY' || vr.safeSearch.violence === 'VERY_LIKELY'));
     if (violenceContent) spamScore += 5;
 
-    // Check for text in images that might indicate spam
+    // Проверка текста в изображениях на наличие спам-индикаторов
     const textInImages = visionResults.flatMap(vr => vr.textAnnotations || []).map(ta => ta.description.toLowerCase());
     const spamKeywordsInImages = textInImages.some(text => 
       spamPhrases.some(phrase => text.includes(phrase.toLowerCase())) ||
@@ -1261,12 +1391,11 @@ Respond with JSON:
 
     spamScore = Math.min(100, spamScore);
 
-    console.log(`GPT Deep Analysis - Category: ${result.category}, Confidence: ${result.confidence}`);
+    console.log(`GPT Deep Analysis - Confidence: ${result.confidence}, Adjusted Spam Score: ${spamScore}`);
 
     return {
       isSpam: spamScore > 85,
-      spamScore: spamScore,
-      category: result.category
+      spamScore: spamScore
     };
 
   } catch (error) {
@@ -1275,13 +1404,13 @@ Respond with JSON:
   }
 }
 
+// Функция для упрощенной проверки в случае ошибки основного анализа
 async function performSimplifiedCheck(message: string): Promise<{
   isSpam: boolean;
   spamScore: number;
-  category: string;
 }> {
   try {
-    const simplePrompt = "Is this message spam? Answer with JSON: {\"isSpam\": boolean, \"category\": string}. Do not use markdown formatting or JSON code blocks in your response.\n\n" + message;
+    const simplePrompt = "Is this message spam? Answer with JSON: {\"isSpam\": boolean}. Do not use markdown formatting or JSON code blocks in your response.\n\n" + message;
     const simpleResponse = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: simplePrompt }],
@@ -1301,303 +1430,376 @@ async function performSimplifiedCheck(message: string): Promise<{
       console.log('Raw simplified GPT response:', simpleAnswer);
       return {
         isSpam: false,
-        spamScore: 50,
-        category: '0.0'
+        spamScore: 50
       };
     }
     
     return {
       isSpam: result.isSpam || false,
-      spamScore: result.isSpam ? 80 : 20,
-      category: result.category || (result.isSpam ? '1.0' : '0.0')
+      spamScore: result.isSpam ? 80 : 20
     };
   } catch (simpleError) {
     console.error('Error in simplified GPT check:', simpleError);
     return {
       isSpam: false,
-      spamScore: 50,
-      category: '0.0'
+      spamScore: 50
     };
   }
 }
 
-// Предполагается, что функция retryGptRequest определена где-то в другом месте кода
-
+// Функция для повторения запроса к GPT в случае ошибки
 async function retryGptRequest<T>(
-  requestFunc: () => Promise<T>,
-  maxRetries: number,
-  timeout: number,
-  finalTimeout: number
+requestFunc: () => Promise<T>,
+maxRetries: number,
+timeout: number,
+finalTimeout: number
 ): Promise<T> {
-  let attempts = 0;
-  const startTime = Date.now();
-  isProcessing = true;
+let attempts = 0;
+const startTime = Date.now();
+isProcessing = true;
 
-  try {
-    while (attempts < maxRetries) {
-      try {
-        const timeLeft = finalTimeout - (Date.now() - startTime);
-        if (timeLeft <= 0) {
-          throw new Error('Final timeout reached');
-        }
-
-        const result = await Promise.race([
-          requestFunc(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Request timeout')), Math.min(timeout, timeLeft))
-          ),
-        ]);
-
-        return result;
-      } catch (error) {
-        attempts++;
-        if (attempts >= maxRetries || Date.now() - startTime >= finalTimeout) {
-          throw error;
-        }
-        console.log(`Retrying GPT request, attempt ${attempts}`);
-      }
-    }
-
-    throw new Error('Max retries reached');
-  } finally {
-    isProcessing = false;
-  }
-}
-
-// RESULT HANDLING
-//--------------------------------------------------
-async function handleResult(result: CheckResult, messages: Api.Message[]): Promise<void> {
-  if (result) {
-    await cacheResult(messages, result);
-    
-    if (isAutoMode) {
-      await sendResult(result.isSpam === true);
-    } else {
-      console.log("Manual mode: Result not sent automatically");
-    }
-  } else {
-    if (isAutoMode) {
-      await sendResult(false);
-    }
-  }
-
-  resetRecoveryTimers();
-}
-
-async function sendResult(isSpam: boolean): Promise<void> {
-  if (isAutoMode) {
-    // Применяем задержку перед отправкой результата
-    await new Promise(resolve => setTimeout(resolve, processInterval));
-    await client.sendMessage(botId, { message: isSpam ? '😡 SPAM' : '😌 NO' });
-  }
-}
-
-async function cacheResult(messages: Api.Message[], result: ResultInfo): Promise<void> {
-  for (const message of messages) {
-    await saveToCache(message, result.isSpam ? '😡 SPAM' : '😌 NO');
-  }
-}
-
-async function handleCheckMsgTimeout(): Promise<void> {
-  const timeSinceLastCheckMsg = Date.now() - lastCheckMsgTime;
-  if (timeSinceLastCheckMsg >= CHECK_MSG_TIMEOUT) {
-    console.log("No checkMsg received for 55 seconds");
-    await notifyAdmin("No checkMsg received for 55 seconds");
-    await client.sendMessage(botId, { message: "/undo" });
-  }
-}
-
-// CACHE MANAGEMENT
-//--------------------------------------------------
-async function saveToCache(message: Api.Message, response: string, gptScore?: number): Promise<void> {
-  const redis = getRedisConnection();
-  const key = `msg:${message.id}`;
-  const mediaType = message.media ? getMediaType(message.media) : 'None';
-  const mediaHash = message.media ? getMediaHash(message.media) : '';
-  const entry: CacheEntry = {
-    message: message.message?.slice(0, 100) || '', // Ограничиваем длину сохраняемого сообщения
-    mediaType,
-    mediaHash,
-    response,
-    timestamp: Date.now(),
-    gptScore
-  };
-  
-  await redis.set(key, JSON.stringify(entry), 'EX', CACHE_TTL);
-  
-  if (gptScore !== undefined) {
-    const contentKey = `gpt:${crypto.createHash('md5').update(message.message || '').digest('hex')}`;
-    await redis.set(contentKey, JSON.stringify({ response, gptScore }), 'EX', CACHE_TTL);
-  }
-
-  // Асинхронная проверка использования кэша
-  setImmediate(async () => {
+try {
+  while (attempts < maxRetries) {
     try {
-      await checkCacheUsage();
+      const timeLeft = finalTimeout - (Date.now() - startTime);
+      if (timeLeft <= 0) {
+        throw new Error('Final timeout reached');
+      }
+
+      const result = await Promise.race([
+        requestFunc(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timeout')), Math.min(timeout, timeLeft))
+        ),
+      ]);
+
+      return result;
     } catch (error) {
-      console.error('Error in checkCacheUsage:', error);
+      attempts++;
+      if (attempts >= maxRetries || Date.now() - startTime >= finalTimeout) {
+        throw error;
+      }
+      console.log(`Retrying GPT request, attempt ${attempts}`);
     }
-  });
+  }
+
+  throw new Error('Max retries reached');
+} finally {
+  isProcessing = false;
+}
 }
 
+// ОБРАБОТКА РЕЗУЛЬТАТОВ
+//--------------------------------------------------
+
+// Функция для обработки результата проверки
+async function handleResult(result: CheckResult, messages: Api.Message[]): Promise<void> {
+if (result) {
+  await cacheResult(messages, result);
+  
+  if (isAutoMode) {
+    await sendResult(result.isSpam === true);
+  } else {
+    console.log("Manual mode: Result not sent automatically");
+  }
+} else {
+  if (isAutoMode) {
+    await sendResult(false);
+  }
+}
+
+resetRecoveryTimers();
+}
+
+// Функция для отправки результата проверки
+async function sendResult(isSpam: boolean): Promise<void> {
+if (isAutoMode) {
+  // Применяем задержку перед отправкой результата
+  await new Promise(resolve => setTimeout(resolve, processInterval));
+  await client.sendMessage(botId, { message: isSpam ? '😡 SPAM' : '😌 NO' });
+}
+}
+
+// Функция для кэширования результата проверки
+async function cacheResult(messages: Api.Message[], result: ResultInfo): Promise<void> {
+for (const message of messages) {
+  await saveToCache(message, result.isSpam ? '😡 SPAM' : '😌 NO');
+}
+}
+
+// Функция для обработки таймаута проверки сообщения
+async function handleCheckMsgTimeout(): Promise<void> {
+const timeSinceLastCheckMsg = Date.now() - lastCheckMsgTime;
+if (timeSinceLastCheckMsg >= CHECK_MSG_TIMEOUT) {
+  console.log("No checkMsg received for 55 seconds");
+  await notifyAdmin("No checkMsg received for 55 seconds");
+  await client.sendMessage(botId, { message: "/undo" });
+}
+}
+
+// УПРАВЛЕНИЕ КЭШЕМ
+//--------------------------------------------------
+
+// Функция для сохранения результата в кэш
+async function saveToCache(message: Api.Message, response: string, gptScore?: number): Promise<void> {
+const redis = getRedisConnection();
+const key = `msg:${message.id}`;
+const mediaType = message.media ? getMediaType(message.media) : 'None';
+const mediaHash = message.media ? getMediaHash(message.media) : '';
+const entry: CacheEntry = {
+  message: message.message?.slice(0, 100) || '', // Ограничиваем длину сохраняемого сообщения
+  mediaType,
+  mediaHash,
+  response,
+  timestamp: Date.now(),
+  gptScore
+};
+
+await redis.set(key, JSON.stringify(entry), 'EX', CACHE_TTL);
+
+if (gptScore !== undefined) {
+  const contentKey = `gpt:${crypto.createHash('md5').update(message.message || '').digest('hex')}`;
+  await redis.set(contentKey, JSON.stringify({ response, gptScore }), 'EX', CACHE_TTL);
+}
+
+// Асинхронная проверка использования кэша
+setImmediate(async () => {
+  try {
+    await checkCacheUsage();
+  } catch (error) {
+    console.error('Error in checkCacheUsage:', error);
+  }
+});
+}
+
+// Функция для получения результата из кэша
 async function getFromCache(message: Api.Message): Promise<CacheEntry | null> {
-  const redis = getRedisConnection();
-  const cachedData = await redis.get(`msg:${message.id}`);
-  return cachedData ? JSON.parse(cachedData) : null;
+const redis = getRedisConnection();
+const cachedData = await redis.get(`msg:${message.id}`);
+return cachedData ? JSON.parse(cachedData) : null;
 }
 
+// Функция для проверки использования кэша
 async function checkCacheUsage(): Promise<void> {
-  const redis = getRedisConnection();
-  const info = await redis.info('memory');
-  const [usedMemory, maxMemory] = info.match(/used_memory:(\d+).*maxmemory:(\d+)/s)?.slice(1).map(Number) || [0, 0];
-  
-  if (maxMemory > 0 && usedMemory / maxMemory > MAX_CACHE_USAGE) {
-    await clearOldCache();
-  }
+const redis = getRedisConnection();
+const info = await redis.info('memory');
+const [usedMemory, maxMemory] = info.match(/used_memory:(\d+).*maxmemory:(\d+)/s)?.slice(1).map(Number) || [0, 0];
+
+if (maxMemory > 0 && usedMemory / maxMemory > MAX_CACHE_USAGE) {
+  await clearOldCache();
+}
 }
 
+// Функция для очистки старых записей в кэше
 async function clearOldCache(): Promise<void> {
-  const redis = getRedisConnection();
-  const keys = await redis.keys('msg:*');
-  const toDelete = Math.floor(keys.length * 0.2); // Увеличиваем количество удаляемых ключей
-  
-  if (toDelete > 0) {
-    const pipeline = redis.pipeline();
-    keys.slice(0, toDelete).forEach(key => pipeline.del(key));
-    await pipeline.exec();
-  }
+const redis = getRedisConnection();
+const keys = await redis.keys('msg:*');
+const toDelete = Math.floor(keys.length * 0.2); // Увеличиваем количество удаляемых ключей
+
+if (toDelete > 0) {
+  const pipeline = redis.pipeline();
+  keys.slice(0, toDelete).forEach(key => pipeline.del(key));
+  await pipeline.exec();
+}
 }
 
+// Пул соединений Redis
 const redisPool = Array.from({ length: REDIS_POOL_SIZE }, () => 
-  new Redis(process.env.REDIS_URL || '')
+new Redis(process.env.REDIS_URL || '')
 );
 
+// Функция для получения соединения Redis из пула
 function getRedisConnection(): Redis {
-  return redisPool[Math.floor(Math.random() * REDIS_POOL_SIZE)];
+return redisPool[Math.floor(Math.random() * REDIS_POOL_SIZE)];
 }
 
-// RECOVERY PROCESS
+// ПРОЦЕСС ВОССТАНОВЛЕНИЯ
 //--------------------------------------------------
+
+// Функция для запуска процесса восстановления
 async function startRecovery(): Promise<void> {
+if (isProcessing) {
+  if (processingStartTime && Date.now() - processingStartTime > MAX_PROCESSING_TIME) {
+    console.log("Processing timeout reached, starting recovery");
+    isProcessing = false;
+    processingStartTime = null;
+  } else {
+    console.log("Recovery skipped: message is still being processed");
+    return;
+  }
+}
+
+if (recoveryTimer) clearTimeout(recoveryTimer);
+if (nextTimer) clearTimeout(nextTimer);
+
+recoveryTimer = setTimeout(async () => {
   if (isProcessing) {
-    if (processingStartTime && Date.now() - processingStartTime > MAX_PROCESSING_TIME) {
-      console.log("Processing timeout reached, starting recovery");
-      isProcessing = false;
-      processingStartTime = null;
-    } else {
-      console.log("Recovery skipped: message is still being processed");
-      return;
-    }
+    console.log("Recovery canceled: message processing completed");
+    return;
   }
 
-  if (recoveryTimer) clearTimeout(recoveryTimer);
-  if (nextTimer) clearTimeout(nextTimer);
-
-  recoveryTimer = setTimeout(async () => {
-    if (isProcessing) {
-      console.log("Recovery canceled: message processing completed");
-      return;
-    }
-
-    try {
-      await client.sendMessage(botId, { message: '/undo' });
-      
-      const previousMessage = await new Promise<Api.Message>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Timeout waiting for previous message')), 10000);
-        
-        const eventBuilder = new NewMessage({});
-        const handler = (event: NewMessageEvent) => {
-          if (event.message instanceof Api.Message && event.message.senderId && event.message.senderId.toJSNumber() === botId) {
-            clearTimeout(timeout);
-            client.removeEventHandler(handler, eventBuilder);
-            resolve(event.message);
-          }
-        };
-
-        client.addEventHandler(handler, eventBuilder);
-      });
-
-      if (previousMessage) {
-        await processReport([previousMessage], { hasLink: '', reportId: '', complaintCount: 0, source: '', sender: '', crowdOpinions: [], telegramSpamProbability: 0 });
-        return;
-      }
-    } catch (error) {
-      console.error('Error in recovery process:', error);
-    }
-
-    nextTimer = setTimeout(async () => {
-      await client.sendMessage(botId, { message: '/next' });
-      
-      setTimeout(async () => {
-        await client.sendMessage(botId, { message: '😌 NO' });
-        
-        const longRecoveryTimer = setInterval(async () => {
-          await client.sendMessage(botId, { message: '/next' });
-        }, 30 * 60 * 1000);
-        setTimeout(() => {
-          clearInterval(longRecoveryTimer);
-          notifyAdmin("Recovery process failed after multiple attempts.");
-        }, 5 * 60 * 60 * 1000);
-      }, 2000);
-    }, 6000);
-  }, 20000);
-}
-
-function resetRecoveryTimers() {
-  if (recoveryTimer) clearTimeout(recoveryTimer);
-  if (nextTimer) clearTimeout(nextTimer);
-  recoveryTimer = null;
-  nextTimer = null;
-}
-
-// ERROR HANDLING AND CLEANUP
-//--------------------------------------------------
-process.on('uncaughtException', async (error) => {
-  console.error('Uncaught Exception:', error);
-  await cleanup();
-  process.exit(1);
-});
-
-process.on('unhandledRejection', async (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  await cleanup();
-  process.exit(1);
-});
-
-async function cleanup() {
-  await Promise.all(redisPool.map(redis => redis.quit()));
-  if (client) {
-    await client.disconnect();
-  }
-}
-
-// MAIN FUNCTION
-//--------------------------------------------------
-async function main() {
   try {
-    client = await initClient();
-    app.listen(port, () => console.log(`Server is running on port ${port}`));
-
-    client.addEventHandler(adminMsg, new NewMessage({ fromUsers: [adminId], incoming: true }));
-    client.addEventHandler(checkMsg, new NewMessage({ fromUsers: [botId], incoming: true, forwards: true }));
-    client.addEventHandler(sysMsg, new NewMessage({ fromUsers: [botId], incoming: true, forwards: false, pattern: /😱\d+/ }));
+    await client.sendMessage(botId, { message: '/undo' });
     
-    // Обновленный обработчик для различных системных сообщений
-    client.addEventHandler(handleNextReport, new NewMessage({ fromUsers: [botId], incoming: true, forwards: false }));
+    const previousMessage = await new Promise<Api.Message>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timeout waiting for previous message')), 10000);
+      
+      const eventBuilder = new NewMessage({});
+      const handler = (event: NewMessageEvent) => {
+        if (event.message instanceof Api.Message && event.message.senderId && event.message.senderId.toJSNumber() === botId) {
+          clearTimeout(timeout);
+          client.removeEventHandler(handler, eventBuilder);
+          resolve(event.message);
+        }
+      };
 
-    console.log("Bot is ready...");
+      client.addEventHandler(handler, eventBuilder);
+    });
+
+    if (previousMessage) {
+      await processReport([previousMessage], { hasLink: '', reportId: '', complaintCount: 0, source: '', sender: '', crowdOpinions: [], telegramSpamProbability: 0 });
+      return;
+    }
+  } catch (error) {
+    console.error('Error in recovery process:', error);
+  }
+
+  nextTimer = setTimeout(async () => {
+    await client.sendMessage(botId, { message: '/next' });
+    
+    setTimeout(async () => {
+      await client.sendMessage(botId, { message: '😌 NO' });
+      
+      const longRecoveryTimer = setInterval(async () => {
+        await client.sendMessage(botId, { message: '/next' });
+      }, 30 * 60 * 1000);
+      setTimeout(() => {
+        clearInterval(longRecoveryTimer);
+        notifyAdmin("Recovery process failed after multiple attempts.");
+      }, 5 * 60 * 60 * 1000);
+    }, 2000);
+  }, 6000);
+}, 20000);
+}
+
+// Функция для сброса таймеров восстановления
+function resetRecoveryTimers() {
+if (recoveryTimer) clearTimeout(recoveryTimer);
+if (nextTimer) clearTimeout(nextTimer);
+recoveryTimer = null;
+nextTimer = null;
+}
+
+// ОБРАБОТКА ОШИБОК И ОЧИСТКА
+//--------------------------------------------------
+
+// Обработка необработанных исключений
+process.on('uncaughtException', async (error) => {
+console.error('Uncaught Exception:', error);
+await cleanup();
+process.exit(1);
+});
+
+// Обработка необработанных отклонений промисов
+process.on('unhandledRejection', async (reason, promise) => {
+console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+await cleanup();
+process.exit(1);
+});
+
+// Функция очистки ресурсов перед завершением работы
+async function cleanup() {
+await Promise.all(redisPool.map(redis => redis.quit()));
+if (client) {
+  await client.disconnect();
+}
+}
+
+// ОСНОВНАЯ ФУНКЦИЯ
+//--------------------------------------------------
+
+// Основная функция приложения
+async function main() {
+try {
+  client = await initClient();
+  app.listen(port, () => console.log(`Server is running on port ${port}`));
+
+  // Добавление обработчиков событий
+  client.addEventHandler(adminMsg, new NewMessage({ fromUsers: [adminId], incoming: true }));
+  client.addEventHandler(checkMsg, new NewMessage({ fromUsers: [botId], incoming: true, forwards: true }));
+  client.addEventHandler(sysMsg, new NewMessage({ fromUsers: [botId], incoming: true, forwards: false, pattern: /😱\d+/ }));
+  
+  // Обновленный обработчик для различных системных сообщений
+  client.addEventHandler(handleNextReport, new NewMessage({ fromUsers: [botId], incoming: true, forwards: false }));
+
+  console.log("Bot is ready...");
     await client.connect();
     setInterval(processBuffer, 1000);
     
     // Инициализируем первый таймер для checkMsg
     checkMsgTimeoutTimer = setTimeout(handleCheckMsgTimeout, CHECK_MSG_TIMEOUT);
     
+    // Уведомляем администратора о успешном запуске
     await notifyAdmin("✅");
 
   } catch (error) {
+    // Логирование критической ошибки и уведомление администратора
     console.error("Critical error in main function:", error);
     await notifyAdmin("❌", error);
   }
 }
 
+// Запуск основной функции
 main().catch(console.error);
+
+// Дополнительные комментарии к структуре и логике работы приложения:
+
+// 1. Инициализация и настройка:
+//    - Загрузка конфигурации из переменных окружения
+//    - Инициализация клиента Telegram
+//    - Настройка подключения к Redis для кэширования
+//    - Инициализация Google Cloud Vision для анализа изображений
+
+// 2. Обработка входящих сообщений:
+//    - Сообщения от бота добавляются в буфер для проверки
+//    - Системные сообщения с информацией о жалобах обрабатываются отдельно
+
+// 3. Процесс проверки (функция processReport):
+//    - Проверки выполняются в следующем порядке:
+//      a. Проверка кэша (checkCache)
+//      b. Проверка очевидного спама (checkObvious)
+//      c. Проверка GPT (checkGPT)
+//    - Используется паттерн "Цепочка обязанностей" для гибкости и расширяемости
+
+// 4. Препроцессинг и анализ медиа:
+//    - Перед проверками выполняется препроцессинг сообщения
+//    - Для медиаконтента выполняется анализ с помощью Google Vision API (если включено)
+//    - Результаты анализа добавляются к preprocessedMessage для дальнейшей обработки
+
+// 5. Условия определения спама:
+//    - Высокое количество жалоб
+//    - Наличие URL или подозрительных фраз в имени отправителя
+//    - Наличие спам-фраз в тексте сообщения
+//    - Чрезмерное использование определенных эмодзи
+//    - Наличие дублирующихся или рекламных ссылок
+//    - Подозрительные шаблоны сообщений
+//    - Избыточная контактная информация
+//    - Дублирующиеся медиафайлы или файлы с потенциально вредоносными расширениями
+//    - Высокая оценка вероятности спама от GPT (с динамическим порогом)
+
+// 6. Обработка результатов:
+//    - Если сообщение определено как спам, отправляется соответствующий ответ боту
+//    - Результат сохраняется в кэш для будущих проверок
+//    - В случае неоднозначных результатов, сообщение считается не спамом
+
+// 7. Дополнительные функции:
+//    - Механизм восстановления для обработки ошибок и зависаний
+//    - Управление сессией бота для оптимизации взаимодействия
+//    - Система кэширования для ускорения повторных проверок
+//    - Возможность включения/отключения отдельных проверок через команды администратора
+//    - Настройка задержки между обработкой сообщений
+//    - Автоматический и ручной режимы работы
+
+// Этот код представляет собой комплексную систему проверки спама для Telegram,
+// использующую различные методы и API для достижения высокой точности определения спама
+// при сохранении возможности нормального общения пользователей.
