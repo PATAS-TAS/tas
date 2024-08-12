@@ -1064,10 +1064,10 @@ async function preprocessAndAnalyze(messages: Api.Message[]): Promise<{ preproce
     };
   }
 
-  // Если анализ изображений включен и есть медиа-контент, выполняем анализ
-  if (isVisionEnabled && mediaTypes.length > 0) {
+  // Если анализ изображений включен и есть медиа-контент без текста, выполняем анализ
+  if (isVisionEnabled && mediaTypes.length > 0 && !message.message) {
     const visionPromises = messages
-      .filter(m => m.media)
+      .filter(m => m.media && !m.message)
       .map(analyzeMediaMessage);
     visionResults = await Promise.all(visionPromises);
     
@@ -1097,7 +1097,7 @@ async function preprocessAndAnalyze(messages: Api.Message[]): Promise<{ preproce
     return { preprocessedMessage, visionResults, isSpam };
   }
 
-  // Если анализ изображений отключен, просто предобрабатываем текст сообщения
+  // Если анализ изображений отключен или нет подходящего медиа, просто предобрабатываем текст сообщения
   return { 
     preprocessedMessage: preprocessMessage(message.message || '', mediaTypes), 
     visionResults,
@@ -1229,36 +1229,41 @@ async function analyzeImageWithVision(imageBuffer: Buffer): Promise<{ labels: st
 
 // Функция для анализа медиа-сообщения
 async function analyzeMediaMessage(mediaMessage: Api.Message): Promise<VisionResult> {
-  const fileSize = await getFileSize(mediaMessage);
   const mediaType = getMediaType(mediaMessage.media!);
   
-  console.log(`Analyzing media: ${mediaType}, size: ${fileSize} bytes`);
+  console.log(`Analyzing media: ${mediaType}`);
 
   let partialResult: Partial<VisionResult> = { type: mediaType, labels: [], safeSearch: {} };
 
+  // Проверяем, есть ли текст в сообщении
   if (mediaMessage.message) {
-    partialResult.textAnnotations = [{ description: mediaMessage.message }];
+    console.log('Skipping Vision analysis for message with text');
+    return partialResult as VisionResult;
   }
 
-  // Пропускаем анализ больших файлов
-  if (fileSize > MAX_FILE_SIZE) {
+  // Пропускаем анализ видео
+  if (mediaType === 'Video') {
+    console.log('Skipping Vision analysis for video');
+    return partialResult as VisionResult;
+  }
+
+  // Проверяем размер файла
+  const fileSize = await getFileSize(mediaMessage);
+  if (fileSize > 1024 * 1024) { // 1 MB
     console.log(`Skipping Vision analysis for large file (${fileSize} bytes)`);
     return partialResult as VisionResult;
   }
 
-  let imageBuffer: Buffer | null = null;
-
   try {
     // Загружаем медиа-контент
-    imageBuffer = await client.downloadMedia(mediaMessage.media!) as Buffer;
+    const imageBuffer = await client.downloadMedia(mediaMessage.media!) as Buffer;
     if (imageBuffer) {
       console.log(`Successfully downloaded media, size: ${imageBuffer.length} bytes`);
       const { labels, safeSearch, textAnnotations } = await analyzeImageWithVision(imageBuffer);
-      partialResult = { ...partialResult, labels, safeSearch, textAnnotations: [...(partialResult.textAnnotations || []), ...(textAnnotations || [])] };
+      partialResult = { ...partialResult, labels, safeSearch, textAnnotations };
     }
   } catch (error) {
     console.error(`Error downloading or processing media:`, error);
-    // Не отправляем /undo здесь, это будет обработано в вызывающей функции
   }
 
   return partialResult as VisionResult;
@@ -1374,9 +1379,9 @@ Classification (0/1) and brief reason:`;
     }
 
     const isSpam = classification === '1';
-    let spamScore = isSpam ? 75 : 25;
+    let spamScore = isSpam ? 70 : 30;  // Изменили начальные значения
 
-    spamScore += Math.min(5, sysInfo.complaintCount);
+    spamScore += Math.min(3, sysInfo.complaintCount);  // Уменьшили влияние жалоб
     spamScore += sysInfo.telegramSpamProbability * 10;
     if (sysInfo.hasLink) spamScore += 2;
     
@@ -1398,7 +1403,7 @@ Classification (0/1) and brief reason:`;
     console.log(`GPT Analysis: ${isSpam ? 'SPAM' : 'NOT SPAM'}, Score: ${spamScore}, Reason: ${reason}`);
 
     return {
-      isSpam: spamScore > 85,
+      isSpam: spamScore > 85,  // Оставили порог без изменений
       spamScore: spamScore
     };
 
