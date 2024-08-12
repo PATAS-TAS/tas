@@ -52,7 +52,7 @@ const CHECK_MSG_TIMEOUT = 55000; // 55 секунд
 let recoveryTimer: NodeJS.Timeout | null = null;
 let nextTimer: NodeJS.Timeout | null = null;
 let client: TelegramClient;
-let processInterval = 200;
+let processInterval = 162;
 let isAutoMode = true; // переключатель авто режима
 let isProcessing = false;
 let isVisionEnabled = true; // переключатель анализа медиа
@@ -338,33 +338,33 @@ Media: ${message.media ? getMediaType(message.media) : 'No'}
   }
 }
 
+async function handleNextReport(event: NewMessageEvent): Promise<void> {
+  if (event.message instanceof Api.Message) {
+    const message = event.message.message;
+    if (!message) {
+      console.log("Received empty message in handleNextReport");
+      return;
+    }
+
+    if (message.includes("Send /next for a new spam report.")) {
+      console.log("Received 'Send /next for a new spam report.' message. Sending /next...");
+      await client.sendMessage(botId, { message: "/next" });
+      resetRecoveryTimers();
+    } else if (message === "No Reports Found" || 
+               message === "Please select 😡 BAN or 😌 NO." || 
+               message.includes("Sorry, an error has occurred during your request. Please try again later.")) {
+      console.log("No reports or error occurred. Sending /undo...");
+      await client.sendMessage(botId, { message: "/undo" });
+      resetRecoveryTimers();
+    }
+  }
+}
+
 async function sysMsg(event: NewMessageEvent): Promise<void> {
   try {
     const message = event.message.message;
     if (!message) {
       console.log("Received empty or non-text system info message");
-      return;
-    }
-
-    // Обработка специфических системных сообщений
-    if (message.includes("Send /next for a new spam report.")) {
-      console.log("Action can no longer be undone. Sending /next...");
-      await client.sendMessage(botId, { message: "/next" });
-      resetRecoveryTimers();
-      return;
-    }
-
-    if (message === "Nothing to undo.\nSend /next for a new spam report.") {
-      console.log("Nothing to undo, sending /next...");
-      await client.sendMessage(botId, { message: "/next" });
-      resetRecoveryTimers();
-      return;
-    }
-
-    if (message === "No Reports Found" || message === "Please select 😡 BAN or 😌 NO." || message.includes("Sorry, an error has occurred during your request. Please try again later.")) {
-      console.log("No reports or error occurred. Sending /undo...");
-      await client.sendMessage(botId, { message: "/undo" });
-      resetRecoveryTimers();
       return;
     }
 
@@ -1581,6 +1581,9 @@ async function main() {
     client.addEventHandler(adminMsg, new NewMessage({ fromUsers: [adminId], incoming: true }));
     client.addEventHandler(checkMsg, new NewMessage({ fromUsers: [botId], incoming: true, forwards: true }));
     client.addEventHandler(sysMsg, new NewMessage({ fromUsers: [botId], incoming: true, forwards: false, pattern: /😱\d+/ }));
+    
+    // Обновленный обработчик для различных системных сообщений
+    client.addEventHandler(handleNextReport, new NewMessage({ fromUsers: [botId], incoming: true, forwards: false }));
 
     console.log("Bot is ready...");
     await client.connect();
