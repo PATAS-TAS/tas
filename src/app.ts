@@ -1448,7 +1448,7 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
   
   Not Spam (0) for:
   1. Normal Interactions:
-     - Greetings, casual conversation
+     - Greetings, casual conversation, jokes
      - Short messages, emojis (unless suspicious pattern)
      - Questions, replies, opinions, reactions
   2. Legitimate Information:
@@ -1460,7 +1460,7 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
      - Political discussions (unless harmful)
      - Arguments or strong language (within reason)
   4. Expressive Language:
-     - Profanity, crude language (unless excessive)
+     - Profanity, crude language (unless excessive or hateful)
      - Emotional outbursts or rants (non-harmful)
   5. Cultural Content:
      - Local slang, cultural references/jokes
@@ -1480,6 +1480,7 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
   - Consider cultural/linguistic context
   - Evaluate if message provides value or is promotional
   - Distinguish between spam discussions and actual spam
+  - Crude jokes or language alone are not spam unless excessive or harmful
   
   Output: Single digit (0 or 1) without any explanation.`;
 
@@ -1506,26 +1507,25 @@ Vision: ${visionAnalysis}
 
 Classification (0/1):`;
 
-try {
-  const response = await retryGptRequest(
-    () => openai.chat.completions.create({
-      model: model, // Используем динамически выбранную модель
-      messages: [
-        { role: "system", content: gptPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      max_tokens: 1,
-      temperature: 0.1,
-    }),
-    2,
-    30000,
-    35000
-  );
+  try {
+    const response = await retryGptRequest(
+      () => openai.chat.completions.create({
+        model: model,
+        messages: [
+          { role: "system", content: gptPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        max_tokens: 1,
+        temperature: 0.1,
+      }),
+      2,
+      30000,
+      35000
+    );
 
     const content = response.choices[0]?.message?.content?.trim();
     if (!content) throw new Error('Empty GPT-4o response');
 
-    // Проверка на корректность ответа
     if (content !== '0' && content !== '1') {
       throw new Error(`Unexpected GPT classification: ${content}`);
     }
@@ -1536,7 +1536,7 @@ try {
     let spamScore = isSpam ? 70 : 30;
 
     // Дополнительные факторы для корректировки спам-скора
-    spamScore += Math.min(3, sysInfo.complaintCount);
+    spamScore += Math.min(sysInfo.complaintCount * 2, 10); // Увеличиваем влияние жалоб, но не более чем на 10 пунктов
     spamScore += sysInfo.telegramSpamProbability * 10;
     if (sysInfo.hasLink) spamScore += 2;
     
@@ -1553,7 +1553,17 @@ try {
     );
     if (spamKeywordsInImages) spamScore += 15;
 
-    spamScore = Math.min(100, spamScore);
+    // Снижаем спам-скор для коротких сообщений без явных признаков спама
+    if (message.length < 50 && !sysInfo.hasLink && sysInfo.complaintCount <= 1) {
+      spamScore = Math.max(spamScore - 10, 0);
+    }
+
+    // Учитываем контекст группы
+    if (sysInfo.source.toLowerCase().includes('chat') || sysInfo.source.toLowerCase().includes('группа')) {
+      spamScore = Math.max(spamScore - 5, 0); // Снижаем спам-скор для обычных чатов и групп
+    }
+
+    spamScore = Math.min(100, Math.max(0, spamScore));
 
     console.log(`GPT Analysis: ${isSpam ? 'SPAM' : 'NOT SPAM'}, Score: ${spamScore}`);
 
