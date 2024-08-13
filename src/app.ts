@@ -1320,6 +1320,10 @@ Spam (1) if clear:
 1.18. Illegal services: Fake documents, licenses
 1.19. Disguised promotions: Informative-looking messages with channel links
 1.20. Emoji abuse: Excessive use of emojis, especially at the start of each line
+1.21. Cryptocurrency and airdrop mentions in URLs: Unsolicited, especially if not in the group's topic
+1.22. Unsolicited surveys, personal information requests, contact information, job applications, business proposals, political opinions, religious messages, charity requests, event invitations, dating messages, educational materials, health advice: Especially if they seem suspicious or irrelevant
+
+
 
 Not Spam (0) for:
 0.1. Normal chat: Greetings, casual conversation
