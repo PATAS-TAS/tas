@@ -1297,69 +1297,72 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
   spamScore: number; 
 }> {
   // Оптимизированный промпт для GPT
-  const gptPrompt = `Analyze multilingual Telegram messages for spam. Classify as spam (1) or not spam (0). Prioritize protecting users from scams, unsolicited advertisements, and harmful content while allowing normal interactions. Consider all context, but prioritize message content. Be cautious with short or emoji messages.
+  const gptPrompt = `Analyze multilingual Telegram messages for spam. Classify as spam (1) or not spam (0). Prioritize protecting users from harmful content while allowing normal interactions. Consider all context, but prioritize message content.
 
-  Spam (1) if clear:
-  1.1. Commercial: Unsolicited ads, aggressive promotions, subtle marketing
-  1.2. Scams: Phishing, fake giveaways, get-rich-quick schemes
-  1.3. Malicious: Malware, viruses
-  1.4. Adult: Explicit content, unsolicited services
-  1.5. Crypto/Financial: Unrealistic promises, quick money schemes
-  1.6. Deceptive: Impersonation, misleading info
-  1.7. Unwanted: Excessive invites, chain messages
-  1.8. Any job offers and vacancies: Unsolicited, unverified, or suspicious
-  1.9. Self-promotion: Unrelated channels/groups, subtle channel promotions
-  1.10. Urgent financial decisions: Pressuring users
-  1.11. Private channels: Attempts to move conversations for commercial purposes
-  1.12. Excessive URLs: Especially shortened/unrelated to discussion
-  1.13. Bot-like behavior: Repetitive messages
-  1.14. Specific usernames: Mentioned for financial services
-  1.15. Bypass attempts: Excessive emojis/symbols to avoid filters
-  1.16. Easy money promises: Including minimal effort claims
-  1.17. Language mismatch: Different from group's primary, especially if promotional
-  1.18. Illegal services: Fake documents, licenses
-  1.19. Disguised promotions: Informative-looking messages with channel links
-  1.20. Emoji abuse: Excessive use of emojis, especially at the start of each line
-  1.21. Cryptocurrency and airdrop mentions in URLs: Unsolicited, especially if not in the group's topic
-  1.22. Unsolicited surveys, personal information requests, contact information, job applications, business proposals, political opinions, religious messages, charity requests, event invitations, dating messages, educational materials, health advice: Especially if they seem suspicious or irrelevant
-  
-  Not Spam (0) for:
-  0.1. Normal chat: Greetings, casual conversation
-  0.2. Short messages: Single words, numbers, emojis (unless part of a pattern)
-  0.3. Group-related: Content relevant to the group
-  0.4. Opinions/reactions: Personal views, responses
-  0.5. Questions/replies: Any inquiry or response
-  0.6. Information sharing: Links, news (unless clearly promotional)
-  0.7. Business talk: Unless clearly a scam or unsolicited promotion
-  0.8. Arguments: Unless extremely offensive
-  0.9. Bot commands: Standard interactions
-  0.10. Political content: Discussions, opinions (unless harmful)
-  0.11. Strong language: Within context of discussion
-  0.12. Scam mentions: Warning about scams, scammers, not promoting them
-  0.13. Insults: Aggressive or offensive, but not promoting scams or unsolicited ads
-  0.14. Just mentions about scam or spam: Without promoting them
-  0.15. Discussions about scams or spam: Educational or warning purposes
-  0.16. Use of words like "скам", "scam" in context of warnings or discussions
-  
-  Key factors (importance order):
-  1. Message content and intent (any language)
-  2. User behavior and message pattern
-  3. Presence of calls to action or channel promotions
-  4. Source relevance and group context
-  5. Links/media presence and nature
-  6. Complaint count and Telegram's spam probability (consider context)
-  7. Emoji usage patterns
-  
-  Ambiguous cases:
-  - Scrutinize informative-looking messages that end with channel promotions
-  - Be wary of messages using emojis excessively, especially at line starts
-  - Consider the overall structure and formatting of the message
-  - Check for subtle calls to action or invitations to join channels
-  - Analyze the relevance of any included links or channel mentions
-  - Be cautious of messages that seem to provide value but ultimately promote something
-  - Distinguish between discussions about scams/spam and actual scam/spam content
-  
-  Output: Single digit (0 or 1) followed by brief reasoning (max 10 words).`;
+Spam (1) if clear:
+1. Commercial:
+   - Unsolicited ads, aggressive promotions, subtle marketing
+   - Self-promotion of unrelated channels/groups
+   - Disguised promotions (e.g., informative-looking messages with channel links)
+2. Scams and Financial:
+   - Phishing, fake giveaways, get-rich-quick schemes
+   - Unrealistic financial promises, quick money schemes
+   - Urgent financial decisions pressuring users
+   - Cryptocurrency and airdrop mentions in unrelated contexts
+3. Deceptive Practices:
+   - Impersonation, misleading information
+   - False promises or guarantees
+4. Adult Content and Solicitation:
+   - Explicit content, unsolicited services
+   - Subtle invitations for private meetings or "coffee dates"
+   - Coded language suggesting sexual services
+   - Unsolicited romantic or sexual propositions
+   - Requests for private photos or intimate information
+5. Unwanted Content:
+   - Excessive invites, chain messages
+   - Unsolicited job offers, surveys, personal information requests
+   - Irrelevant business proposals, political/religious messages, charity requests
+6. Suspicious Behavior:
+   - Bot-like or repetitive messages
+   - Attempts to move conversations to private channels for commercial purposes
+   - Language mismatch (different from group's primary, especially if promotional)
+   - Excessive use of emojis, especially at line starts
+   - Bypass attempts (e.g., excessive symbols to avoid filters)
+
+Not Spam (0) for:
+1. Normal Interactions:
+   - Greetings, casual conversation
+   - Short messages, single words, numbers, emojis (unless part of a spam pattern)
+   - Questions, replies, opinions, reactions
+   - Group-related content
+2. Legitimate Information:
+   - Relevant news sharing (unless clearly promotional)
+   - Discussions about business (unless clearly a scam or unsolicited promotion)
+   - Educational content or warnings about scams/spam
+3. Standard Group Activities:
+   - Bot commands
+   - Political discussions (unless harmful)
+   - Arguments or strong language (within context)
+4. Mentions of spam/scam:
+   - Warnings about scams or discussions about spam
+   - Use of words like "скам", "scam" in educational or warning contexts
+
+Key Evaluation Factors (in order of importance):
+1. Message content and intent (in any language)
+2. User behavior and message patterns
+3. Relevance to the group and conversation context
+4. Presence and nature of links/media
+5. Complaint count and Telegram's spam probability (consider broader context)
+
+For Ambiguous Cases:
+- Analyze the overall message structure and intent
+- Check for subtle calls to action or hidden solicitations
+- Assess the relevance of included links or mentions
+- Distinguish between discussions about scams/spam and actual scam/spam content
+- Consider if the message provides value or is ultimately promotional
+- Be aware of cultural and linguistic nuances that might disguise inappropriate content
+
+Output: Single digit (0 or 1) followed by brief reasoning (max 10 words).`;
 
   // Формирование строки с результатами анализа изображений
   const visionAnalysis = visionResults.length > 0
