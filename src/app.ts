@@ -89,6 +89,8 @@ let enabledChecks = new Set(['cache', 'obvious', 'gpt']); // список вкл
 let processingStartTime: number | null = null;
 let lastCheckMsgTime = Date.now();
 let checkMsgTimeoutTimer: NodeJS.Timeout | null = null;
+let lastUndoTime = 0;
+let undoCounter = 0;
 
 // ИНТЕРФЕЙСЫ
 //--------------------------------------------------
@@ -1579,12 +1581,26 @@ for (const message of messages) {
 
 // Функция для обработки таймаута проверки сообщения
 async function handleCheckMsgTimeout(): Promise<void> {
-const timeSinceLastCheckMsg = Date.now() - lastCheckMsgTime;
-if (timeSinceLastCheckMsg >= CHECK_MSG_TIMEOUT) {
-  console.log("No checkMsg received for 30 seconds");
-  await notifyAdmin("No checkMsg received for 30 seconds");
-  await client.sendMessage(botId, { message: "/undo" });
-}
+  const timeSinceLastCheckMsg = Date.now() - lastCheckMsgTime;
+  if (timeSinceLastCheckMsg >= CHECK_MSG_TIMEOUT) {
+    console.log("No checkMsg received for 30 seconds");
+    
+    const currentTime = Date.now();
+    if (currentTime - lastUndoTime <= 10000) {
+      undoCounter++;
+    } else {
+      undoCounter = 1;
+    }
+    
+    lastUndoTime = currentTime;
+
+    await client.sendMessage(botId, { message: "/undo" });
+    
+    if (undoCounter >= 2) {
+      await notifyAdmin("No checkMsg received for 30 seconds, /undo sent twice within 10 seconds");
+      undoCounter = 0; // Сбрасываем счетчик после уведомления
+    }
+  }
 }
 
 // УПРАВЛЕНИЕ КЭШЕМ
