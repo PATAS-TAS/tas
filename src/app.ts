@@ -1422,63 +1422,84 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
   // Оптимизированный промпт для GPT
   const gptPrompt = `Analyze multilingual Telegram messages for spam. Use provided context (complaints, source, sender, links, spam probability). Classify as spam (1) or not spam (0) and provide a confidence score from 0 to 100.
 
-Spam (1) if any of the following are present:
-1. Commercial/Financial:
-   - Unsolicited ads, subtle marketing
-   - Self-promotion of unrelated channels/groups
-   - Disguised promotions (e.g., informative messages with external links)
-   - Job offers, especially with unrealistic income promises
-   - Requests for financial help or donations, especially from unknown users
-   - Messages about currency exchange or financial advice in unrelated groups
-2. Suspicious Behavior:
-   - Short messages with external links, especially to unfamiliar websites
-   - Messages unrelated to the group's theme, especially if promotional
-   - High complaint count (more than 5) combined with any suspicious content
-   - Bot-like messages or repetitive content across different groups
-   - Attempts to move conversations to private channels or external platforms
-3. Deceptive Content:
-   - Phishing attempts, fake giveaways, get-rich-quick schemes
-   - Impersonation of official entities or celebrities
-   - False promises or unrealistic claims
-   - Veiled offers for adult services or "relaxation"
-4. Unwanted Content:
-   - Chain messages or excessive invites
-   - Unsolicited surveys or personal requests to large groups
-   - Irrelevant political, religious, or ideological messages in non-related groups
-5. Harmful Content:
-   - Incitement to violence or illegal activities
-   - Hate speech or extreme discrimination
-   - Sharing of others' personal information without consent
-
-Not Spam (0) for:
-1. Relevant group discussions and interactions
-2. Legitimate questions or information sharing related to the group's theme
-3. Normal greetings or short messages without suspicious elements
-4. Official announcements from group administrators
-5. Constructive debates or arguments (unless they become harmful)
-6. Messages that are part of normal conversation, even if short or containing emojis
-
-Key Factors (in order of importance):
-1. Message content and intent in the context of the group
-2. Complaint count and spam probability provided by Telegram
-3. Presence of suspicious patterns (links, requests for money)
-4. Sender's behavior and message history (if available)
-5. Relevance to the group's theme
-
-For Ambiguous Cases:
-- Analyze the overall intent and potential harm of the message
-- Consider the group context and typical interactions
-- Evaluate if the message provides value to the group or is purely self-serving
-- Be cautious of seemingly innocent messages that might hide ulterior motives
-- Short messages or those with emojis should not be automatically considered spam unless combined with other suspicious elements
-
-Importantly:
-- Messages with high complaint counts (5+) should be scrutinized more carefully
-- Requests for financial help in unrelated groups are usually spam
-- Messages about currency or finance in unrelated groups are suspicious
-- Normal conversation, even if brief or containing emojis, should not be classified as spam
-
-Output: Two numbers separated by a comma. First number is classification (0 for not spam, 1 for spam), second is confidence score (0-100).`;
+  Spam (1) if clear:
+  1. Commercial:
+     - Unsolicited ads, subtle marketing
+     - Self-promotion of unrelated channels/groups
+     - Disguised promotions (e.g., informative messages with channel links)
+  2. Scams/Financial:
+     - Phishing, fake giveaways, get-rich-quick schemes
+     - Unrealistic financial promises, urgent decisions
+     - Suspicious cryptocurrency/airdrop mentions
+  3. Deceptive/Adult:
+     - Impersonation, false promises
+     - Explicit content, unsolicited services
+     - Subtle invitations for private meetings, coded language
+     - Requests for private photos/information
+  4. Unwanted:
+     - Chain messages, excessive invites
+     - Unsolicited job offers, surveys, personal requests
+     - Irrelevant business/political/religious messages
+  5. Suspicious Behavior:
+     - Bot-like messages, repetitive content
+     - Attempts to move conversations to private channels
+     - Excessive emojis, especially at line starts
+     - Bypass attempts (e.g., unusual symbols)
+  6. Harmful:
+     - Incitement to violence/illegal activities
+     - Sharing others' personal information
+  
+  Not Spam (0) for:
+  1. Normal Interactions:
+     - Greetings, casual conversation, jokes
+     - Short messages, single words, numbers, or emojis (unless suspicious pattern)
+     - Questions, replies, opinions, reactions
+     - Any form of inquiry or response
+  2. Legitimate Information:
+     - Relevant news, educational content
+     - Warnings about scams/spam (educational context)
+  3. Group Activities:
+     - Bot commands (starting with "/"), unless they have 3 or more complaints
+     - Relevant polls
+     - Political discussions (unless inciting violence or illegal activities)
+     - Any message that could be relevant to a group's theme
+  4. Expressive Language:
+     - Profanity, crude language
+     - Emotional outbursts or rants
+     - Insults, arguments, or disagreements, even if very offensive or aggressive
+  5. Cultural Content:
+     - Local slang, cultural references/jokes
+     - Regional news/events discussion
+  6. Any message without clear spam indicators
+  
+  Key Factors:
+  1. Message content and intent in any language
+  2. Presence/nature of links or media
+  3. Language tone and message structure
+  4. Relevance to typical group conversations
+  5. Provided context (complaints, source, spam probability)
+  
+  For Ambiguous Cases:
+  - Analyze overall message intent
+  - Check for subtle solicitations or hidden promotions
+  - Assess relevance of links/mentions
+  - Consider cultural/linguistic context
+  - Evaluate if message provides value or is promotional
+  - Distinguish between spam discussions and actual spam
+  - Offensive language or aggression alone are not indicators of spam
+  
+  Importantly:
+  - Normal conversations, including casual chat and emoji usage, are not spam
+  - Short messages are usually not spam unless part of a suspicious pattern
+  - Group-related content should be considered in the context of the group's theme
+  - Personal opinions or reactions are generally not spam
+  - Business or financial discussions are allowed unless clearly scams or promotions
+  - Messages with high complaint counts should be scrutinized carefully, but complaint count alone is not definitive proof of spam
+  - Bot commands ("/") with 3 or more complaints should be carefully evaluated for spam potential
+  - Sharing of links or information is not automatically spam, but context is crucial
+  - Extremely offensive or aggressive language is not spam, but may violate other community guidelines
+  
+  Output: Two numbers separated by a comma. First number is classification (0 for not spam, 1 for spam), second is confidence score (0-100).`;
 
   // Формирование строки с результатами анализа изображений
   const visionAnalysis = visionResults.length > 0
@@ -1503,48 +1524,48 @@ Vision: ${visionAnalysis}
 
 Classification (0/1) and Confidence (0-100):`;
 
-try {
-  const response = await retryGptRequest(
-    () => openai.chat.completions.create({
-      model: model,
-      messages: [
-        { role: "system", content: gptPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      max_tokens: 5,
-      temperature: 0.1,
-    }),
-    2,
-    30000,
-    35000
-  );
+  try {
+    const response = await retryGptRequest(
+      () => openai.chat.completions.create({
+        model: model,
+        messages: [
+          { role: "system", content: gptPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        max_tokens: 5,
+        temperature: 0.1,
+      }),
+      2,
+      30000,
+      35000
+    );
 
-  const content = response.choices[0]?.message?.content?.trim();
-  if (!content) {
-    throw new Error('Empty GPT-4o response');
-  }
+    const content = response.choices[0]?.message?.content?.trim();
+    if (!content) {
+      throw new Error('Empty GPT-4o response');
+    }
 
-  const [classification, confidenceStr] = content.split(',');
-  
-  if (!classification || !confidenceStr) {
-    throw new Error('Invalid GPT response format');
-  }
+    const [classification, confidenceStr] = content.split(',');
+    
+    if (!classification || !confidenceStr) {
+      throw new Error('Invalid GPT response format');
+    }
 
-  const isSpam = classification.trim() === '1';
-  const gptConfidence = parseInt(confidenceStr.trim());
+    const isSpam = classification.trim() === '1';
+    let gptConfidence = parseInt(confidenceStr.trim());
 
-  if (isNaN(gptConfidence) || gptConfidence < 0 || gptConfidence > 100) {
-    throw new Error(`Invalid GPT confidence: ${confidenceStr}`);
+    if (isNaN(gptConfidence) || gptConfidence < 0 || gptConfidence > 100) {
+      throw new Error(`Invalid GPT confidence: ${confidenceStr}`);
     }
 
     // Корректировка уверенности на основе дополнительных факторов
     let adjustedConfidence = gptConfidence;
 
-    // Учитываем количество жалоб
-    adjustedConfidence += Math.min(sysInfo.complaintCount * 2, 10);
+    // Учитываем количество жалоб (уменьшаем влияние)
+    adjustedConfidence += Math.min(sysInfo.complaintCount, 5);
 
     // Учитываем вероятность спама от Telegram
-    adjustedConfidence += sysInfo.telegramSpamProbability * 10;
+    adjustedConfidence += sysInfo.telegramSpamProbability * 5;
 
     // Учитываем наличие ссылок
     if (sysInfo.hasLink) adjustedConfidence += 5;
@@ -1559,19 +1580,28 @@ try {
     // Нормализуем adjustedConfidence
     adjustedConfidence = Math.min(100, Math.max(0, adjustedConfidence));
 
-    // Применяем понижающие факторы
-    if (message.length < 50 && !sysInfo.hasLink && sysInfo.complaintCount <= 1) {
+    // Применяем понижающие факторы для коротких сообщений
+    if (message.length < 10 && !sysInfo.hasLink) {
+      adjustedConfidence = Math.max(adjustedConfidence - 30, 0);
+    } else if (message.length < 50 && !sysInfo.hasLink) {
       adjustedConfidence = Math.max(adjustedConfidence - 20, 0);
     }
 
+    // Учитываем контекст группы
     if (sysInfo.source.toLowerCase().includes('chat') || sysInfo.source.toLowerCase().includes('группа') || sysInfo.source.toLowerCase().includes('чат')) {
       adjustedConfidence = Math.max(adjustedConfidence - 10, 0);
     }
 
-    console.log(`GPT Analysis: ${isSpam ? 'SPAM' : 'NOT SPAM'}, Confidence: ${adjustedConfidence}`);
+    // Дополнительное снижение для очень коротких ответов
+    const shortResponses = ['yes', 'no', 'ok', 'thanks', 'спасибо', 'да', 'нет'];
+    if (shortResponses.includes(message.toLowerCase().trim())) {
+      adjustedConfidence = Math.max(adjustedConfidence - 40, 0);
+    }
+
+    console.log(`GPT Analysis: ${isSpam ? 'SPAM' : 'NOT SPAM'}, Original Confidence: ${gptConfidence}, Adjusted Confidence: ${adjustedConfidence}`);
 
     return {
-      isSpam: isSpam,
+      isSpam: adjustedConfidence > 70, // Изменяем порог для определения спама
       confidence: adjustedConfidence
     };
 
