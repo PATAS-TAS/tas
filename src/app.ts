@@ -1307,7 +1307,7 @@ Spam (1) if clear:
 1.5. Crypto/Financial: Unrealistic promises, quick money schemes
 1.6. Deceptive: Impersonation, misleading info
 1.7. Unwanted: Excessive invites, chain messages
-1.8. Job offers: Unsolicited or suspicious
+1.8. Any job offers and vacancies: Unsolicited, unverified, or suspicious
 1.9. Self-promotion: Unrelated channels/groups, subtle channel promotions
 1.10. Urgent financial decisions: Pressuring users
 1.11. Private channels: Attempts to move conversations for commercial purposes
