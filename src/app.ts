@@ -1427,7 +1427,6 @@ Spam (1) if any of the following are present:
    - Requests for financial help or donations, especially from unknown users
    - Messages about currency exchange or financial advice in unrelated groups
 2. Suspicious Behavior:
-   - Use of emojis at the start of messages, especially moon emojis (🌕, 🌚) followed by percentages
    - Short messages with external links, especially to unfamiliar websites
    - Messages unrelated to the group's theme, especially if promotional
    - High complaint count (more than 5) combined with any suspicious content
@@ -1453,11 +1452,12 @@ Not Spam (0) for:
 3. Normal greetings or short messages without suspicious elements
 4. Official announcements from group administrators
 5. Constructive debates or arguments (unless they become harmful)
+6. Messages that are part of normal conversation, even if short or containing emojis
 
 Key Factors (in order of importance):
 1. Message content and intent in the context of the group
 2. Complaint count and spam probability provided by Telegram
-3. Presence of suspicious patterns (emojis, links, requests for money)
+3. Presence of suspicious patterns (links, requests for money)
 4. Sender's behavior and message history (if available)
 5. Relevance to the group's theme
 
@@ -1466,12 +1466,13 @@ For Ambiguous Cases:
 - Consider the group context and typical interactions
 - Evaluate if the message provides value to the group or is purely self-serving
 - Be cautious of seemingly innocent messages that might hide ulterior motives
+- Short messages or those with emojis should not be automatically considered spam unless combined with other suspicious elements
 
 Importantly:
 - Messages with high complaint counts (5+) should be scrutinized more carefully
-- Short messages with emojis and links are often spam, especially if unrelated to the group
 - Requests for financial help in unrelated groups are usually spam
 - Messages about currency or finance in unrelated groups are suspicious
+- Normal conversation, even if brief or containing emojis, should not be classified as spam
 
 Output: Single digit (0 for not spam, 1 for spam) without any explanation.`;
 
@@ -1546,12 +1547,17 @@ Classification (0/1):`;
 
     // Снижаем спам-скор для коротких сообщений без явных признаков спама
     if (message.length < 50 && !sysInfo.hasLink && sysInfo.complaintCount <= 1) {
-      spamScore = Math.max(spamScore - 10, 0);
+      spamScore = Math.max(spamScore - 20, 0);
     }
 
     // Учитываем контекст группы
-    if (sysInfo.source.toLowerCase().includes('chat') || sysInfo.source.toLowerCase().includes('группа')) {
-      spamScore = Math.max(spamScore - 5, 0); // Снижаем спам-скор для обычных чатов и групп
+    if (sysInfo.source.toLowerCase().includes('chat') || sysInfo.source.toLowerCase().includes('группа') || sysInfo.source.toLowerCase().includes('чат')) {
+      spamScore = Math.max(spamScore - 10, 0); // Снижаем спам-скор для обычных чатов и групп
+    }
+
+    // Снижаем спам-скор для коротких сообщений в контексте нормального общения
+    if (message.length < 100 && !sysInfo.hasLink && sysInfo.complaintCount <= 1) {
+      spamScore = Math.max(spamScore - 15, 0);
     }
 
     spamScore = Math.min(100, Math.max(0, spamScore));
