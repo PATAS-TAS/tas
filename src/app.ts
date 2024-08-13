@@ -1297,72 +1297,83 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
   spamScore: number; 
 }> {
   // Оптимизированный промпт для GPT
-  const gptPrompt = `Analyze multilingual Telegram messages for spam. Classify as spam (1) or not spam (0). Prioritize protecting users from harmful content while allowing normal interactions. Consider all context, but prioritize message content.
+  const gptPrompt = `Analyze individual Telegram messages for spam without access to chat history or user information. Classify as spam (1) or not spam (0). Prioritize protecting users from harmful content while allowing normal interactions. Focus solely on the content of the current message.
 
-Spam (1) if clear:
-1. Commercial:
-   - Unsolicited ads, aggressive promotions, subtle marketing
-   - Self-promotion of unrelated channels/groups
-   - Disguised promotions (e.g., informative-looking messages with channel links)
-2. Scams and Financial:
-   - Phishing, fake giveaways, get-rich-quick schemes
-   - Unrealistic financial promises, quick money schemes
-   - Urgent financial decisions pressuring users
-   - Cryptocurrency and airdrop mentions in unrelated contexts
-3. Deceptive Practices:
-   - Impersonation, misleading information
-   - False promises or guarantees
-4. Adult Content and Solicitation:
-   - Explicit content, unsolicited services
-   - Subtle invitations for private meetings or "coffee dates"
-   - Coded language suggesting sexual services
-   - Unsolicited romantic or sexual propositions
-   - Requests for private photos or intimate information
-5. Unwanted Content:
-   - Excessive invites, chain messages
-   - Unsolicited job offers, surveys, personal information requests
-   - Irrelevant business proposals, political/religious messages, charity requests
-6. Suspicious Behavior:
-   - Bot-like or repetitive messages
-   - Attempts to move conversations to private channels for commercial purposes
-   - Language mismatch (different from group's primary, especially if promotional)
-   - Excessive use of emojis, especially at line starts
-   - Bypass attempts (e.g., excessive symbols to avoid filters)
-
-Not Spam (0) for:
-1. Normal Interactions:
-   - Greetings, casual conversation
-   - Short messages, single words, numbers, emojis (unless part of a spam pattern)
-   - Questions, replies, opinions, reactions
-   - Group-related content
-2. Legitimate Information:
-   - Relevant news sharing (unless clearly promotional)
-   - Discussions about business (unless clearly a scam or unsolicited promotion)
-   - Educational content or warnings about scams/spam
-3. Standard Group Activities:
-   - Bot commands
-   - Political discussions (unless harmful)
-   - Arguments or strong language (within context)
-4. Mentions of spam/scam:
-   - Warnings about scams or discussions about spam
-   - Use of words like "скам", "scam" in educational or warning contexts
-
-Key Evaluation Factors (in order of importance):
-1. Message content and intent (in any language)
-2. User behavior and message patterns
-3. Relevance to the group and conversation context
-4. Presence and nature of links/media
-5. Complaint count and Telegram's spam probability (consider broader context)
-
-For Ambiguous Cases:
-- Analyze the overall message structure and intent
-- Check for subtle calls to action or hidden solicitations
-- Assess the relevance of included links or mentions
-- Distinguish between discussions about scams/spam and actual scam/spam content
-- Consider if the message provides value or is ultimately promotional
-- Be aware of cultural and linguistic nuances that might disguise inappropriate content
-
-Output: Single digit (0 or 1) followed by brief reasoning (max 10 words).`;
+  Spam (1) if clear:
+  1. Commercial:
+     - Unsolicited ads, aggressive promotions, subtle marketing
+     - Self-promotion of unrelated channels/groups
+     - Disguised promotions (e.g., informative-looking messages with channel links)
+  2. Scams and Financial:
+     - Phishing, fake giveaways, get-rich-quick schemes
+     - Unrealistic financial promises, quick money schemes
+     - Urgent financial decisions pressuring users
+     - Cryptocurrency and airdrop mentions in promotional contexts
+  3. Deceptive Practices:
+     - Impersonation, misleading information
+     - False promises or guarantees
+  4. Adult Content and Solicitation:
+     - Explicit content, unsolicited services
+     - Subtle invitations for private meetings or "coffee dates"
+     - Coded language suggesting sexual services
+     - Unsolicited romantic or sexual propositions
+     - Requests for private photos or intimate information
+  5. Unwanted Content:
+     - Chain messages
+     - Unsolicited job offers, surveys, personal information requests
+     - Irrelevant business proposals, political/religious messages, charity requests
+  6. Suspicious Behavior:
+     - Bot-like or repetitive message structure
+     - Attempts to move conversations to private channels for commercial purposes
+     - Excessive use of emojis, especially at line starts
+     - Bypass attempts (e.g., excessive symbols to avoid filters)
+  7. Harmful Content:
+     - Incitement to violence or illegal activities
+     - Hate speech or extreme discrimination
+     - Sharing of personal information
+  
+  Not Spam (0) for:
+  1. Normal Interactions:
+     - Greetings, casual conversation
+     - Short messages, single words, numbers, emojis (unless suspicious pattern)
+     - Questions, replies, opinions, reactions
+     - Group-related content
+  2. Legitimate Information:
+     - Relevant news sharing (unless clearly promotional)
+     - Discussions about business (unless clearly a scam or unsolicited promotion)
+     - Educational content or warnings about scams/spam
+  3. Standard Group Activities:
+     - Bot commands
+     - Political discussions (unless harmful)
+     - Arguments or strong language (within reason)
+  4. Mentions of spam/scam:
+     - Warnings about scams or discussions about spam
+     - Use of words like "скам", "scam" in educational or warning contexts
+  5. Expressive Language:
+     - Profanity, swear words, or crude language
+     - Insults or aggressive speech (unless extremely offensive)
+     - Emotional outbursts or rants
+  6. Cultural and Regional Content:
+     - Local slang or dialect
+     - Cultural references or jokes
+     - Regional news or events discussion
+  
+  Key Evaluation Factors (in order of importance):
+  1. Message content and intent (in any language)
+  2. Presence and nature of links/media
+  3. Complaint count and Telegram's spam probability (if provided)
+  4. Language and tone of the message
+  
+  For Ambiguous Cases:
+  - Analyze the overall message structure and intent
+  - Check for subtle calls to action or hidden solicitations
+  - Assess the relevance of included links or mentions
+  - Distinguish between discussions about scams/spam and actual scam/spam content
+  - Consider if the message provides value or is ultimately promotional
+  - Be aware of cultural and linguistic nuances that might disguise inappropriate content
+  - Evaluate profanity or aggressive language in the context of the single message
+  
+  Output: Single digit (0 or 1) followed by brief reasoning (max 10 words).`;
 
   // Формирование строки с результатами анализа изображений
   const visionAnalysis = visionResults.length > 0
