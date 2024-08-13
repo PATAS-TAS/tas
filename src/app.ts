@@ -1418,71 +1418,82 @@ async function gptDeep(message: string, sysInfo: SysInfo, visionResults: VisionR
   // Оптимизированный промпт для GPT
   const gptPrompt = `Analyze multilingual Telegram messages for spam. Use provided context (complaints, source, sender, links, spam probability). Classify as spam (1) or not spam (0).
 
-  Spam (1) if clear:
-  1. Commercial:
-     - Unsolicited ads, subtle marketing
-     - Self-promotion of unrelated channels/groups
-     - Disguised promotions (e.g., informative messages with channel links)
-  2. Scams/Financial:
-     - Phishing, fake giveaways, get-rich-quick schemes
-     - Unrealistic financial promises, urgent decisions
-     - Suspicious cryptocurrency/airdrop mentions
-  3. Deceptive/Adult:
-     - Impersonation, false promises
-     - Explicit content, unsolicited services
-     - Subtle invitations for private meetings, coded language
-     - Requests for private photos/information
-  4. Unwanted:
-     - Chain messages, excessive invites
-     - Unsolicited job offers, surveys, personal requests
-     - Irrelevant business/political/religious messages
-  5. Suspicious Behavior:
-     - Bot-like messages, repetitive content
-     - Attempts to move conversations to private channels
-     - Excessive emojis, especially at line starts
-     - Bypass attempts (e.g., unusual symbols)
-  6. Harmful:
-     - Incitement to violence/illegal activities
-     - Hate speech, extreme discrimination
-     - Sharing others' personal information
-  
-  Not Spam (0) for:
-  1. Normal Interactions:
-     - Greetings, casual conversation, jokes
-     - Short messages, emojis (unless suspicious pattern)
-     - Questions, replies, opinions, reactions
-  2. Legitimate Information:
-     - Relevant news, educational content
-     - Business discussions (non-promotional)
-     - Warnings about scams/spam (educational context)
-  3. Group Activities:
-     - Bot commands, relevant polls
-     - Political discussions (unless harmful)
-     - Arguments or strong language (within reason)
-  4. Expressive Language:
-     - Profanity, crude language (unless excessive or hateful)
-     - Emotional outbursts or rants (non-harmful)
-  5. Cultural Content:
-     - Local slang, cultural references/jokes
-     - Regional news/events discussion
-  
-  Key Factors:
-  1. Message content and intent in any language
-  2. Presence/nature of links or media
-  3. Language tone and message structure
-  4. Relevance to typical group conversations
-  5. Provided context (complaints, source, spam probability)
-  
-  For Ambiguous Cases:
-  - Analyze overall message intent
-  - Check for subtle solicitations or hidden promotions
-  - Assess relevance of links/mentions
-  - Consider cultural/linguistic context
-  - Evaluate if message provides value or is promotional
-  - Distinguish between spam discussions and actual spam
-  - Crude jokes or language alone are not spam unless excessive or harmful
-  
-  Output: Single digit (0 or 1) without any explanation.`;
+Spam (1) if clear:
+1. Commercial:
+   - Unsolicited ads, subtle marketing
+   - Self-promotion of unrelated channels/groups
+   - Disguised promotions (e.g., informative messages with channel links)
+2. Scams/Financial:
+   - Phishing, fake giveaways, get-rich-quick schemes
+   - Unrealistic financial promises, urgent decisions
+   - Suspicious cryptocurrency/airdrop mentions
+3. Deceptive/Adult:
+   - Impersonation, false promises
+   - Explicit content, unsolicited services
+   - Subtle invitations for private meetings, coded language
+   - Requests for private photos/information
+   - Veiled offers of sexual services or "relaxation"
+   - Use of suggestive emojis (e.g., ❤️‍🔥, 🍑, 💦) in suspicious contexts
+4. Unwanted:
+   - Chain messages, excessive invites
+   - Unsolicited job offers, surveys, personal requests
+   - Irrelevant business/political/religious messages
+5. Suspicious Behavior:
+   - Bot-like messages, repetitive content
+   - Attempts to move conversations to private channels
+   - Excessive emojis, especially at line starts
+   - Bypass attempts (e.g., unusual symbols)
+6. Harmful:
+   - Incitement to violence/illegal activities
+   - Hate speech, extreme discrimination
+   - Sharing others' personal information
+
+Not Spam (0) for:
+1. Normal Interactions:
+   - Greetings, casual conversation
+   - Short messages, emojis (unless suspicious pattern)
+   - Questions, replies, opinions, reactions
+2. Legitimate Information:
+   - Relevant news, educational content
+   - Business discussions (non-promotional)
+   - Warnings about scams/spam (educational context)
+3. Group Activities:
+   - Bot commands, relevant polls
+   - Political discussions (unless harmful)
+   - Arguments or strong language (within reason)
+4. Expressive Language:
+   - Profanity, crude language (unless excessive)
+   - Emotional outbursts or rants (non-harmful)
+5. Cultural Content:
+   - Local slang, cultural references/jokes
+   - Regional news/events discussion
+
+Key Factors:
+1. Message content and intent in any language
+2. Presence/nature of links or media
+3. Language tone and message structure
+4. Relevance to typical group conversations
+5. Provided context (complaints, source, spam probability)
+
+For Ambiguous Cases:
+- Analyze overall message intent
+- Check for subtle solicitations or hidden promotions
+- Assess relevance of links/mentions
+- Consider cultural/linguistic context
+- Evaluate if message provides value or is promotional
+- Distinguish between spam discussions and actual spam
+- Pay extra attention to messages with seemingly innocent content but potential hidden meanings
+
+Examples of subtle spam:
+- "Let me help you relax ❤️‍🔥" (likely offering adult services)
+- "I can make your stress disappear 😉" (veiled offer of services)
+- "Looking for a good time? DM me 🍑" (soliciting private interaction)
+- "Need some company tonight? 💋" (suggestive invitation)
+- "I know how to make your evening special 💆‍♀️" (implied services)
+
+Consider these examples as highly likely to be spam.
+
+Output: Single digit (0 or 1) without any explanation.`;
 
   // Формирование строки с результатами анализа изображений
   const visionAnalysis = visionResults.length > 0
