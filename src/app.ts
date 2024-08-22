@@ -8,17 +8,20 @@ import dotenv from 'dotenv';
 import pkg from 'pg';
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 import { createObjectCsvWriter } from 'csv-writer';
 import winston from 'winston';
+import Redis from 'ioredis';
+import schedule from 'node-schedule';
 
-// Загрузка переменных окружения
+// Загрузка переменных окружения и инициализация
 dotenv.config();
 
-// Константы и конфигурация
 const DEEP_LOG = process.env.DEEP_LOG === 'true';
 const PORT = process.env.PORT || 3000;
 const ADMIN_ID = parseInt(process.env.ADMIN_ID!, 10);
 const DB_URL = process.env.DATABASE_URL!;
+const REDIS_URL = process.env.REDIS_URL!;
 const API_ID = parseInt(process.env.API_ID!, 10);
 const API_HASH = process.env.API_HASH!;
 const SESSION_STRING = process.env.SESSION_STRING!;
@@ -29,6 +32,7 @@ const HEALTH_CHECK_INTERVAL = parseInt(process.env.HEALTH_CHECK_INTERVAL || '300
 
 const app = express();
 const { Pool } = pkg;
+const redis = new Redis.Redis(REDIS_URL);
 
 // Настройка логгера
 const logger = winston.createLogger({
@@ -46,7 +50,6 @@ const logger = winston.createLogger({
   ]
 });
 
-// Функции логирования
 const log = (msg: string) => logger.info(msg);
 const logErr = (ctx: string, err: unknown) => {
   const errMsg = err instanceof Error ? err.message : String(err);
@@ -56,20 +59,21 @@ const logErr = (ctx: string, err: unknown) => {
   );
 };
 
-// Интерфейсы
+// Интерфейсы и типы
 interface Report {
   reportId: string;
-  messageContent: string[];
-  mediaHashes: string[];
+  messageContent?: string[];
+  mediaHashes?: string[];
   complaintCount: number;
   source: string;
   sender: string;
-  spamProbability?: number;
+  spamProbability: number;
   hasExternalLink: boolean;
   hasInternalLink: boolean;
   modFlood: number;
   modNotSpam: number;
-  manualClassification?: string;
+  isSpam: boolean;
+  reason?: string;
 }
 
 interface ValidationResult {
@@ -77,12 +81,30 @@ interface ValidationResult {
   error?: string;
 }
 
+interface SpamDecision {
+  isSpam: boolean;
+  reason?: string;
+}
+
+enum ReportProcessingState {
+  IDLE,
+  WAITING_FOR_MODERATOR_OPINION,
+  WAITING_FOR_NEXT_REPORT
+}
+
 // Глобальные переменные
 let client: TelegramClient;
 let botEntity: Api.InputPeerUser | null = null;
 let currentReport: Partial<Report> = {};
+let autoMode = false;
+let isProcessing = false;
+let notifyAttempts = 0;
+let currentState: ReportProcessingState = ReportProcessingState.IDLE;
 
-// Инициализация пула соединений с базой данных
+const MAX_NOTIFY_ATTEMPTS = 3;
+const reportQueue: Report[] = [];
+const dangEx = ['.exe', '.apk', '.bat', '.cmd', '.msi', '.vbs', '.js', '.scr', '.pif'];
+
 const pool = new Pool({
   connectionString: DB_URL,
   ssl: { rejectUnauthorized: false },
@@ -91,7 +113,6 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000,
 });
 
-// Регулярные выражения для парсинга системных сообщений
 const sysRegex = {
   reportId: /#r(\d+)/,
   complaintCount: /😱(\d+)/,
@@ -104,7 +125,8 @@ const sysRegex = {
   internalLink: /🔶/
 };
 
-// Инициализация Telegram клиента
+// -------------------- Инициализация и настройка --------------------
+
 async function initClient(): Promise<TelegramClient> {
   if (!API_ID || !API_HASH || !SESSION_STRING) {
     throw new Error('API_ID, API_HASH, and SESSION_STRING must be set in .env file');
@@ -133,7 +155,6 @@ async function initClient(): Promise<TelegramClient> {
   }
 }
 
-// Инициализация базы данных
 async function initDB() {
   const client = await pool.connect();
   try {
@@ -154,7 +175,9 @@ async function initDB() {
         has_internal_link BOOLEAN,
         mod_flood INTEGER DEFAULT 0,
         mod_not_spam INTEGER DEFAULT 0,
-        manual_classification TEXT,
+        is_spam BOOLEAN,
+        reason TEXT,
+        decision TEXT,
         created_at TEXT DEFAULT to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'DD.MM.YY, HH24:MI:SS')
       );
     `);
@@ -176,7 +199,6 @@ async function initDB() {
   }
 }
 
-// Инициализация бота
 async function initBot() {
   if (!BOT_ID || !BOT_ACCESS_HASH) {
     throw new Error('BOT_ID and BOT_ACCESS_HASH must be set in .env file');
@@ -195,8 +217,37 @@ async function initBot() {
   }
 }
 
-// Обработка проверочных сообщений
+async function setupHandlers() {
+  if (!botEntity) throw new Error('Bot entity not initialized');
+  const botUserId = botEntity.userId.toJSNumber();
+
+  const handlers = [
+    { handler: handleCheck, options: { fromUsers: [botUserId], incoming: true, forwards: true } },
+    { handler: handleSys, options: { fromUsers: [botUserId], incoming: true, pattern: /😱\d+/ } },
+    { handler: handleAddMsg, options: { fromUsers: [botUserId], incoming: true } },
+    { handler: handleAdmin, options: { fromUsers: [ADMIN_ID], incoming: true } }
+  ];
+
+  handlers.forEach(({ handler, options }) => {
+    try {
+      client.addEventHandler(handler, new NewMessage(options));
+      DEEP_LOG && log(`Handler ${handler.name} set up successfully`);
+    } catch (error) {
+      logErr(`setupHandlers - ${handler.name}`, error);
+    }
+  });
+
+  DEEP_LOG && log('All event handlers set up successfully');
+}
+
+// -------------------- Обработка сообщений --------------------
+
 async function handleCheck(event: NewMessageEvent) {
+  if (!autoMode) {
+    DEEP_LOG && log('Automatic mode is off, skipping message check');
+    return;
+  }
+
   const message = event.message;
   if (
     message instanceof Api.Message &&
@@ -205,6 +256,11 @@ async function handleCheck(event: NewMessageEvent) {
     message.senderId?.toString() === botEntity.userId.toString()
   ) {
     DEEP_LOG && log(`Received message for check: ${message.message}`);
+    
+    if (currentState === ReportProcessingState.WAITING_FOR_NEXT_REPORT) {
+      currentState = ReportProcessingState.IDLE;
+      return;
+    }
     
     if (!currentReport.messageContent) currentReport.messageContent = [];
     if (!currentReport.mediaHashes) currentReport.mediaHashes = [];
@@ -242,12 +298,6 @@ async function handleCheck(event: NewMessageEvent) {
   }
 }
 
-// Предобработка сообщения
-function preprocessMessage(message: string): string {
-  return message.split('\n').slice(1).join('\n');
-}
-
-// Обработка системных сообщений
 async function handleSys(event: NewMessageEvent) {
   const { message } = event;
   if (
@@ -257,24 +307,40 @@ async function handleSys(event: NewMessageEvent) {
     message.senderId?.toString() === botEntity.userId.toString()
   ) {
     DEEP_LOG && log(`Received system message: ${message.message}`);
+
     const sysInfo = parseSysMsg(message.message || '');
     DEEP_LOG && log(`Parsed system info: ${JSON.stringify(sysInfo, null, 2)}`);
-    
-    currentReport = { ...currentReport, ...sysInfo };
-    DEEP_LOG && log(`Current report after merging: ${JSON.stringify(currentReport, null, 2)}`);
-    
+
+    if (currentState === ReportProcessingState.WAITING_FOR_MODERATOR_OPINION) {
+      currentReport = { ...currentReport, ...sysInfo };
+      DEEP_LOG && log(`Current report updated with moderator opinions: ${JSON.stringify(currentReport, null, 2)}`);
+      const index = reportQueue.findIndex(report => report.reportId === currentReport.reportId);
+      if (index !== -1) {
+        reportQueue[index] = currentReport as Report;
+      }
+      currentState = ReportProcessingState.IDLE;
+      return;
+    }
+
+    currentReport = { ...sysInfo };
+    DEEP_LOG && log(`New report received: ${JSON.stringify(currentReport, null, 2)}`);
+
     if (!currentReport.reportId) {
       log('Warning: reportId is missing in the current report');
     } else {
       DEEP_LOG && log(`Report ID found: ${currentReport.reportId}`);
     }
-    
+
     const validationResult = validateReport(currentReport as Report);
     if (validationResult.isValid) {
-      await saveReport(currentReport as Report);
-      DEEP_LOG && log(`Report saved: ${JSON.stringify(currentReport, null, 2)}`);
-      currentReport = {};
-      DEEP_LOG && log('Current report reset');
+      if (autoMode) {
+        reportQueue.push(currentReport as Report);
+        DEEP_LOG && log('Current report added to queue');
+        processNextReport();
+      } else {
+        await saveToCache(currentReport as Report);
+        DEEP_LOG && log('Current report saved to cache (auto mode off)');
+      }
     } else {
       log(`Report validation failed: ${validationResult.error}`);
       DEEP_LOG && log(`Invalid report data: ${JSON.stringify(currentReport, null, 2)}`);
@@ -282,73 +348,295 @@ async function handleSys(event: NewMessageEvent) {
   }
 }
 
-// Обработка ручной классификации
-async function handleManual(event: NewMessageEvent) {
+async function handleAddMsg(event: NewMessageEvent) {
   const message = event.message;
-  if (message instanceof Api.Message && !event.isPrivate && botEntity && message.peerId?.toString() === botEntity.userId.toString()) {
-    const classification = message.message || '';
-    log(`Manual classification sent: ${classification}`);
-    if (classification === "😡 SPAM" || classification === "😌 NO") {
-      currentReport.manualClassification = classification;
-      if (isValidReport(currentReport as Report)) {
-        await saveReport(currentReport as Report);
-        currentReport = {};
-        log(`Report saved with manual classification: ${classification}`);
-      } else {
-        log('Current report is not valid, manual classification not saved');
-      }
-    } else {
-      log(`Received message is not a valid classification: ${classification}`);
+  if (
+    message instanceof Api.Message &&
+    event.isPrivate &&
+    botEntity &&
+    message.senderId?.toString() === botEntity.userId.toString()
+  ) {
+    DEEP_LOG && log(`Received additional message: ${message.message}`);
+
+    switch (message.message) {
+      case "No Reports Found":
+        DEEP_LOG && log('No reports found, sending /undo');
+        await sendToBot("/undo");
+        break;
+      case "Hello there! Send /next to start processing reports.":
+        if (autoMode) {
+          await sendToBot("/next");
+        }
+        break;
+      case "Please select 😡 BAN or 😌 NO.":
+      case "Sorry, an error has occurred during your request. Please try again later.":
+        await sendToBot("/undo");
+        break;
+      default:
+        if (message.message.startsWith("Your Fee for this month:")) {
+          DEEP_LOG && log(`Earnings info received: ${message.message}`);
+          await notify(`Earnings update: ${message.message}`);
+        }
     }
   }
 }
 
-// Парсинг системного сообщения
+async function handleAdmin(event: NewMessageEvent) {
+  if (!client || !client.connected) {
+    DEEP_LOG && log('Telegram client not connected. Attempting to reconnect...');
+    try {
+      await reconnectClient();
+    } catch (error) {
+      logErr('handleAdmin - reconnectClient', error);
+      return;
+    }
+  }
+
+  const message = event.message;
+  if (message instanceof Api.Message && message.senderId?.toString() === ADMIN_ID.toString()) {
+    DEEP_LOG && log(`Received admin message: ${message.message}`);
+    const command = message.message.toLowerCase();
+
+    switch (command) {
+      case '/start':
+        await startAutoMode();
+        await notify('Automatic mode started');
+        break;
+      case '/stop':
+        stopAutoMode();
+        await notify('Automatic mode stopped');
+        break;
+      case '/db':
+        await handleDbExport();
+        break;
+      case '/status':
+        await sendStatus();
+        break;
+      default:
+        if (command.startsWith('/time ')) {
+          const time = parseInt(command.split(' ')[1], 10);
+          if (!isNaN(time) && time > 0) {
+            process.env.PROCESSING_INTERVAL = time.toString();
+            await notify(`Processing interval set to ${time} ms`);
+          } else {
+            await notify('Invalid time value. Please enter a positive number.');
+          }
+        } else {
+          DEEP_LOG && log(`Unrecognized admin command: ${command}`);
+        }
+    }
+  }
+}
+
+// -------------------- Основные функции обработки --------------------
+
+async function processReport(report: Report): Promise<void> {
+  const processingInterval = getProcessingInterval();
+  const startTime = Date.now();
+
+  // Параллельное выполнение проверки на очевидный спам и проверки кэша
+  const [obviousSpamDecision, cachedReport] = await Promise.all([
+    detectObviousSpam(report as unknown as Api.Message, report),
+    checkCache(report)
+  ]);
+
+  // Обработка результата проверки на очевидный спам
+  if (obviousSpamDecision.isSpam) {
+    DEEP_LOG && log(`Obvious spam detected: ${obviousSpamDecision.reason}`);
+    report.isSpam = true;
+    report.reason = obviousSpamDecision.reason || 'Obvious spam detection';
+    await sendDecision('😡 SPAM');
+    await saveReport(report);
+    await ensureMinimumInterval(startTime, processingInterval);
+    return;
+  }
+
+  // Обработка результата проверки кэша
+  if (cachedReport) {
+    DEEP_LOG && log(`Using cached result for report ${report.reportId}: ${cachedReport.isSpam ? 'SPAM' : 'NOT SPAM'}`);
+    await sendDecision(cachedReport.isSpam ? '😡 SPAM' : '😌 NO');
+    await ensureMinimumInterval(startTime, processingInterval);
+    return;
+  }
+
+  // Если не найдено в кэше и не является очевидным спамом:
+  await sendToBot("/stats");
+
+  currentState = ReportProcessingState.WAITING_FOR_MODERATOR_OPINION;
+  await sendToBot(report.reportId);
+
+  // Обработка мнений модераторов
+  const decision = await processModeratorsOpinions(report);
+
+  if (decision === "/undo") {
+    DEEP_LOG && log("No conclusive moderator opinions, sending /undo");
+    await sendToBot("/undo");
+    currentState = ReportProcessingState.IDLE;
+    await ensureMinimumInterval(startTime, processingInterval);
+    return;
+  }
+
+  currentState = ReportProcessingState.WAITING_FOR_NEXT_REPORT;
+  await sendToBot("/next");
+
+  // Ожидаем следующий отчет
+  const nextReportTimeout = 10000; // 10 секунд максимального ожидания
+  const nextReportStartTime = Date.now();
+  while (currentState === ReportProcessingState.WAITING_FOR_NEXT_REPORT) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (Date.now() - nextReportStartTime > nextReportTimeout) {
+      DEEP_LOG && log("Timeout waiting for next report");
+      break;
+    }
+  }
+
+  report.isSpam = decision === '😡 SPAM';
+  await sendDecision(decision);
+  await saveReport(report);
+
+  currentState = ReportProcessingState.IDLE;
+  await ensureMinimumInterval(startTime, processingInterval);
+}
+
+async function processModeratorsOpinions(report: Report): Promise<string> {
+  const moderatorOpinionTimeout = 30000; // 30 секунд максимального ожидания
+  const startTime = Date.now();
+  let lastOpinionTime = startTime;
+  
+  while (Date.now() - lastOpinionTime < moderatorOpinionTimeout) {
+    await new Promise(resolve => setTimeout(resolve, 100)); // Короткие интервалы проверки
+    
+    if (report.modFlood > 0 || report.modNotSpam > 0) {
+      // Получено новое мнение модератора, обновляем время последнего мнения
+      lastOpinionTime = Date.now();
+      DEEP_LOG && log(`Received moderator opinion. Current state: Flood ${report.modFlood}, NotSpam ${report.modNotSpam}`);
+    }
+    
+    // Проверяем, можем ли мы принять решение на основе текущих мнений
+    const decision = makeDecision(report);
+    if (decision !== "/undo") {
+      DEEP_LOG && log(`Decision made: ${decision}`);
+      return decision;
+    }
+    
+    // Проверяем, не превысили ли мы общее время ожидания
+    if (Date.now() - startTime >= 60000) { // Максимум 60 секунд общего ожидания
+      DEEP_LOG && log("Reached maximum total waiting time for moderator opinions");
+      break;
+    }
+  }
+
+  DEEP_LOG && log("No conclusive moderator opinions received within the timeout period");
+  return "/undo";
+}
+
+function makeDecision(report: Report): string {
+  if (report.modFlood >= 2) return "😡 SPAM";
+  if (report.modNotSpam >= 2) return "😌 NO";
+  if (report.modFlood === 1 && report.modNotSpam === 0) return "😡 SPAM";
+  if (report.modNotSpam === 1 && report.modFlood === 0) return "😌 NO";
+  if (report.modFlood === 1 && report.modNotSpam === 1) return "😌 NO";
+  if (report.modFlood === 0 && report.modNotSpam === 0) return "/undo";
+  
+  DEEP_LOG && log(`Unexpected voting combination: modFlood = ${report.modFlood}, modNotSpam = ${report.modNotSpam}`);
+  return "😌 NO";
+}
+
+async function detectObviousSpam(message: Api.Message, report: Partial<Report>): Promise<SpamDecision> {
+  if ((message.media || 
+     message.message && (message.message.includes('http') || message.message.includes('@') || message.message.match(/\+?[0-9]{10,14}/))) 
+    && report.complaintCount && report.complaintCount > 2) {
+    return { isSpam: true, reason: 'Media or links with high complaint count' };
+  }
+
+  if (message.media instanceof Api.MessageMediaStory) {
+    return { isSpam: true, reason: 'Story content' };
+  }
+
+  if (message.replyMarkup instanceof Api.ReplyInlineMarkup) {
+    for (const row of message.replyMarkup.rows) {
+      for (const button of row.buttons) {
+        if (button instanceof Api.KeyboardButtonUrl) {
+          return { isSpam: true, reason: 'URL button detected' };
+        }
+      }
+    }
+  }
+
+  if (report.messageContent && report.messageContent.length > 3 && 
+    new Set(report.messageContent).size < report.messageContent.length * 0.7) {
+    return { isSpam: true, reason: 'Duplicate messages detected' };
+  }
+
+  const linkRegex = /(https?:\/\/[^\s]+)|(@\w+)/g;
+  const links = message.message?.match(linkRegex) || [];
+  const linkCounts = new Map<string, number>();
+  for (const link of links) {
+    const count = linkCounts.get(link) || 0;
+    if (count > 2) {
+      return { isSpam: true, reason: 'Repeated links or usernames' };
+    }
+    linkCounts.set(link, count + 1);
+  }
+
+  if (message.media instanceof Api.MessageMediaDocument && 
+    message.media.document instanceof Api.Document) {
+    const fileName = message.media.document.attributes
+      .find((attr): attr is Api.DocumentAttributeFilename => attr instanceof Api.DocumentAttributeFilename)?.fileName;
+    if (fileName && dangEx.includes(path.extname(fileName).toLowerCase())) {
+      return { isSpam: true, reason: 'Potentially harmful file detected' };
+    }
+  }
+
+  return { isSpam: false };
+}
+
+// -------------------- Вспомогательные функции --------------------
+
+function preprocessMessage(message: string): string {
+  return message.split('\n').slice(1).join('\n');
+}
+
 function parseSysMsg(msg: string): Partial<Report> {
   const info: Partial<Report> = {
     modFlood: 0,
     modNotSpam: 0,
     hasExternalLink: false,
-    hasInternalLink: false
+    hasInternalLink: false,
+    spamProbability: 0
   };
-  
-  const reportIdMatch = msg.match(sysRegex.reportId);
-  if (reportIdMatch) info.reportId = reportIdMatch[1];
-  
-  const complaintMatch = msg.match(sysRegex.complaintCount);
+
+  const reportIdMatch = msg.match(/#r(\d+)/);
+  if (reportIdMatch) info.reportId = reportIdMatch[0];
+
+  const complaintMatch = msg.match(/😱(\d+)/);
   if (complaintMatch) info.complaintCount = parseInt(complaintMatch[1]);
-  
-  info.hasExternalLink = sysRegex.externalLink.test(msg);
-  info.hasInternalLink = sysRegex.internalLink.test(msg);
-  
-  const sourceMatch = msg.match(sysRegex.source);
+
+  info.hasExternalLink = /🔴/.test(msg);
+  info.hasInternalLink = /🔶/.test(msg);
+
+  const sourceMatch = msg.match(/^(?:🗣\s*)?Source:\s*(.+)/m);
   if (sourceMatch) info.source = sourceMatch[1].trim();
-  
-  const senderMatch = msg.match(sysRegex.sender);
+
+  const senderMatch = msg.match(/^Sender:\s*(.+)/m);
   if (senderMatch) info.sender = senderMatch[1].trim();
-  
-  const spamProbMatch = msg.match(sysRegex.spamProbability);
+
+  const spamProbMatch = msg.match(/(?:🌕|🌔|🌓|🌒|🌚)\s*(\d+)%/);
   if (spamProbMatch) info.spamProbability = parseInt(spamProbMatch[1]);
-  
-  // Обработка решений модераторов
+
   const lines = msg.split('\n');
   for (const line of lines) {
-    if (sysRegex.modFlood.test(line)) {
+    if (/– Flood/.test(line)) {
       info.modFlood = (info.modFlood || 0) + 1;
     }
-    if (sysRegex.modNotSpam.test(line)) {
+    if (/– Not Spam/.test(line)) {
       info.modNotSpam = (info.modNotSpam || 0) + 1;
     }
   }
-  
-  // Ограничиваем значения modFlood и modNotSpam до 2
-  if (info.modFlood) info.modFlood = Math.min(info.modFlood, 2);
-  if (info.modNotSpam) info.modNotSpam = Math.min(info.modNotSpam, 2);
-  
+
   return info;
 }
 
-// Получение хеша медиа-контента
 async function getMediaHash(media: Api.TypeMessageMedia): Promise<string> {
   if (media instanceof Api.MessageMediaPhoto && media.photo)
     return `photo:${media.photo.id.toString()}`;
@@ -372,11 +660,10 @@ async function getMediaHash(media: Api.TypeMessageMedia): Promise<string> {
     return `dice:${media.value}`;
   if (media instanceof Api.MessageMediaStory)
     return `story:${media.id}`;
-  
+
   return `unknown:${crypto.createHash('md5').update(JSON.stringify(media)).digest('hex')}`;
 }
 
-// Валидация отчета
 function validateReport(report: Partial<Report>): ValidationResult {
   if (!report.reportId || typeof report.reportId !== 'string') {
     return { isValid: false, error: `Invalid or missing reportId: ${JSON.stringify(report.reportId)}` };
@@ -399,22 +686,57 @@ function validateReport(report: Partial<Report>): ValidationResult {
   if (report.hasInternalLink !== undefined && typeof report.hasInternalLink !== 'boolean') {
     return { isValid: false, error: `Invalid hasInternalLink: ${JSON.stringify(report.hasInternalLink)}` };
   }
-  if (report.modFlood !== undefined && (typeof report.modFlood !== 'number' || report.modFlood < 0 || report.modFlood > 2)) {
+  if (report.modFlood !== undefined && (typeof report.modFlood !== 'number' || report.modFlood < 0)) {
     return { isValid: false, error: `Invalid modFlood: ${JSON.stringify(report.modFlood)}` };
   }
-  if (report.modNotSpam !== undefined && (typeof report.modNotSpam !== 'number' || report.modNotSpam < 0 || report.modNotSpam > 2)) {
+  if (report.modNotSpam !== undefined && (typeof report.modNotSpam !== 'number' || report.modNotSpam < 0)) {
     return { isValid: false, error: `Invalid modNotSpam: ${JSON.stringify(report.modNotSpam)}` };
   }
-  
+
   return { isValid: true };
 }
 
-// Проверка валидности отчета
-function isValidReport(report: Partial<Report>): boolean {
-  return validateReport(report).isValid;
+// -------------------- Функции кэширования и базы данных --------------------
+
+async function checkCache(report: Report): Promise<Report | null> {
+  try {
+    const key = `report:${report.reportId}`;
+    const cachedResult = await redis.get(key);
+    if (cachedResult) {
+      const cachedReport = JSON.parse(cachedResult) as Report;
+      if (isReportIdentical(report, cachedReport)) {
+        DEEP_LOG && log(`Cache hit for report ${report.reportId}`);
+        return cachedReport;
+      }
+    }
+    DEEP_LOG && log(`Cache miss for report ${report.reportId}`);
+    return null;
+  } catch (error) {
+    logErr('checkCache', error);
+    return null;
+  }
 }
 
-// Сохранение отчета в базу данных
+function isReportIdentical(report1: Report, report2: Report): boolean {
+  return report1.messageContent?.join('') === report2.messageContent?.join('') &&
+         JSON.stringify(report1.mediaHashes) === JSON.stringify(report2.mediaHashes) &&
+         report1.complaintCount === report2.complaintCount;
+}
+
+async function saveToCache(report: Report) {
+  try {
+    const key = `report:${report.reportId}`;
+    const value = JSON.stringify({
+      ...report,
+      cachedAt: new Date().toISOString()
+    });
+    await redis.set(key, value, 'EX', 86400 * 7); // Кэш на 7 дней
+    DEEP_LOG && log(`Saved to cache: ${key}`);
+  } catch (error) {
+    logErr('saveToCache', error);
+  }
+}
+
 async function saveReport(report: Report) {
   const validationResult = validateReport(report);
   if (!validationResult.isValid) {
@@ -430,28 +752,26 @@ async function saveReport(report: Report) {
     INSERT INTO reports (
       report_id, message_content, media_hashes, complaint_count, source, sender,
       spam_probability, has_external_link, has_internal_link,
-      mod_flood, mod_not_spam, manual_classification, created_at
+      mod_flood, mod_not_spam, is_spam, reason, created_at
     ) 
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 
       to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'DD.MM.YY, HH24:MI:SS'))
     ON CONFLICT (report_id) 
     DO UPDATE SET
-      message_content = COALESCE(EXCLUDED.message_content, reports.message_content),
-      media_hashes = COALESCE(EXCLUDED.media_hashes, reports.media_hashes),
-      complaint_count = COALESCE(EXCLUDED.complaint_count, reports.complaint_count),
-      source = COALESCE(EXCLUDED.source, reports.source),
-      sender = COALESCE(EXCLUDED.sender, reports.sender),
+      message_content = EXCLUDED.message_content,
+      media_hashes = EXCLUDED.media_hashes,
+      complaint_count = EXCLUDED.complaint_count,
+      source = EXCLUDED.source,
+      sender = EXCLUDED.sender,
       spam_probability = EXCLUDED.spam_probability,
-      has_external_link = COALESCE(EXCLUDED.has_external_link, reports.has_external_link),
-      has_internal_link = COALESCE(EXCLUDED.has_internal_link, reports.has_internal_link),
-      mod_flood = GREATEST(reports.mod_flood, EXCLUDED.mod_flood),
-      mod_not_spam = GREATEST(reports.mod_not_spam, EXCLUDED.mod_not_spam),
-      manual_classification = COALESCE(EXCLUDED.manual_classification, reports.manual_classification),
-      created_at = CASE
-        WHEN reports.created_at IS NULL THEN EXCLUDED.created_at
-        ELSE reports.created_at
-      END
-  `;
+      has_external_link = EXCLUDED.has_external_link,
+      has_internal_link = EXCLUDED.has_internal_link,
+      mod_flood = EXCLUDED.mod_flood,
+      mod_not_spam = EXCLUDED.mod_not_spam,
+      is_spam = EXCLUDED.is_spam,
+      reason = EXCLUDED.reason,
+      created_at = EXCLUDED.created_at
+    `;
 
     const values = [
       report.reportId,
@@ -465,11 +785,15 @@ async function saveReport(report: Report) {
       report.hasInternalLink,
       report.modFlood,
       report.modNotSpam,
-      report.manualClassification
+      report.isSpam,
+      report.reason
     ];
     await client.query(query, values);
     await client.query('COMMIT');
     DEEP_LOG && log(`Report saved successfully: ${report.reportId}`);
+
+    // Синхронизация с кэшем
+    await saveToCache(report);
   } catch (error) {
     await client.query('ROLLBACK');
     logErr('saveReport', error);
@@ -478,69 +802,149 @@ async function saveReport(report: Report) {
   }
 }
 
-// Уведомление администратора
-async function notify(msg: string) {
+async function transferDataFromRedisToPostgres() {
+  const keys = await redis.keys('report:*');
+  const pgClient = await pool.connect();
+
   try {
+    await pgClient.query('BEGIN');
+
+    for (const key of keys) {
+      const value = await redis.get(key);
+      if (value) {
+        const report = JSON.parse(value) as Report;
+        await saveReport(report);
+      }
+    }
+
+    await pgClient.query('COMMIT');
+    DEEP_LOG && log(`Transferred ${keys.length} records from Redis to PostgreSQL`);
+  } catch (error) {
+    await pgClient.query('ROLLBACK');
+    throw error;
+  } finally {
+    pgClient.release();
+  }
+}
+
+// -------------------- Утилиты и вспомогательные функции --------------------
+
+function getProcessingInterval(): number {
+  return parseInt(process.env.PROCESSING_INTERVAL || '1000', 10);
+}
+
+async function processNextReport() {
+  if (!autoMode) {
+    DEEP_LOG && log('Automatic mode is off, skipping report processing');
+    return;
+  }
+
+  if (isProcessing || reportQueue.length === 0) return;
+
+  isProcessing = true;
+  const report = reportQueue.shift();
+
+  if (report) {
+    await new Promise(resolve => setTimeout(resolve, getProcessingInterval()));
+    await processReport(report);
+    
+    await sendToBot("/next");
+  }
+
+  isProcessing = false;
+  processNextReport(); // Обработка следующего отчета в очереди
+}
+
+async function ensureMinimumInterval(startTime: number, minInterval: number): Promise<void> {
+  const elapsedTime = Date.now() - startTime;
+  if (elapsedTime < minInterval) {
+    await new Promise(resolve => setTimeout(resolve, minInterval - elapsedTime));
+  }
+}
+
+async function reconnectClient() {
+  try {
+    DEEP_LOG && log('Attempting to reconnect Telegram client...');
+    if (client) {
+      await client.disconnect();
+    }
+    client = await initClient();
+    DEEP_LOG && log('Telegram client reconnected successfully');
+  } catch (error) {
+    logErr('reconnectClient', error);
+    throw new Error('Failed to reconnect Telegram client');
+  }
+}
+
+async function notify(msg: string) {
+  if (notifyAttempts >= MAX_NOTIFY_ATTEMPTS) {
+    logger.error(`Failed to notify admin after ${MAX_NOTIFY_ATTEMPTS} attempts: ${msg}`);
+    notifyAttempts = 0;
+    return;
+  }
+
+  try {
+    if (!client || !client.connected) {
+      await reconnectClient();
+    }
+
     DEEP_LOG && log(`Notifying admin: ${msg}`);
     await client.sendMessage(ADMIN_ID, { message: msg });
     DEEP_LOG && log(`Admin notified successfully: ${msg}`);
+    notifyAttempts = 0;
   } catch (error) {
+    notifyAttempts++;
     logErr('notify', error);
-    DEEP_LOG && log(`Failed to notify admin: ${msg}`);
-  }
-}
-
-// Обработка сообщений администратора
-async function handleAdmin(event: NewMessageEvent) {
-  const message = event.message;
-  if (message instanceof Api.Message && message.senderId?.toString() === ADMIN_ID.toString()) {
-    DEEP_LOG && log(`Received admin message: ${message.message}`);
-    if (message.message === '/db') {
-      DEEP_LOG && log('Admin requested database export');
-      try {
-        const filename = await exportCSV();
-        const fileStats = await fs.promises.stat(filename);
-        await client.sendFile(ADMIN_ID, {
-          file: filename,
-          caption: `Database export: ${filename}\nSize: ${fileStats.size} bytes`,
-        });
-        await fs.promises.unlink(filename);
-        DEEP_LOG && log('Database export sent to admin');
-      } catch (error) {
-        logErr('handleAdmin - database export', error);
-        await notify('Failed to export database. Check logs for details.');
-      }
-    } else {
-      DEEP_LOG && log(`Unrecognized admin command: ${message.message}`);
+    DEEP_LOG && log(`Failed to notify admin: ${msg}. Attempt ${notifyAttempts}`);
+    
+    if (notifyAttempts < MAX_NOTIFY_ATTEMPTS) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await notify(msg);
     }
   }
 }
 
-// Настройка обработчиков событий
-async function setupHandlers() {
-  if (!botEntity) throw new Error('Bot entity not initialized');
-  const botUserId = botEntity.userId.toJSNumber();
-
-  const handlers = [
-    { handler: handleCheck, options: { fromUsers: [botUserId], incoming: true, forwards: true } },
-    { handler: handleSys, options: { fromUsers: [botUserId], incoming: true, pattern: /😱\d+/ } },
-    { handler: handleManual, options: { outgoing: true, chats: [botUserId] } },
-    { handler: handleAdmin, options: { fromUsers: [ADMIN_ID], incoming: true } }
-  ];
-
-  handlers.forEach(({ handler, options }) => {
-    try {
-      client.addEventHandler(handler, new NewMessage(options));
-      DEEP_LOG && log(`Handler ${handler.name} set up successfully`);
-    } catch (error) {
-      logErr(`setupHandlers - ${handler.name}`, error);
-    }
-  });
-
-  DEEP_LOG && log('All event handlers set up successfully');
+async function startAutoMode() {
+  autoMode = true;
+  log('Automatic mode activated');
+  await sendToBot("/next");
+  processNextReport();
 }
 
-// Экспорт данных в CSV
+function stopAutoMode() {
+  autoMode = false;
+  reportQueue.length = 0;
+  log('Automatic mode deactivated and report queue cleared');
+}
+
+async function sendStatus() {
+  const status = `
+Current status:
+Auto mode: ${autoMode ? 'On' : 'Off'}
+Processing delay: ${getProcessingInterval()} ms
+Database connection: ${await checkDB() ? 'Connected' : 'Disconnected'}
+Reports in database: ${await checkDBContent()}
+  `;
+  await notify(status);
+}
+
+async function handleDbExport() {
+  DEEP_LOG && log('Admin requested database export');
+  try {
+    const filename = await exportCSV();
+    const fileStats = await fs.promises.stat(filename);
+    await client.sendFile(ADMIN_ID, {
+      file: filename,
+      caption: `Database export: ${filename}\nSize: ${fileStats.size} bytes`,
+    });
+    await fs.promises.unlink(filename);
+    DEEP_LOG && log('Database export sent to admin');
+  } catch (error) {
+    logErr('handleDbExport', error);
+    await notify('Failed to export database. Check logs for details.');
+  }
+}
+
 async function exportCSV(): Promise<string> {
   const client = await pool.connect();
   try {
@@ -564,7 +968,8 @@ async function exportCSV(): Promise<string> {
         { id: 'has_internal_link', title: 'Has Internal Link' },
         { id: 'mod_flood', title: 'Mod Flood' },
         { id: 'mod_not_spam', title: 'Mod Not Spam' },
-        { id: 'manual_classification', title: 'Manual Classification' },
+        { id: 'is_spam', title: 'Is Spam' },
+        { id: 'reason', title: 'Reason' },
         { id: 'created_at', title: 'Created At' }
       ]
     });
@@ -580,7 +985,6 @@ async function exportCSV(): Promise<string> {
   }
 }
 
-// Проверка соединения с базой данных
 async function checkDB() {
   const client = await pool.connect();
   try {
@@ -595,7 +999,6 @@ async function checkDB() {
   }
 }
 
-// Проверка настроек базы данных
 async function checkDBSettings() {
   const client = await pool.connect();
   try {
@@ -615,7 +1018,6 @@ async function checkDBSettings() {
   }
 }
 
-// Проверка содержимого базы данных
 async function checkDBContent() {
   const client = await pool.connect();
   try {
@@ -636,7 +1038,28 @@ async function checkDBContent() {
   }
 }
 
-// Основная функция
+async function sendToBot(message: string) {
+  if (!botEntity) throw new Error('Bot entity not initialized');
+  try {
+    await client.sendMessage(botEntity, { message });
+    DEEP_LOG && log(`Message sent to bot: ${message}`);
+  } catch (error) {
+    logErr('sendToBot', error);
+  }
+}
+
+async function sendDecision(decision: string) {
+  if (!botEntity) throw new Error('Bot entity not initialized');
+  try {
+    await client.sendMessage(botEntity, { message: decision });
+    DEEP_LOG && log(`Decision sent to bot: ${decision}`);
+  } catch (error) {
+    logErr('sendDecision', error);
+  }
+}
+
+// -------------------- Основная функция --------------------
+
 async function main() {
   try {
     DEEP_LOG && log('Starting application...');
@@ -655,8 +1078,13 @@ async function main() {
       logErr('main', 'Failed to check database settings');
     }
 
-    client = await initClient();
-    DEEP_LOG && log('Telegram client initialized');
+    try {
+      client = await initClient();
+      DEEP_LOG && log('Telegram client initialized');
+    } catch (error) {
+      logErr('main - initClient', error);
+      throw new Error('Failed to initialize Telegram client');
+    }
 
     await initBot();
     DEEP_LOG && log('Bot initialized');
@@ -666,16 +1094,17 @@ async function main() {
 
     app.listen(PORT, () => log(`Server running on port ${PORT}`));
 
-    if (botEntity) {
+    // Установка ежедневного сохранения данных из Redis в PostgreSQL
+    schedule.scheduleJob('0 23 * * *', async () => {
+      DEEP_LOG && log('Starting daily data transfer from Redis to PostgreSQL');
       try {
-        await client.sendMessage(botEntity, { message: "/next" });
-        log('Initial message sent to bot');
+        await transferDataFromRedisToPostgres();
+        DEEP_LOG && log('Daily data transfer completed successfully');
       } catch (error) {
-        logErr('main - sending initial message to bot', error);
+        logErr('Daily data transfer', error);
+        await notify('Failed to transfer data from Redis to PostgreSQL. Check logs for details.');
       }
-    } else {
-      throw new Error('Bot entity not initialized');
-    }
+    });
 
     // Установка периодических проверок
     setInterval(async () => {
@@ -693,6 +1122,14 @@ async function main() {
       DEEP_LOG && log(`Current number of reports in database: ${reportCount}`);
     }, HEALTH_CHECK_INTERVAL);
 
+    // Добавляем периодическую проверку соединения с Telegram
+    setInterval(async () => {
+      if (!client || !client.connected) {
+        DEEP_LOG && log('Lost connection to Telegram. Attempting to reconnect...');
+        await reconnectClient();
+      }
+    }, 60000); // Проверяем каждую минуту
+
     await notify('Application initialized successfully');
 
     // Обработка ошибок
@@ -707,15 +1144,54 @@ async function main() {
 
     process.on('SIGINT', async () => {
       log('Shutting down gracefully');
-      await pool.end();
-      await client.disconnect();
-      process.exit(0);
+      await gracefulShutdown();
+    });
+
+    process.on('SIGTERM', async () => {
+      log('Received SIGTERM. Shutting down gracefully');
+      await gracefulShutdown();
     });
 
   } catch (error) {
     logErr('main', error);
     process.exit(1);
   }
+}
+
+async function gracefulShutdown() {
+  log('Starting graceful shutdown...');
+
+  // Остановка автоматического режима
+  stopAutoMode();
+
+  // Закрытие соединения с базой данных
+  try {
+    await pool.end();
+    log('Database connection closed');
+  } catch (error) {
+    logErr('gracefulShutdown - closing database connection', error);
+  }
+
+  // Отключение клиента Telegram
+  try {
+    if (client) {
+      await client.disconnect();
+      log('Telegram client disconnected');
+    }
+  } catch (error) {
+    logErr('gracefulShutdown - disconnecting Telegram client', error);
+  }
+
+  // Закрытие соединения с Redis
+  try {
+    await redis.quit();
+    log('Redis connection closed');
+  } catch (error) {
+    logErr('gracefulShutdown - closing Redis connection', error);
+  }
+
+  log('Graceful shutdown completed');
+  process.exit(0);
 }
 
 // Запуск приложения
