@@ -44,6 +44,8 @@ const DB_CHECK_INTERVAL = parseInt(process.env.DB_CHECK_INTERVAL || '60000', 10)
 const HEALTH_CHECK_INTERVAL = parseInt(process.env.HEALTH_CHECK_INTERVAL || '300000', 10);
 const DB_MAX_SIZE_MB = 900;
 const DB_ARCHIVE_THRESHOLD = 0.8;
+const MAX_MESSAGE_LENGTH = 2000;
+const IDLE_TIMEOUT = 1 * 60 * 1000; // 1 minutes
 
 // Initialize Redis client
 const redis = new Redis.Redis(REDIS_URL, {
@@ -69,9 +71,7 @@ const logger = winston.createLogger({
     winston.format.printf(({ timestamp, level, message }) => `${timestamp} [${level}]: ${message}`)
   ),
   transports: [
-    new winston.transports.Console(),
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'combined.log' })
+    new winston.transports.Console()
   ]
 });
 
@@ -112,7 +112,7 @@ interface Report {
   complaintCount: number;
   source: string;
   sender: string;
-  isSpam: boolean;
+  isSpam: number;
   reason?: Reason;
   confidence?: number;
   corrected?: boolean;
@@ -126,7 +126,7 @@ interface ValidationResult {
 }
 
 interface SpamDecision {
-  isSpam: boolean;
+  isSpam: number;
   reason: Reason;
   confidence?: number;
 }
@@ -144,7 +144,7 @@ interface ModeratorOpinion {
 }
 
 interface CheckResult {
-  isSpam: boolean;
+  isSpam: number;
   reason: Reason;
 }
 
@@ -169,6 +169,7 @@ let COMMAND_DELAY = parseInt(process.env.COMMAND_DELAY || '100', 10);
 let lastProcessedReportId: string | null = null;
 let reportQueue: Report[] = [];
 let postgresQueue: Report[] = [];
+let lastProcessingTime: number = Date.now();
 
 const MAX_NOTIFY_ATTEMPTS = 3;
 const dangEx = ['.exe', '.apk', '.bat', '.cmd', '.msi', '.vbs', '.js', '.scr', '.pif'];
@@ -203,7 +204,8 @@ function delay(ms: number): Promise<void> {
 }
 
 function preprocessMessage(message: string): string {
-  return message.split('\n').slice(1).join('\n');
+  const processedMessage = message.split('\n').slice(1).join('\n');
+  return processedMessage.length > MAX_MESSAGE_LENGTH ? processedMessage.slice(0, MAX_MESSAGE_LENGTH) : processedMessage;
 }
 
 function getMediaType(media: Api.TypeMessageMedia): string {
@@ -285,7 +287,7 @@ function validateReport(report: Partial<Report>): ValidationResult {
   if (!report.sender || typeof report.sender !== 'string') {
     return { isValid: false, error: `Invalid or missing sender: ${JSON.stringify(report.sender)}` };
   }
-  if (report.isSpam !== undefined && typeof report.isSpam !== 'boolean') {
+  if (report.isSpam !== undefined && (report.isSpam !== 0 && report.isSpam !== 1)) {
     return { isValid: false, error: `Invalid isSpam: ${JSON.stringify(report.isSpam)}` };
   }
   if (report.reason !== undefined && !Object.values(Reason).includes(report.reason)) {
@@ -312,21 +314,7 @@ async function saveToCache(report: Report) {
     const valueToCache = {
       ...report,
       cachedAt: Date.now(),
-      created_at: report.created_at ? report.created_at.toLocaleString('ru-RU', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: '2-digit', 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit' 
-      }) : new Date().toLocaleString('ru-RU', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: '2-digit', 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit' 
-      })
+      created_at: report.created_at ? report.created_at.toISOString() : new Date().toISOString()
     };
 
     const value = JSON.stringify(valueToCache);
@@ -425,7 +413,8 @@ async function checkAndManageMemory() {
     
     if (newMemoryUsage.percentUsed > 90) {
       logErr('Memory Management', 'Memory usage is critically high even after cleanup attempt');
-      await notify('Warning: Memory usage is critically high. Consider restarting the application.');
+      await notify('Warning: Memory usage is critically high. The application will be restarted.');
+      await gracefulShutdown(true);
     }
   }
 }
@@ -1028,11 +1017,11 @@ async function sendDecision(decision: string) {
   try {
     await new Promise<void>((resolve) => {
       setTimeout(() => {
-    client.sendMessage(botEntity!, { message: decision });
-    DEEP_LOG && log(`Decision sent to bot: ${decision}`);
-    resolve();
-    }, 100);
-  });
+        client.sendMessage(botEntity!, { message: decision });
+        DEEP_LOG && log(`Decision sent to bot: ${decision}`);
+        resolve();
+      }, 162);
+    });
   } catch (error) {
     logErr('sendDecision', error);
   }
@@ -1074,7 +1063,7 @@ async function checkObviousSpam(report: Report): Promise<SpamDecision | null> {
   const unusualFormattingCount = (messageContent.match(/[\uD835][\uDC00-\uDFFF]/g) || []).length;
   const textLength = messageContent.replace(/\s/g, '').length;
   if ((emojiCount + unusualFormattingCount) / textLength > 0.3) {
-    return { isSpam: true, reason: Reason.OBVIOUS };
+    return { isSpam: 1, reason: Reason.OBVIOUS };
   }
 
   // 2. Check for repetitive elements
@@ -1086,7 +1075,7 @@ async function checkObviousSpam(report: Report): Promise<SpamDecision | null> {
   const maxRepetitions = Math.max(...Object.values(wordCounts));
   const repeatingSymbolsMatch = messageContent.match(/(.)\1{4,}/);
   if (maxRepetitions > 3 || repeatingSymbolsMatch) {
-    return { isSpam: true, reason: Reason.OBVIOUS };
+    return { isSpam: 1, reason: Reason.OBVIOUS };
   }
 
   // 3. Check for multiple links and contact information
@@ -1094,20 +1083,20 @@ async function checkObviousSpam(report: Report): Promise<SpamDecision | null> {
   const tMeLinkCount = (lowercaseContent.match(/t\.me\/\+?\w+/g) || []).length;
   const usernameCount = (messageContent.match(/@\w+/g) || []).length;
   if (linkCount + tMeLinkCount > 2 || (usernameCount > 1 && tMeLinkCount > 0)) {
-    return { isSpam: true, reason: Reason.OBVIOUS };
+    return { isSpam: 1, reason: Reason.OBVIOUS };
   }
 
   // 4. Check for excessive use of uppercase letters
   const uppercaseRatio = messageContent.replace(/[^a-zA-Z]/g, '').split('').filter(char => char === char.toUpperCase()).length / messageContent.replace(/[^a-zA-Z]/g, '').length;
   if (uppercaseRatio > 0.7 && messageContent.length > 20) {
-    return { isSpam: true, reason: Reason.OBVIOUS };
+    return { isSpam: 1, reason: Reason.OBVIOUS };
   }
 
   // 5. Check for suspicious message structure
   const lines = messageContent.split('\n');
   const singleWordLines = lines.filter(line => line.trim().split(/\s+/).length === 1);
   if (singleWordLines.length > 5 || (messageContent.length > 500 && (linkCount + tMeLinkCount > 0))) {
-    return { isSpam: true, reason: Reason.OBVIOUS };
+    return { isSpam: 1, reason: Reason.OBVIOUS };
   }
 
   // 6. Check for media or URL buttons with high complaint count
@@ -1123,12 +1112,12 @@ async function checkObviousSpam(report: Report): Promise<SpamDecision | null> {
       lowercaseContent.includes('@') || 
       lowercaseContent.match(/\+?[0-9]{10,14}/)) 
      && report.complaintCount > 2) {
-    return { isSpam: true, reason: Reason.OBVIOUS };
+    return { isSpam: 1, reason: Reason.OBVIOUS };
   }
 
   // 7. Check for stories
   if (lowercaseContent.includes('story') && report.mediaHashes?.some(hash => hash.startsWith('story:'))) {
-    return { isSpam: true, reason: Reason.OBVIOUS };
+    return { isSpam: 1, reason: Reason.OBVIOUS };
   }
 
   // 8. Check for dangerous file types
@@ -1139,19 +1128,19 @@ async function checkObviousSpam(report: Report): Promise<SpamDecision | null> {
     }
     return false;
   })) {
-    return { isSpam: true, reason: Reason.OBVIOUS };
+    return { isSpam: 1, reason: Reason.OBVIOUS };
   }
 
   // 9. Check for URL buttons (InlineKeyboardButton)
   if (report.mediaHashes?.some(hash => hash.startsWith('url_button:'))) {
-    return { isSpam: true, reason: Reason.OBVIOUS };
+    return { isSpam: 1, reason: Reason.OBVIOUS };
   }
 
    // 10. Check for phone numbers with more than 2 complaints
    const phoneRegex = /(\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g;
    const phoneNumbers = messageContent.match(phoneRegex) || [];
    if ((phoneNumbers.length > 0 || report.mediaHashes?.some(hash => hash.startsWith('contact:'))) && report.complaintCount > 2) {
-     return { isSpam: true, reason: Reason.OBVIOUS };
+     return { isSpam: 1, reason: Reason.OBVIOUS };
    }
 
   return null;
@@ -1162,9 +1151,9 @@ async function getTopSpamPhrases(): Promise<Array<{phrase: string, score: number
     const client = await pool.connect();
     const result = await client.query(`
       SELECT r.message_content, r.complaint_count, 
-             (SELECT COUNT(*) FROM reports WHERE is_spam = false) as total_non_spam
+             (SELECT COUNT(*) FROM reports WHERE is_spam = 0) as total_non_spam
       FROM reports r
-      WHERE r.is_spam = true
+      WHERE r.is_spam = 1
       AND r.created_at > NOW() - INTERVAL '30 days'
       LIMIT 10000
     `);
@@ -1195,7 +1184,7 @@ async function getTopSpamPhrases(): Promise<Array<{phrase: string, score: number
     const nonSpamResult = await client.query(`
       SELECT message_content
       FROM reports
-      WHERE is_spam = false
+      WHERE is_spam = 0
       AND created_at > NOW() - INTERVAL '30 days'
       LIMIT 10000
     `);
@@ -1289,7 +1278,7 @@ async function checkGPT(report: Report, sysInfo: SysInfo): Promise<SpamDecision 
      - Unrealistic financial promises, urgent decisions
      - Suspicious cryptocurrency/airdrop mentions
      - Offers of quick money or short-term "jobs"
-  3. Deceptive/Adult:
+     3. Deceptive/Adult:
      - Impersonation, false promises
      - Explicit content, unsolicited services
      - Subtle invitations for private meetings, coded language
@@ -1413,7 +1402,7 @@ Classification (0/1) and Confidence (0-100):`;
     DEEP_LOG && log(`GPT decision: ${isSpam ? 'SPAM' : 'NOT SPAM'}, Confidence: ${confidence}%, Based on: ${report.messageContent ? 'Message content' : 'System information'}`);
 
     return {
-      isSpam: isSpam,
+      isSpam: isSpam ? 1 : 0,
       reason: isSpam ? Reason.GPT_SPAM : Reason.GPT_NOT_SPAM,
       confidence: confidence
     };
@@ -1531,13 +1520,13 @@ async function checkModerators(sysInfo: SysInfo): Promise<CheckResult | null> {
 
   let decision: CheckResult | null;
   if (moderatorOpinion.modFlood >= 2) {
-    decision = { isSpam: true, reason: Reason.MODERATOR_2_FLOOD };
+    decision = { isSpam: 1, reason: Reason.MODERATOR_2_FLOOD };
   } else if (moderatorOpinion.modNotSpam >= 2) {
-    decision = { isSpam: false, reason: Reason.MODERATOR_2_NOT_SPAM };
+    decision = { isSpam: 0, reason: Reason.MODERATOR_2_NOT_SPAM };
   } else if (moderatorOpinion.modFlood === 1 && moderatorOpinion.modNotSpam === 0) {
-    decision = { isSpam: true, reason: Reason.MODERATOR_1_FLOOD };
+    decision = { isSpam: 1, reason: Reason.MODERATOR_1_FLOOD };
   } else if (moderatorOpinion.modNotSpam === 1 && moderatorOpinion.modFlood === 0) {
-    decision = { isSpam: false, reason: Reason.MODERATOR_1_NOT_SPAM };
+    decision = { isSpam: 0, reason: Reason.MODERATOR_1_NOT_SPAM };
   } else if (moderatorOpinion.modFlood === 1 && moderatorOpinion.modNotSpam === 1) {
     decision = null; // GPT will continue the check
   } else if (moderatorOpinion.modFlood === 0 && moderatorOpinion.modNotSpam === 0) {
@@ -1581,6 +1570,7 @@ async function processReport(report: Report): Promise<void> {
 
     const mediaTypes = report.messages?.map(m => m.media ? getMediaType(m.media) : 'None') || [];
     log(`Processing Report: ${report.reportId}, Messages: ${report.messages?.length || 0}, Media: ${mediaTypes.join(', ')}, Complaints: ${report.complaintCount}`);
+    log(`Message content: ${report.messageContent?.join('\n').substring(0, 500)}${report.messageContent && report.messageContent.join('\n').length > 500 ? '...' : ''}`);
 
     const sysInfo: SysInfo = {
       complaintCount: report.complaintCount,
@@ -1640,12 +1630,14 @@ async function processReport(report: Report): Promise<void> {
     if (decision) {
       await sendDecision(decision.isSpam ? '😡 SPAM' : '😌 NO');
       await saveReport({ ...report, ...decision, confidence: decision.confidence });
+      log(`Decision for report ${report.reportId}: ${decision.isSpam ? 'SPAM' : 'NOT SPAM'}`);
     } else {
       DEEP_LOG && log("No decision made, sending /undo");
       await sendToBot("/undo");
     }
 
     lastProcessedReportId = report.reportId;
+    lastProcessingTime = Date.now();
 
   } catch (error: unknown) {
     console.error("Error processing report:", error);
@@ -1673,7 +1665,7 @@ async function processReport(report: Report): Promise<void> {
 function parseSysMsg(msg: string): Partial<Report> {
   const info: Partial<Report> = {
     complaintCount: 0,
-    isSpam: false
+    isSpam: 0
   };
 
   const reportIdMatch = msg.match(sysRegex.reportId);
@@ -1689,15 +1681,29 @@ function parseSysMsg(msg: string): Partial<Report> {
   if (senderMatch) info.sender = senderMatch[1].trim();
 
   const lines = msg.split('\n');
+  let modFloodCount = 0;
+  let modNotSpamCount = 0;
   for (const line of lines) {
     if (sysRegex.modFlood.test(line)) {
-      info.reason = Reason.MODERATOR_1_FLOOD;
-      info.isSpam = true;
+      modFloodCount++;
     }
     if (sysRegex.modNotSpam.test(line)) {
-      info.reason = Reason.MODERATOR_1_NOT_SPAM;
-      info.isSpam = false;
+      modNotSpamCount++;
     }
+  }
+
+  if (modFloodCount >= 2) {
+    info.reason = Reason.MODERATOR_2_FLOOD;
+    info.isSpam = 1;
+  } else if (modNotSpamCount >= 2) {
+    info.reason = Reason.MODERATOR_2_NOT_SPAM;
+    info.isSpam = 0;
+  } else if (modFloodCount === 1 && modNotSpamCount === 0) {
+    info.reason = Reason.MODERATOR_1_FLOOD;
+    info.isSpam = 1;
+  } else if (modNotSpamCount === 1 && modFloodCount === 0) {
+    info.reason = Reason.MODERATOR_1_NOT_SPAM;
+    info.isSpam = 0;
   }
 
   return info;
@@ -1784,8 +1790,8 @@ async function handleSys(event: NewMessageEvent) {
     if (sysInfo.reportId) {
       await saveReportIdToRedis(sysInfo.reportId);
       await redis.hmset(`moderator_opinion:${sysInfo.reportId}`, {
-        modFlood: sysInfo.reason === Reason.MODERATOR_1_FLOOD ? 1 : 0,
-        modNotSpam: sysInfo.reason === Reason.MODERATOR_1_NOT_SPAM ? 1 : 0
+        modFlood: sysInfo.reason === Reason.MODERATOR_1_FLOOD || sysInfo.reason === Reason.MODERATOR_2_FLOOD ? 1 : 0,
+        modNotSpam: sysInfo.reason === Reason.MODERATOR_1_NOT_SPAM || sysInfo.reason === Reason.MODERATOR_2_NOT_SPAM ? 1 : 0
       });
 
       if (!currentReport.reportId || currentReport.reportId === sysInfo.reportId) {
@@ -1874,13 +1880,13 @@ async function handleReportCompletion(reportId: string, decision: string, emoji:
   if (cachedReport) {
     const report = JSON.parse(cachedReport) as Report;
     
-    if (report.isSpam !== (decision === 'spam')) {
+    if (report.isSpam !== (decision === 'spam' ? 1 : 0)) {
       const mismatchMessage = `Mismatch detected for report #${reportId}. Our classification: ${report.isSpam ? 'spam' : 'not spam'}, Bot decision: ${decision}`;
       DEEP_LOG && log(mismatchMessage);
       await notify(mismatchMessage);
     }
     
-    report.isSpam = decision === 'spam';
+    report.isSpam = decision === 'spam' ? 1 : 0;
     await saveReport(report);
   } else {
     DEEP_LOG && log(`No cached report found for #${reportId}`);
@@ -2004,7 +2010,7 @@ async function handleCorrectDecision(reportId: string) {
 
     const report = JSON.parse(cachedReport) as Report;
 
-    report.isSpam = !report.isSpam;
+    report.isSpam = report.isSpam === 1 ? 0 : 1;
     report.corrected = true;
 
     await saveToCache(report);
@@ -2070,7 +2076,7 @@ async function initDB() {
         complaint_count INTEGER NOT NULL,
         source TEXT NOT NULL,
         sender TEXT NOT NULL,
-        is_spam BOOLEAN,
+        is_spam INTEGER,
         reason INTEGER,
         corrected BOOLEAN DEFAULT FALSE,
         confidence FLOAT,
@@ -2182,7 +2188,7 @@ async function setupHandlers() {
   DEEP_LOG && log('All event handlers set up successfully');
 }
 
-async function gracefulShutdown() {
+async function gracefulShutdown(restart = false) {
   log('Starting graceful shutdown...');
 
   stopAutoMode();
@@ -2211,7 +2217,13 @@ async function gracefulShutdown() {
   }
 
   log('Graceful shutdown completed');
-  process.exit(0);
+  
+  if (restart) {
+    log('Restarting application...');
+    process.exit(1); // Exit with a non-zero code to trigger a restart
+  } else {
+    process.exit(0);
+  }
 }
 
 async function main() {
@@ -2299,6 +2311,15 @@ async function main() {
         await processPostgresQueue();
       }
     }, 60000);
+
+    setInterval(async () => {
+      const currentTime = Date.now();
+      if (currentTime - lastProcessingTime > IDLE_TIMEOUT) {
+        log('Application has been idle for too long. Performing undo and restarting...');
+        await handleUndoProcess(currentReport.reportId || '');
+        await gracefulShutdown(true);
+      }
+    }, IDLE_TIMEOUT);
 
     client.addEventHandler(async () => {
       if (!client.connected) {
