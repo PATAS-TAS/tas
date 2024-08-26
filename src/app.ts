@@ -1631,14 +1631,19 @@ async function processReport(report: Report): Promise<void> {
       DEEP_LOG && log(`Saved final decision to cache for ${report.reportId}: ${JSON.stringify(decision)}`);
     }
   
-    // Send the decision
-    if (decision) {
-      await sendDecision(decision.isSpam ? '😡 SPAM' : '😌 NO');
-      await saveReport({ ...report, ...decision, confidence: decision.confidence });
-    } else {
-      DEEP_LOG && log("No decision made, sending /undo");
-      await sendToBot("/undo");
-    }
+// Send the decision
+if (decision) {
+  await new Promise<void>((resolve) => {
+    setTimeout(() => {
+      sendDecision(decision.isSpam ? '😡 SPAM' : '😌 NO');
+      saveReport({ ...report, ...decision, confidence: decision.confidence });
+      resolve();
+    }, 150);
+  });
+} else {
+  DEEP_LOG && log("No decision made, sending /undo");
+  await sendToBot("/undo");
+}
 
     lastProcessedReportId = report.reportId;
 
