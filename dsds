@@ -1,0 +1,986 @@
+
+https://t.me/OGCommunityBot?start=b7PpPHpkMGqibMgo
+
+
+
+
+
+
+Join fasy
+2024-08-30T06:46:20.622Z [info]: Checking for obvious spam for #r741048541
+2024-08-30T06:46:20.622Z [info]: Checking for obvious spam in report #r741048541
+2024-08-30T06:46:20.623Z [info]: Obvious spam detected for #r741048541: 1.5
+2024-08-30T06:46:20.623Z [info]: Final decision for #r741048541: SPAM
+2024-08-30T06:46:20.787Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:20.789Z [info]: Saving report to Redis: #r741048541
+2024-08-30T06:46:20.840Z [info]: Saved to cache: report:#r741048541
+2024-08-30T06:46:20.840Z [info]: Report saved successfully to Redis: #r741048541
+2024-08-30T06:46:20.840Z [info]: Set isProcessing to false for #r741048541
+2024-08-30T06:46:20.840Z [info]: Processing ended at: 2024-08-30T06:46:20.840Z
+2024-08-30T06:46:20.840Z [info]: Queue empty after processing #r741048541
+2024-08-30T06:46:20.948Z [info]: Received message for check: 🌕 0%
+🔥速来吃瓜 高中生母狗 
+被主人调校乖乖私拍户外露出视频 
+在天台拉尿,也是第一次见❗ 
+🉑视频竹叶自取
+2024-08-30T06:46:20.949Z [info]: Current report: {
+  "messageContent": [
+    "🔗 Your referral links\n\nhttps://t.me/OGCommunityBot?start=b7PpPHpkMGqibMgo\n\n\n\n\n\n\nJoin fasy",
+    "🔥速来吃瓜 高中生母狗 \n被主人调校乖乖私拍户外露出视频 \n在天台拉尿,也是第一次见❗ \n🉑视频竹叶自取"
+  ],
+  "mediaHashes": [],
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000380522,
+  "alreadyProcessed": false,
+  "reportId": "#r741048541",
+  "source": "OGCommunity Chat @OGC_Announcements_chat",
+  "sender": "🇵🇰 PAK, Malik Abdul Mohid🦴, @malikabdul_mohid"
+}
+2024-08-30T06:46:20.949Z [info]: Received system message: #r741085113, 😱2
+Source: 东南亚木姐华人交流群 @mujiejiaolu
+Sender: 🇨🇱 CHL, 草莓味 , @capmeiwei
+30.08.24, 06:46  🌕 0%
+/pattern741085113 · /abuse741085113 · /eng741085113
+2024-08-30T06:46:20.949Z [info]: Parsed system info: {
+  "complaintCount": 2,
+  "isSpam": 0,
+  "timestamp": 1725000380949,
+  "alreadyProcessed": false,
+  "reportId": "#r741085113",
+  "source": "东南亚木姐华人交流群 @mujiejiaolu",
+  "sender": "🇨🇱 CHL, 草莓味 , @capmeiwei"
+}
+2024-08-30T06:46:20.950Z [info]: Received additional message: Report #r741048541 marked as spam 😡
+Send /undo741048541 to revert your decision.
+2024-08-30T06:46:20.997Z [info]: Report #741048541 completed. Decision: spam 😡
+2024-08-30T06:46:21.043Z [info]: New report received: {
+  "complaintCount": 2,
+  "isSpam": 0,
+  "timestamp": 1725000380949,
+  "alreadyProcessed": false,
+  "reportId": "#r741085113",
+  "source": "东南亚木姐华人交流群 @mujiejiaolu",
+  "sender": "🇨🇱 CHL, 草莓味 , @capmeiwei"
+}
+2024-08-30T06:46:21.043Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:21.043Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:21.043Z [info]: Received additional message: #r741085113, 😱2
+Source: 东南亚木姐华人交流群 @mujiejiaolu
+Sender: 🇨🇱 CHL, 草莓味 , @capmeiwei
+30.08.24, 06:46  🌕 0%
+/pattern741085113 · /abuse741085113 · /eng741085113
+2024-08-30T06:46:21.044Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:21.044Z [info]: Starting to process report: #r741085113
+2024-08-30T06:46:21.044Z [info]: Entering processReport for #r741085113. isProcessing: false
+2024-08-30T06:46:21.044Z [info]: Set isProcessing to true for #r741085113
+2024-08-30T06:46:21.044Z [info]: Processing Report: #r741085113, Messages: 0, Media: , Complaints: 2
+2024-08-30T06:46:21.044Z [info]: Message content: undefined
+2024-08-30T06:46:21.044Z [info]: Checking for obvious spam for #r741085113
+2024-08-30T06:46:21.044Z [info]: Checking for obvious spam in report #r741085113
+2024-08-30T06:46:21.045Z [info]: Checking cache for #r741085113
+2024-08-30T06:46:21.045Z [info]: Cache miss for report #r741085113
+2024-08-30T06:46:21.046Z [info]: Checking GPT for #r741085113
+2024-08-30T06:46:21.057Z [info]: No cached report found for #741048541
+2024-08-30T06:46:21.579Z [info]: GPT decision: SPAM, Confidence: 75%, Based on: System information
+2024-08-30T06:46:21.579Z [info]: GPT decision for #r741085113: SPAM, Confidence: 75%
+2024-08-30T06:46:21.579Z [info]: Final decision for #r741085113: SPAM
+2024-08-30T06:46:21.743Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:21.743Z [info]: Saving report to Redis: #r741085113
+2024-08-30T06:46:21.799Z [info]: Saved to cache: report:#r741085113
+2024-08-30T06:46:21.800Z [info]: Report saved successfully to Redis: #r741085113
+2024-08-30T06:46:21.800Z [info]: Set isProcessing to false for #r741085113
+2024-08-30T06:46:21.800Z [info]: Processing ended at: 2024-08-30T06:46:21.800Z
+2024-08-30T06:46:21.800Z [info]: Queue empty after processing #r741085113
+2024-08-30T06:46:21.868Z [info]: Received message for check: 🌕 0%
+#𝐊𝐢𝐧𝐠𝐒𝐚𝐬𝐞𝐝
+        𝑵𝑨𝑮𝑰𝑵𝑰_𝑵𝑶𝑴𝑰𝑫𝑨𝑵
+2024-08-30T06:46:21.869Z [info]: Received system message: #r741017578, 😱3
+Source: 💙🍒𝐓𝐀𝐍𝐈𝐖𝐔𝐕 𝐂𝐇𝐀𝐓🍒💙 @TANWUV_2024
+Sender: 🇵🇰 PAK, 12 ❤️ཱུ𓍳꯭𝑶꯭𝑵꯭𝑨𝑺꯭𝑯꯭𝑰𝑴…
+30.08.24, 06:42  🌕 0%
+/pattern741017578 · /abuse741017578 · /eng741017578
+2024-08-30T06:46:21.869Z [info]: Parsed system info: {
+  "complaintCount": 3,
+  "isSpam": 0,
+  "timestamp": 1725000381869,
+  "alreadyProcessed": false,
+  "reportId": "#r741017578",
+  "source": "💙🍒𝐓𝐀𝐍𝐈𝐖𝐔𝐕 𝐂𝐇𝐀𝐓🍒💙 @TANWUV_2024",
+  "sender": "🇵🇰 PAK, 12 ❤️ཱུ𓍳꯭𝑶꯭𝑵꯭𝑨𝑺꯭𝑯꯭𝑰𝑴…"
+}
+2024-08-30T06:46:21.869Z [info]: Received additional message: Report #r741085113 marked as spam 😡
+Send /undo741085113 to revert your decision.
+2024-08-30T06:46:21.915Z [info]: Report #741085113 completed. Decision: spam 😡
+2024-08-30T06:46:21.964Z [info]: No cached report found for #741085113
+2024-08-30T06:46:21.964Z [info]: Updated current report: {
+  "complaintCount": 3,
+  "isSpam": 0,
+  "timestamp": 1725000381869,
+  "alreadyProcessed": false,
+  "reportId": "#r741017578",
+  "source": "💙🍒𝐓𝐀𝐍𝐈𝐖𝐔𝐕 𝐂𝐇𝐀𝐓🍒💙 @TANWUV_2024",
+  "sender": "🇵🇰 PAK, 12 ❤️ཱུ𓍳꯭𝑶꯭𝑵꯭𝑨𝑺꯭𝑯꯭𝑰𝑴…"
+}
+2024-08-30T06:46:21.964Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:21.964Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:21.964Z [info]: Received additional message: #r741017578, 😱3
+Source: 💙🍒𝐓𝐀𝐍𝐈𝐖𝐔𝐕 𝐂𝐇𝐀𝐓🍒💙 @TANWUV_2024
+Sender: 🇵🇰 PAK, 12 ❤️ཱུ𓍳꯭𝑶꯭𝑵꯭𝑨𝑺꯭𝑯꯭𝑰𝑴…
+30.08.24, 06:42  🌕 0%
+/pattern741017578 · /abuse741017578 · /eng741017578
+2024-08-30T06:46:21.965Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:21.965Z [info]: Starting to process report: #r741017578
+2024-08-30T06:46:21.965Z [info]: Entering processReport for #r741017578. isProcessing: false
+2024-08-30T06:46:21.965Z [info]: Set isProcessing to true for #r741017578
+2024-08-30T06:46:21.965Z [info]: Processing Report: #r741017578, Messages: 0, Media: , Complaints: 3
+2024-08-30T06:46:21.965Z [info]: Message content: undefined
+2024-08-30T06:46:21.965Z [info]: Checking for obvious spam for #r741017578
+2024-08-30T06:46:21.965Z [info]: Checking for obvious spam in report #r741017578
+2024-08-30T06:46:21.965Z [info]: Checking cache for #r741017578
+2024-08-30T06:46:21.965Z [info]: Cache miss for report #r741017578
+2024-08-30T06:46:21.965Z [info]: Checking GPT for #r741017578
+2024-08-30T06:46:22.358Z [info]: GPT decision: SPAM, Confidence: 85%, Based on: System information
+2024-08-30T06:46:22.358Z [info]: GPT decision for #r741017578: SPAM, Confidence: 85%
+2024-08-30T06:46:22.358Z [info]: Final decision for #r741017578: SPAM
+2024-08-30T06:46:22.521Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:22.522Z [info]: Saving report to Redis: #r741017578
+2024-08-30T06:46:22.655Z [info]: Saved to cache: report:#r741017578
+2024-08-30T06:46:22.655Z [info]: Report saved successfully to Redis: #r741017578
+2024-08-30T06:46:22.655Z [info]: Set isProcessing to false for #r741017578
+2024-08-30T06:46:22.655Z [info]: Processing ended at: 2024-08-30T06:46:22.655Z
+2024-08-30T06:46:22.655Z [info]: Queue empty after processing #r741017578
+2024-08-30T06:46:22.717Z [info]: Received message for check: 🌕 0%
+Помогу в финансах, не скам, не звонилка или что то подобное, если тебе интересно отпиши @Rabotatytoo3
+
+ User links: 1
+2024-08-30T06:46:22.718Z [info]: Received system message: #r741072841, 😱1
+Source: Биржа спонтанного трудоустройства и вза… @Arbeit_in_Sachsen_fuer_Ukraina
+Sender: 🇰🇿 KAZ, Elena , @enjcnww
+30.08.24, 06:45  🌕 0%
+/pattern741072841 · /abuse741072841 · /eng741072841
+2024-08-30T06:46:22.718Z [info]: Parsed system info: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000382718,
+  "alreadyProcessed": false,
+  "reportId": "#r741072841",
+  "source": "Биржа спонтанного трудоустройства и вза… @Arbeit_in_Sachsen_fuer_Ukraina",
+  "sender": "🇰🇿 KAZ, Elena , @enjcnww"
+}
+2024-08-30T06:46:22.718Z [info]: Received additional message: Report #r741017578 marked as spam 😡
+Send /undo741017578 to revert your decision.
+2024-08-30T06:46:22.781Z [info]: Report #741017578 completed. Decision: spam 😡
+2024-08-30T06:46:22.831Z [info]: No cached report found for #741017578
+2024-08-30T06:46:22.831Z [info]: Updated current report: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000382718,
+  "alreadyProcessed": false,
+  "reportId": "#r741072841",
+  "source": "Биржа спонтанного трудоустройства и вза… @Arbeit_in_Sachsen_fuer_Ukraina",
+  "sender": "🇰🇿 KAZ, Elena , @enjcnww"
+}
+2024-08-30T06:46:22.831Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:22.831Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:22.832Z [info]: Received additional message: #r741072841, 😱1
+Source: Биржа спонтанного трудоустройства и вза… @Arbeit_in_Sachsen_fuer_Ukraina
+Sender: 🇰🇿 KAZ, Elena , @enjcnww
+30.08.24, 06:45  🌕 0%
+/pattern741072841 · /abuse741072841 · /eng741072841
+2024-08-30T06:46:22.832Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:22.832Z [info]: Starting to process report: #r741072841
+2024-08-30T06:46:22.832Z [info]: Entering processReport for #r741072841. isProcessing: false
+2024-08-30T06:46:22.832Z [info]: Set isProcessing to true for #r741072841
+2024-08-30T06:46:22.832Z [info]: Processing Report: #r741072841, Messages: 0, Media: , Complaints: 1
+2024-08-30T06:46:22.833Z [info]: Message content: undefined
+2024-08-30T06:46:22.833Z [info]: Checking for obvious spam for #r741072841
+2024-08-30T06:46:22.833Z [info]: Checking for obvious spam in report #r741072841
+2024-08-30T06:46:22.833Z [info]: Checking cache for #r741072841
+2024-08-30T06:46:22.833Z [info]: Cache miss for report #r741072841
+2024-08-30T06:46:22.833Z [info]: Checking GPT for #r741072841
+2024-08-30T06:46:23.408Z [info]: GPT decision: SPAM, Confidence: 75%, Based on: System information
+2024-08-30T06:46:23.408Z [info]: GPT decision for #r741072841: SPAM, Confidence: 75%
+2024-08-30T06:46:23.408Z [info]: Final decision for #r741072841: SPAM
+2024-08-30T06:46:23.572Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:23.572Z [info]: Saving report to Redis: #r741072841
+2024-08-30T06:46:23.704Z [info]: Saved to cache: report:#r741072841
+2024-08-30T06:46:23.705Z [info]: Report saved successfully to Redis: #r741072841
+2024-08-30T06:46:23.705Z [info]: Set isProcessing to false for #r741072841
+2024-08-30T06:46:23.705Z [info]: Processing ended at: 2024-08-30T06:46:23.705Z
+2024-08-30T06:46:23.705Z [info]: Queue empty after processing #r741072841
+2024-08-30T06:46:23.762Z [info]: Received message for check: 🌕 0%
+Требуются люди 100-150 баксов в  день. времени займет 1-2 часа, работа из дома удаленно. Обращайтесь в лс
+2024-08-30T06:46:23.763Z [info]: Received system message: #r740265409, 😱21
+Source: 6th Russian Highline &amp; Climbing Fes… @rushighfestchat
+Sender: 🇰🇬 KGZ, Виктория 
+30.08.24, 06:39  🌕 0%
+/pattern740265409 · /abuse740265409 · /eng740265409
+2024-08-30T06:46:23.763Z [info]: Parsed system info: {
+  "complaintCount": 21,
+  "isSpam": 0,
+  "timestamp": 1725000383763,
+  "alreadyProcessed": false,
+  "reportId": "#r740265409",
+  "source": "6th Russian Highline &amp; Climbing Fes… @rushighfestchat",
+  "sender": "🇰🇬 KGZ, Виктория"
+}
+2024-08-30T06:46:23.763Z [info]: Received additional message: Report #r741072841 marked as spam 😡
+Send /undo741072841 to revert your decision.
+2024-08-30T06:46:23.810Z [info]: Report #741072841 completed. Decision: spam 😡
+2024-08-30T06:46:23.857Z [info]: No cached report found for #741072841
+2024-08-30T06:46:23.858Z [info]: Updated current report: {
+  "complaintCount": 21,
+  "isSpam": 0,
+  "timestamp": 1725000383763,
+  "alreadyProcessed": false,
+  "reportId": "#r740265409",
+  "source": "6th Russian Highline &amp; Climbing Fes… @rushighfestchat",
+  "sender": "🇰🇬 KGZ, Виктория"
+}
+2024-08-30T06:46:23.858Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:23.858Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:23.858Z [info]: Received additional message: #r740265409, 😱21
+Source: 6th Russian Highline &amp; Climbing Fes… @rushighfestchat
+Sender: 🇰🇬 KGZ, Виктория 
+30.08.24, 06:39  🌕 0%
+/pattern740265409 · /abuse740265409 · /eng740265409
+2024-08-30T06:46:23.858Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:23.859Z [info]: Starting to process report: #r740265409
+2024-08-30T06:46:23.859Z [info]: Entering processReport for #r740265409. isProcessing: false
+2024-08-30T06:46:23.859Z [info]: Set isProcessing to true for #r740265409
+2024-08-30T06:46:23.859Z [info]: Processing Report: #r740265409, Messages: 0, Media: , Complaints: 21
+2024-08-30T06:46:23.859Z [info]: Message content: undefined
+2024-08-30T06:46:23.859Z [info]: Checking for obvious spam for #r740265409
+2024-08-30T06:46:23.859Z [info]: Checking for obvious spam in report #r740265409
+2024-08-30T06:46:23.859Z [info]: Checking cache for #r740265409
+2024-08-30T06:46:23.859Z [info]: Cache miss for report #r740265409
+2024-08-30T06:46:23.859Z [info]: Checking GPT for #r740265409
+2024-08-30T06:46:24.510Z [info]: GPT decision: SPAM, Confidence: 85%, Based on: System information
+2024-08-30T06:46:24.511Z [info]: GPT decision for #r740265409: SPAM, Confidence: 85%
+2024-08-30T06:46:24.511Z [info]: Final decision for #r740265409: SPAM
+2024-08-30T06:46:24.674Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:24.675Z [info]: Saving report to Redis: #r740265409
+2024-08-30T06:46:24.752Z [info]: Saved to cache: report:#r740265409
+2024-08-30T06:46:24.752Z [info]: Report saved successfully to Redis: #r740265409
+2024-08-30T06:46:24.752Z [info]: Set isProcessing to false for #r740265409
+2024-08-30T06:46:24.753Z [info]: Processing ended at: 2024-08-30T06:46:24.753Z
+2024-08-30T06:46:24.753Z [info]: Queue empty after processing #r740265409
+2024-08-30T06:46:24.830Z [info]: Received message for check: 🌕 0%
+Am available
+2024-08-30T06:46:24.831Z [info]: Received system message: #r740208012, 😱3
+Source: Qatar Chatting Group 😘 @LoveChattingGr
+Sender: 🇳🇬 NGA, HANNAH MERCY
+30.08.24, 06:36  🌕 0%
+/pattern740208012 · /abuse740208012 · /eng740208012
+2024-08-30T06:46:24.831Z [info]: Parsed system info: {
+  "complaintCount": 3,
+  "isSpam": 0,
+  "timestamp": 1725000384831,
+  "alreadyProcessed": false,
+  "reportId": "#r740208012",
+  "source": "Qatar Chatting Group 😘 @LoveChattingGr",
+  "sender": "🇳🇬 NGA, HANNAH MERCY"
+}
+2024-08-30T06:46:24.831Z [info]: Received additional message: Report #r740265409 marked as spam 😡
+Send /undo740265409 to revert your decision.
+2024-08-30T06:46:24.878Z [info]: Report #740265409 completed. Decision: spam 😡
+2024-08-30T06:46:24.925Z [info]: No cached report found for #740265409
+2024-08-30T06:46:24.925Z [info]: Updated current report: {
+  "complaintCount": 3,
+  "isSpam": 0,
+  "timestamp": 1725000384831,
+  "alreadyProcessed": false,
+  "reportId": "#r740208012",
+  "source": "Qatar Chatting Group 😘 @LoveChattingGr",
+  "sender": "🇳🇬 NGA, HANNAH MERCY"
+}
+2024-08-30T06:46:24.925Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:24.925Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:24.925Z [info]: Received additional message: #r740208012, 😱3
+Source: Qatar Chatting Group 😘 @LoveChattingGr
+Sender: 🇳🇬 NGA, HANNAH MERCY
+30.08.24, 06:36  🌕 0%
+/pattern740208012 · /abuse740208012 · /eng740208012
+2024-08-30T06:46:24.926Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:24.926Z [info]: Starting to process report: #r740208012
+2024-08-30T06:46:24.926Z [info]: Entering processReport for #r740208012. isProcessing: false
+2024-08-30T06:46:24.926Z [info]: Set isProcessing to true for #r740208012
+2024-08-30T06:46:24.926Z [info]: Processing Report: #r740208012, Messages: 0, Media: , Complaints: 3
+2024-08-30T06:46:24.926Z [info]: Message content: undefined
+2024-08-30T06:46:24.926Z [info]: Checking for obvious spam for #r740208012
+2024-08-30T06:46:24.926Z [info]: Checking for obvious spam in report #r740208012
+2024-08-30T06:46:24.927Z [info]: Checking cache for #r740208012
+2024-08-30T06:46:24.927Z [info]: Cache miss for report #r740208012
+2024-08-30T06:46:24.927Z [info]: Checking GPT for #r740208012
+2024-08-30T06:46:25.430Z [info]: GPT decision: SPAM, Confidence: 85%, Based on: System information
+2024-08-30T06:46:25.430Z [info]: GPT decision for #r740208012: SPAM, Confidence: 85%
+2024-08-30T06:46:25.430Z [info]: Final decision for #r740208012: SPAM
+2024-08-30T06:46:25.593Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:25.594Z [info]: Saving report to Redis: #r740208012
+2024-08-30T06:46:25.643Z [info]: Saved to cache: report:#r740208012
+2024-08-30T06:46:25.643Z [info]: Report saved successfully to Redis: #r740208012
+2024-08-30T06:46:25.644Z [info]: Set isProcessing to false for #r740208012
+2024-08-30T06:46:25.644Z [info]: Processing ended at: 2024-08-30T06:46:25.644Z
+2024-08-30T06:46:25.644Z [info]: Queue empty after processing #r740208012
+2024-08-30T06:46:25.758Z [info]: Received message for check: 🌚 96%
+http://t.me/token1win_bot/start?startapp=refId2050805558
+
+🎁 50,000 free 1win Tokens are already waiting for you at 1win!
+😌 I invite you to join the game.
+
+ Bot links: 1
+2024-08-30T06:46:25.759Z [info]: Received system message: #r741052012, 😱2
+Source: PROFIT MAKER v3 🤖 @profit_maker_v3
+Sender: 🇳🇬 NGA, Amanam Joseph, @mr_amanam
+30.08.24, 06:44  🌚 96%
+/pattern741052012 · /abuse741052012 · /eng741052012
+2024-08-30T06:46:25.759Z [info]: Parsed system info: {
+  "complaintCount": 2,
+  "isSpam": 0,
+  "timestamp": 1725000385759,
+  "alreadyProcessed": false,
+  "reportId": "#r741052012",
+  "source": "PROFIT MAKER v3 🤖 @profit_maker_v3",
+  "sender": "🇳🇬 NGA, Amanam Joseph, @mr_amanam"
+}
+2024-08-30T06:46:25.759Z [info]: Received additional message: Report #r740208012 marked as spam 😡
+Send /undo740208012 to revert your decision.
+2024-08-30T06:46:25.805Z [info]: Report #740208012 completed. Decision: spam 😡
+2024-08-30T06:46:25.852Z [info]: No cached report found for #740208012
+2024-08-30T06:46:25.853Z [info]: Updated current report: {
+  "complaintCount": 2,
+  "isSpam": 0,
+  "timestamp": 1725000385759,
+  "alreadyProcessed": false,
+  "reportId": "#r741052012",
+  "source": "PROFIT MAKER v3 🤖 @profit_maker_v3",
+  "sender": "🇳🇬 NGA, Amanam Joseph, @mr_amanam"
+}
+2024-08-30T06:46:25.853Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:25.853Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:25.853Z [info]: Received additional message: #r741052012, 😱2
+Source: PROFIT MAKER v3 🤖 @profit_maker_v3
+Sender: 🇳🇬 NGA, Amanam Joseph, @mr_amanam
+30.08.24, 06:44  🌚 96%
+/pattern741052012 · /abuse741052012 · /eng741052012
+2024-08-30T06:46:25.853Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:25.853Z [info]: Starting to process report: #r741052012
+2024-08-30T06:46:25.853Z [info]: Entering processReport for #r741052012. isProcessing: false
+2024-08-30T06:46:25.854Z [info]: Set isProcessing to true for #r741052012
+2024-08-30T06:46:25.854Z [info]: Processing Report: #r741052012, Messages: 0, Media: , Complaints: 2
+2024-08-30T06:46:25.854Z [info]: Message content: undefined
+2024-08-30T06:46:25.854Z [info]: Checking for obvious spam for #r741052012
+2024-08-30T06:46:25.854Z [info]: Checking for obvious spam in report #r741052012
+2024-08-30T06:46:25.854Z [info]: Checking cache for #r741052012
+2024-08-30T06:46:25.854Z [info]: Cache miss for report #r741052012
+2024-08-30T06:46:25.854Z [info]: Checking GPT for #r741052012
+2024-08-30T06:46:26.331Z [info]: GPT decision: SPAM, Confidence: 85%, Based on: System information
+2024-08-30T06:46:26.331Z [info]: GPT decision for #r741052012: SPAM, Confidence: 85%
+2024-08-30T06:46:26.331Z [info]: Final decision for #r741052012: SPAM
+2024-08-30T06:46:26.494Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:26.495Z [info]: Saving report to Redis: #r741052012
+2024-08-30T06:46:26.545Z [info]: Saved to cache: report:#r741052012
+2024-08-30T06:46:26.546Z [info]: Report saved successfully to Redis: #r741052012
+2024-08-30T06:46:26.546Z [info]: Set isProcessing to false for #r741052012
+2024-08-30T06:46:26.546Z [info]: Processing ended at: 2024-08-30T06:46:26.546Z
+2024-08-30T06:46:26.546Z [info]: Queue empty after processing #r741052012
+2024-08-30T06:46:26.614Z [info]: Received message for check: 🌕 0%
+https://t.me/rosgame_bot/ros?startApp=6699403410
+🏴‍☠️  Ahoy, Join me and Earn upto $50,000 now!
+
+ Bot links: 1
+2024-08-30T06:46:26.614Z [info]: Received system message: #r740220307, 😱1
+Source: Revenge of Sloths @rosgame_chat
+Sender: 🇧🇩 BGD, Md Jamal Khan
+30.08.24, 06:37  🌕 0%
+/pattern740220307 · /abuse740220307 · /eng740220307
+2024-08-30T06:46:26.614Z [info]: Parsed system info: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000386614,
+  "alreadyProcessed": false,
+  "reportId": "#r740220307",
+  "source": "Revenge of Sloths @rosgame_chat",
+  "sender": "🇧🇩 BGD, Md Jamal Khan"
+}
+2024-08-30T06:46:26.614Z [info]: Received additional message: Report #r741052012 marked as spam 😡
+Send /undo741052012 to revert your decision.
+2024-08-30T06:46:26.661Z [info]: Report #741052012 completed. Decision: spam 😡
+2024-08-30T06:46:26.711Z [info]: No cached report found for #741052012
+2024-08-30T06:46:26.712Z [info]: Updated current report: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000386614,
+  "alreadyProcessed": false,
+  "reportId": "#r740220307",
+  "source": "Revenge of Sloths @rosgame_chat",
+  "sender": "🇧🇩 BGD, Md Jamal Khan"
+}
+2024-08-30T06:46:26.712Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:26.712Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:26.712Z [info]: Received additional message: #r740220307, 😱1
+Source: Revenge of Sloths @rosgame_chat
+Sender: 🇧🇩 BGD, Md Jamal Khan
+30.08.24, 06:37  🌕 0%
+/pattern740220307 · /abuse740220307 · /eng740220307
+2024-08-30T06:46:26.713Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:26.713Z [info]: Starting to process report: #r740220307
+2024-08-30T06:46:26.713Z [info]: Entering processReport for #r740220307. isProcessing: false
+2024-08-30T06:46:26.713Z [info]: Set isProcessing to true for #r740220307
+2024-08-30T06:46:26.713Z [info]: Processing Report: #r740220307, Messages: 0, Media: , Complaints: 1
+2024-08-30T06:46:26.713Z [info]: Message content: undefined
+2024-08-30T06:46:26.713Z [info]: Checking for obvious spam for #r740220307
+2024-08-30T06:46:26.713Z [info]: Checking for obvious spam in report #r740220307
+2024-08-30T06:46:26.714Z [info]: Checking cache for #r740220307
+2024-08-30T06:46:26.714Z [info]: Cache miss for report #r740220307
+2024-08-30T06:46:26.714Z [info]: Checking GPT for #r740220307
+2024-08-30T06:46:27.302Z [info]: GPT decision: NOT SPAM, Confidence: 85%, Based on: System information
+2024-08-30T06:46:27.302Z [info]: GPT decision for #r740220307: NOT SPAM, Confidence: 85%
+2024-08-30T06:46:27.302Z [info]: Final decision for #r740220307: NOT SPAM
+2024-08-30T06:46:27.465Z [info]: Decision sent to bot: 😌 NO
+2024-08-30T06:46:27.466Z [info]: Saving report to Redis: #r740220307
+2024-08-30T06:46:27.515Z [info]: Saved to cache: report:#r740220307
+2024-08-30T06:46:27.515Z [info]: Report saved successfully to Redis: #r740220307
+2024-08-30T06:46:27.515Z [info]: Set isProcessing to false for #r740220307
+2024-08-30T06:46:27.515Z [info]: Processing ended at: 2024-08-30T06:46:27.515Z
+2024-08-30T06:46:27.515Z [info]: Queue empty after processing #r740220307
+2024-08-30T06:46:27.628Z [info]: Received message for check: 🌕 0%
+@vb777_cs1 kick nó đi, nó mời e chơi game nè
+
+ User links: 1
+2024-08-30T06:46:27.629Z [info]: Received system message: #r740182361, 😱1
+Source: VB777Club - Code @vb777_code
+Sender: 🇻🇳 VNM, TRÙM Game, @Vb777_club
+30.08.24, 06:35  🌕 0%
+/pattern740182361 · /abuse740182361 · /eng740182361
+2024-08-30T06:46:27.629Z [info]: Parsed system info: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000387629,
+  "alreadyProcessed": false,
+  "reportId": "#r740182361",
+  "source": "VB777Club - Code @vb777_code",
+  "sender": "🇻🇳 VNM, TRÙM Game, @Vb777_club"
+}
+2024-08-30T06:46:27.629Z [info]: Received additional message: Report #r740220307 marked as not spam 😌
+Send /undo740220307 to revert your decision.
+2024-08-30T06:46:27.679Z [info]: Report #740220307 completed. Decision: not spam 😌
+2024-08-30T06:46:27.729Z [info]: No cached report found for #740220307
+2024-08-30T06:46:27.730Z [info]: Updated current report: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000387629,
+  "alreadyProcessed": false,
+  "reportId": "#r740182361",
+  "source": "VB777Club - Code @vb777_code",
+  "sender": "🇻🇳 VNM, TRÙM Game, @Vb777_club"
+}
+2024-08-30T06:46:27.730Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:27.730Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:27.730Z [info]: Received additional message: #r740182361, 😱1
+Source: VB777Club - Code @vb777_code
+Sender: 🇻🇳 VNM, TRÙM Game, @Vb777_club
+30.08.24, 06:35  🌕 0%
+/pattern740182361 · /abuse740182361 · /eng740182361
+2024-08-30T06:46:27.731Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:27.731Z [info]: Starting to process report: #r740182361
+2024-08-30T06:46:27.731Z [info]: Entering processReport for #r740182361. isProcessing: false
+2024-08-30T06:46:27.731Z [info]: Set isProcessing to true for #r740182361
+2024-08-30T06:46:27.731Z [info]: Processing Report: #r740182361, Messages: 0, Media: , Complaints: 1
+2024-08-30T06:46:27.731Z [info]: Message content: undefined
+2024-08-30T06:46:27.731Z [info]: Checking for obvious spam for #r740182361
+2024-08-30T06:46:27.731Z [info]: Checking for obvious spam in report #r740182361
+2024-08-30T06:46:27.732Z [info]: Checking cache for #r740182361
+2024-08-30T06:46:27.732Z [info]: Cache miss for report #r740182361
+2024-08-30T06:46:27.732Z [info]: Checking GPT for #r740182361
+2024-08-30T06:46:28.223Z [info]: GPT decision: SPAM, Confidence: 85%, Based on: System information
+2024-08-30T06:46:28.223Z [info]: GPT decision for #r740182361: SPAM, Confidence: 85%
+2024-08-30T06:46:28.223Z [info]: Final decision for #r740182361: SPAM
+2024-08-30T06:46:28.386Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:28.387Z [info]: Saving report to Redis: #r740182361
+2024-08-30T06:46:28.438Z [info]: Saved to cache: report:#r740182361
+2024-08-30T06:46:28.438Z [info]: Report saved successfully to Redis: #r740182361
+2024-08-30T06:46:28.439Z [info]: Set isProcessing to false for #r740182361
+2024-08-30T06:46:28.439Z [info]: Processing ended at: 2024-08-30T06:46:28.439Z
+2024-08-30T06:46:28.439Z [info]: Queue empty after processing #r740182361
+2024-08-30T06:46:28.515Z [info]: Received message for check: 🌕 0%
+When will they released the coin
+2024-08-30T06:46:28.515Z [info]: Received system message: #r741014418, 😱1
+Source: ReCat Community @ResistanceCatCommunity
+Sender: 🇳🇬 NGA, Ejitx Crypto, @EjitexCrypto
+30.08.24, 06:42  🌕 0%
+/pattern741014418 · /abuse741014418 · /eng741014418
+2024-08-30T06:46:28.515Z [info]: Parsed system info: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000388515,
+  "alreadyProcessed": false,
+  "reportId": "#r741014418",
+  "source": "ReCat Community @ResistanceCatCommunity",
+  "sender": "🇳🇬 NGA, Ejitx Crypto, @EjitexCrypto"
+}
+2024-08-30T06:46:28.516Z [info]: Received additional message: Report #r740182361 marked as spam 😡
+Send /undo740182361 to revert your decision.
+2024-08-30T06:46:28.562Z [info]: Report #740182361 completed. Decision: spam 😡
+2024-08-30T06:46:28.615Z [info]: No cached report found for #740182361
+2024-08-30T06:46:28.616Z [info]: Updated current report: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000388515,
+  "alreadyProcessed": false,
+  "reportId": "#r741014418",
+  "source": "ReCat Community @ResistanceCatCommunity",
+  "sender": "🇳🇬 NGA, Ejitx Crypto, @EjitexCrypto"
+}
+2024-08-30T06:46:28.616Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:28.616Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:28.616Z [info]: Received additional message: #r741014418, 😱1
+Source: ReCat Community @ResistanceCatCommunity
+Sender: 🇳🇬 NGA, Ejitx Crypto, @EjitexCrypto
+30.08.24, 06:42  🌕 0%
+/pattern741014418 · /abuse741014418 · /eng741014418
+2024-08-30T06:46:28.616Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:28.617Z [info]: Starting to process report: #r741014418
+2024-08-30T06:46:28.617Z [info]: Entering processReport for #r741014418. isProcessing: false
+2024-08-30T06:46:28.617Z [info]: Set isProcessing to true for #r741014418
+2024-08-30T06:46:28.617Z [info]: Processing Report: #r741014418, Messages: 0, Media: , Complaints: 1
+2024-08-30T06:46:28.617Z [info]: Message content: undefined
+2024-08-30T06:46:28.617Z [info]: Checking for obvious spam for #r741014418
+2024-08-30T06:46:28.617Z [info]: Checking for obvious spam in report #r741014418
+2024-08-30T06:46:28.617Z [info]: Checking cache for #r741014418
+2024-08-30T06:46:28.617Z [info]: Cache miss for report #r741014418
+2024-08-30T06:46:28.617Z [info]: Checking GPT for #r741014418
+2024-08-30T06:46:29.079Z [info]: GPT decision: SPAM, Confidence: 75%, Based on: System information
+2024-08-30T06:46:29.079Z [info]: GPT decision for #r741014418: SPAM, Confidence: 75%
+2024-08-30T06:46:29.079Z [info]: Final decision for #r741014418: SPAM
+2024-08-30T06:46:29.242Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:29.244Z [info]: Saving report to Redis: #r741014418
+2024-08-30T06:46:29.294Z [info]: Saved to cache: report:#r741014418
+2024-08-30T06:46:29.295Z [info]: Report saved successfully to Redis: #r741014418
+2024-08-30T06:46:29.295Z [info]: Set isProcessing to false for #r741014418
+2024-08-30T06:46:29.295Z [info]: Processing ended at: 2024-08-30T06:46:29.295Z
+2024-08-30T06:46:29.295Z [info]: Queue empty after processing #r741014418
+2024-08-30T06:46:29.377Z [info]: Received message for check: 🌕 0%
+Vote
+2024-08-30T06:46:29.377Z [info]: Received system message: #r741074624, 😱2
+Source: Major Livestream &amp; Community Chat |… @MajorCommunityChat
+Sender: 🇧🇩 BGD, @Luica , @Luica21F
+30.08.24, 06:45  🌕 0%
+/pattern741074624 · /abuse741074624 · /eng741074624
+2024-08-30T06:46:29.378Z [info]: Parsed system info: {
+  "complaintCount": 2,
+  "isSpam": 0,
+  "timestamp": 1725000389377,
+  "alreadyProcessed": false,
+  "reportId": "#r741074624",
+  "source": "Major Livestream &amp; Community Chat |… @MajorCommunityChat",
+  "sender": "🇧🇩 BGD, @Luica , @Luica21F"
+}
+2024-08-30T06:46:29.378Z [info]: Received additional message: Report #r741014418 marked as spam 😡
+Send /undo741014418 to revert your decision.
+2024-08-30T06:46:29.435Z [info]: Report #741014418 completed. Decision: spam 😡
+2024-08-30T06:46:29.486Z [info]: No cached report found for #741014418
+2024-08-30T06:46:29.486Z [info]: Updated current report: {
+  "complaintCount": 2,
+  "isSpam": 0,
+  "timestamp": 1725000389377,
+  "alreadyProcessed": false,
+  "reportId": "#r741074624",
+  "source": "Major Livestream &amp; Community Chat |… @MajorCommunityChat",
+  "sender": "🇧🇩 BGD, @Luica , @Luica21F"
+}
+2024-08-30T06:46:29.486Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:29.486Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:29.487Z [info]: Received additional message: #r741074624, 😱2
+Source: Major Livestream &amp; Community Chat |… @MajorCommunityChat
+Sender: 🇧🇩 BGD, @Luica , @Luica21F
+30.08.24, 06:45  🌕 0%
+/pattern741074624 · /abuse741074624 · /eng741074624
+2024-08-30T06:46:29.487Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:29.487Z [info]: Starting to process report: #r741074624
+2024-08-30T06:46:29.487Z [info]: Entering processReport for #r741074624. isProcessing: false
+2024-08-30T06:46:29.488Z [info]: Set isProcessing to true for #r741074624
+2024-08-30T06:46:29.488Z [info]: Processing Report: #r741074624, Messages: 0, Media: , Complaints: 2
+2024-08-30T06:46:29.488Z [info]: Message content: undefined
+2024-08-30T06:46:29.488Z [info]: Checking for obvious spam for #r741074624
+2024-08-30T06:46:29.488Z [info]: Checking for obvious spam in report #r741074624
+2024-08-30T06:46:29.488Z [info]: Checking cache for #r741074624
+2024-08-30T06:46:29.488Z [info]: Cache miss for report #r741074624
+2024-08-30T06:46:29.488Z [info]: Checking GPT for #r741074624
+2024-08-30T06:46:33.157Z [info]: GPT decision: SPAM, Confidence: 75%, Based on: System information
+2024-08-30T06:46:33.157Z [info]: GPT decision for #r741074624: SPAM, Confidence: 75%
+2024-08-30T06:46:33.157Z [info]: Final decision for #r741074624: SPAM
+2024-08-30T06:46:33.320Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:33.321Z [info]: Saving report to Redis: #r741074624
+2024-08-30T06:46:33.371Z [info]: Saved to cache: report:#r741074624
+2024-08-30T06:46:33.371Z [info]: Report saved successfully to Redis: #r741074624
+2024-08-30T06:46:33.372Z [info]: Set isProcessing to false for #r741074624
+2024-08-30T06:46:33.372Z [info]: Processing ended at: 2024-08-30T06:46:33.372Z
+2024-08-30T06:46:33.372Z [info]: Queue empty after processing #r741074624
+2024-08-30T06:46:33.533Z [info]: Received message for check: 🌕 0%
+Кто приедет либо привезёт свою нижнюю шлюху для жёсткой ебли у меня на работе в мастерской, подробности в личку, не коммерция, Москва!
+2024-08-30T06:46:33.533Z [info]: Received system message: #r741048411, 😱11
+Source: Anal dreams🤑
+Sender: 🇷🇺 RUS, Максимус , @Maks19868
+30.08.24, 06:44  🌕 0%
+/pattern741048411 · /abuse741048411 · /eng741048411
+2024-08-30T06:46:33.533Z [info]: Parsed system info: {
+  "complaintCount": 11,
+  "isSpam": 0,
+  "timestamp": 1725000393533,
+  "alreadyProcessed": false,
+  "reportId": "#r741048411",
+  "source": "Anal dreams🤑",
+  "sender": "🇷🇺 RUS, Максимус , @Maks19868"
+}
+2024-08-30T06:46:33.533Z [info]: Received additional message: Report #r741074624 marked as spam 😡
+Send /undo741074624 to revert your decision.
+2024-08-30T06:46:33.581Z [info]: Report #741074624 completed. Decision: spam 😡
+2024-08-30T06:46:33.633Z [info]: No cached report found for #741074624
+2024-08-30T06:46:33.634Z [info]: Updated current report: {
+  "complaintCount": 11,
+  "isSpam": 0,
+  "timestamp": 1725000393533,
+  "alreadyProcessed": false,
+  "reportId": "#r741048411",
+  "source": "Anal dreams🤑",
+  "sender": "🇷🇺 RUS, Максимус , @Maks19868"
+}
+2024-08-30T06:46:33.634Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:33.634Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:33.634Z [info]: Received additional message: #r741048411, 😱11
+Source: Anal dreams🤑
+Sender: 🇷🇺 RUS, Максимус , @Maks19868
+30.08.24, 06:44  🌕 0%
+/pattern741048411 · /abuse741048411 · /eng741048411
+2024-08-30T06:46:33.634Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:33.634Z [info]: Starting to process report: #r741048411
+2024-08-30T06:46:33.635Z [info]: Entering processReport for #r741048411. isProcessing: false
+2024-08-30T06:46:33.635Z [info]: Set isProcessing to true for #r741048411
+2024-08-30T06:46:33.635Z [info]: Processing Report: #r741048411, Messages: 0, Media: , Complaints: 11
+2024-08-30T06:46:33.635Z [info]: Message content: undefined
+2024-08-30T06:46:33.635Z [info]: Checking for obvious spam for #r741048411
+2024-08-30T06:46:33.635Z [info]: Checking for obvious spam in report #r741048411
+2024-08-30T06:46:33.635Z [info]: Checking cache for #r741048411
+2024-08-30T06:46:33.635Z [info]: Cache miss for report #r741048411
+2024-08-30T06:46:33.635Z [info]: Checking GPT for #r741048411
+2024-08-30T06:46:34.235Z [info]: GPT decision: SPAM, Confidence: 85%, Based on: System information
+2024-08-30T06:46:34.236Z [info]: GPT decision for #r741048411: SPAM, Confidence: 85%
+2024-08-30T06:46:34.236Z [info]: Final decision for #r741048411: SPAM
+2024-08-30T06:46:34.399Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:34.400Z [info]: Saving report to Redis: #r741048411
+2024-08-30T06:46:34.455Z [info]: Saved to cache: report:#r741048411
+2024-08-30T06:46:34.455Z [info]: Report saved successfully to Redis: #r741048411
+2024-08-30T06:46:34.455Z [info]: Set isProcessing to false for #r741048411
+2024-08-30T06:46:34.455Z [info]: Processing ended at: 2024-08-30T06:46:34.455Z
+2024-08-30T06:46:34.455Z [info]: Queue empty after processing #r741048411
+2024-08-30T06:46:34.526Z [info]: Received message for check: 🌕 0%
+https://t.me/major/start?startapp=7082239619
+
+👑 Join me in @Major game and earn $MAJOR token soon!
+⭐️ 750 rating bonus for you.
+⭐️ 1000 rating bonus if you are Premium.
+
+ Bot links: 2
+2024-08-30T06:46:34.527Z [info]: Received system message: #r741016433, 😱1
+Source: BBQCoin9 @bbqcoingroup9
+Sender: 🇳🇬 NGA, Abdullahi Ahmed, @Comrdmalla
+30.08.24, 06:42  🌕 0%
+/pattern741016433 · /abuse741016433 · /eng741016433
+2024-08-30T06:46:34.527Z [info]: Parsed system info: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000394527,
+  "alreadyProcessed": false,
+  "reportId": "#r741016433",
+  "source": "BBQCoin9 @bbqcoingroup9",
+  "sender": "🇳🇬 NGA, Abdullahi Ahmed, @Comrdmalla"
+}
+2024-08-30T06:46:34.527Z [info]: Received additional message: Report #r741048411 marked as spam 😡
+Send /undo741048411 to revert your decision.
+2024-08-30T06:46:34.602Z [info]: Report #741048411 completed. Decision: spam 😡
+2024-08-30T06:46:34.672Z [info]: No cached report found for #741048411
+2024-08-30T06:46:34.672Z [info]: Updated current report: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000394527,
+  "alreadyProcessed": false,
+  "reportId": "#r741016433",
+  "source": "BBQCoin9 @bbqcoingroup9",
+  "sender": "🇳🇬 NGA, Abdullahi Ahmed, @Comrdmalla"
+}
+2024-08-30T06:46:34.672Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:34.672Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:34.673Z [info]: Received additional message: #r741016433, 😱1
+Source: BBQCoin9 @bbqcoingroup9
+Sender: 🇳🇬 NGA, Abdullahi Ahmed, @Comrdmalla
+30.08.24, 06:42  🌕 0%
+/pattern741016433 · /abuse741016433 · /eng741016433
+2024-08-30T06:46:34.673Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:34.673Z [info]: Starting to process report: #r741016433
+2024-08-30T06:46:34.673Z [info]: Entering processReport for #r741016433. isProcessing: false
+2024-08-30T06:46:34.673Z [info]: Set isProcessing to true for #r741016433
+2024-08-30T06:46:34.673Z [info]: Processing Report: #r741016433, Messages: 0, Media: , Complaints: 1
+2024-08-30T06:46:34.673Z [info]: Message content: undefined
+2024-08-30T06:46:34.673Z [info]: Checking for obvious spam for #r741016433
+2024-08-30T06:46:34.674Z [info]: Checking for obvious spam in report #r741016433
+2024-08-30T06:46:34.674Z [info]: Checking cache for #r741016433
+2024-08-30T06:46:34.674Z [info]: Cache miss for report #r741016433
+2024-08-30T06:46:34.674Z [info]: Checking GPT for #r741016433
+2024-08-30T06:46:35.363Z [info]: GPT decision: SPAM, Confidence: 75%, Based on: System information
+2024-08-30T06:46:35.363Z [info]: GPT decision for #r741016433: SPAM, Confidence: 75%
+2024-08-30T06:46:35.363Z [info]: Final decision for #r741016433: SPAM
+2024-08-30T06:46:35.527Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:35.527Z [info]: Saving report to Redis: #r741016433
+2024-08-30T06:46:35.578Z [info]: Saved to cache: report:#r741016433
+2024-08-30T06:46:35.579Z [info]: Report saved successfully to Redis: #r741016433
+2024-08-30T06:46:35.579Z [info]: Set isProcessing to false for #r741016433
+2024-08-30T06:46:35.579Z [info]: Processing ended at: 2024-08-30T06:46:35.579Z
+2024-08-30T06:46:35.579Z [info]: Queue empty after processing #r741016433
+2024-08-30T06:46:35.640Z [info]: Received message for check: 🌕 0%
+UK 🇬🇧 Twitter available dm
+2024-08-30T06:46:35.640Z [info]: Received system message: #r741084214, 😱4
+Source: MELAN | MARKET Chat @melanZglChatss
+Sender: 🇳🇬 NGA, REAPHEAL FUNDZ, @reaphel_fundz
+30.08.24, 06:46  🌕 0%
+/pattern741084214 · /abuse741084214 · /eng741084214
+2024-08-30T06:46:35.640Z [info]: Parsed system info: {
+  "complaintCount": 4,
+  "isSpam": 0,
+  "timestamp": 1725000395640,
+  "alreadyProcessed": false,
+  "reportId": "#r741084214",
+  "source": "MELAN | MARKET Chat @melanZglChatss",
+  "sender": "🇳🇬 NGA, REAPHEAL FUNDZ, @reaphel_fundz"
+}
+2024-08-30T06:46:35.641Z [info]: Received additional message: Report #r741016433 marked as spam 😡
+Send /undo741016433 to revert your decision.
+2024-08-30T06:46:35.688Z [info]: Report #741016433 completed. Decision: spam 😡
+2024-08-30T06:46:35.745Z [info]: No cached report found for #741016433
+2024-08-30T06:46:35.745Z [info]: Updated current report: {
+  "complaintCount": 4,
+  "isSpam": 0,
+  "timestamp": 1725000395640,
+  "alreadyProcessed": false,
+  "reportId": "#r741084214",
+  "source": "MELAN | MARKET Chat @melanZglChatss",
+  "sender": "🇳🇬 NGA, REAPHEAL FUNDZ, @reaphel_fundz"
+}
+2024-08-30T06:46:35.745Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:35.745Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:35.746Z [info]: Received additional message: #r741084214, 😱4
+Source: MELAN | MARKET Chat @melanZglChatss
+Sender: 🇳🇬 NGA, REAPHEAL FUNDZ, @reaphel_fundz
+30.08.24, 06:46  🌕 0%
+/pattern741084214 · /abuse741084214 · /eng741084214
+2024-08-30T06:46:35.746Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:35.746Z [info]: Starting to process report: #r741084214
+2024-08-30T06:46:35.746Z [info]: Entering processReport for #r741084214. isProcessing: false
+2024-08-30T06:46:35.746Z [info]: Set isProcessing to true for #r741084214
+2024-08-30T06:46:35.746Z [info]: Processing Report: #r741084214, Messages: 0, Media: , Complaints: 4
+2024-08-30T06:46:35.746Z [info]: Message content: undefined
+2024-08-30T06:46:35.746Z [info]: Checking for obvious spam for #r741084214
+2024-08-30T06:46:35.746Z [info]: Checking for obvious spam in report #r741084214
+2024-08-30T06:46:35.746Z [info]: Checking cache for #r741084214
+2024-08-30T06:46:35.747Z [info]: Cache miss for report #r741084214
+2024-08-30T06:46:35.747Z [info]: Checking GPT for #r741084214
+2024-08-30T06:46:36.375Z [info]: GPT decision: SPAM, Confidence: 85%, Based on: System information
+2024-08-30T06:46:36.376Z [info]: GPT decision for #r741084214: SPAM, Confidence: 85%
+2024-08-30T06:46:36.376Z [info]: Final decision for #r741084214: SPAM
+2024-08-30T06:46:36.539Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:36.540Z [info]: Saving report to Redis: #r741084214
+2024-08-30T06:46:36.590Z [info]: Saved to cache: report:#r741084214
+2024-08-30T06:46:36.590Z [info]: Report saved successfully to Redis: #r741084214
+2024-08-30T06:46:36.590Z [info]: Set isProcessing to false for #r741084214
+2024-08-30T06:46:36.590Z [info]: Processing ended at: 2024-08-30T06:46:36.590Z
+2024-08-30T06:46:36.590Z [info]: Queue empty after processing #r741084214
+2024-08-30T06:46:36.662Z [info]: Received message for check: 🌕 6%
+Mit den Erkenntnissen von Herrn Henry sind wir in einer guten Position, es ist immer eine gute Idee, weiter zu lernen und sich anzupassen. Kryptomärkte sind unberechenbar, aber mit der richtigen Anleitung können wir sie effektiv navigieren
+2024-08-30T06:46:36.662Z [info]: Received system message: #r741030504, 😱1
+Source: Trade Market Community @analystkient
+Sender: 🇳🇮 NIC, Isabella Koch 
+30.08.24, 06:43  🌕 6%
+/pattern741030504 · /abuse741030504 · /eng741030504
+2024-08-30T06:46:36.662Z [info]: Parsed system info: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000396662,
+  "alreadyProcessed": false,
+  "reportId": "#r741030504",
+  "source": "Trade Market Community @analystkient",
+  "sender": "🇳🇮 NIC, Isabella Koch"
+}
+2024-08-30T06:46:36.662Z [info]: Received additional message: Report #r741084214 marked as spam 😡
+Send /undo741084214 to revert your decision.
+2024-08-30T06:46:36.709Z [info]: Report #741084214 completed. Decision: spam 😡
+2024-08-30T06:46:36.757Z [info]: No cached report found for #741084214
+2024-08-30T06:46:36.757Z [info]: Updated current report: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000396662,
+  "alreadyProcessed": false,
+  "reportId": "#r741030504",
+  "source": "Trade Market Community @analystkient",
+  "sender": "🇳🇮 NIC, Isabella Koch"
+}
+2024-08-30T06:46:36.757Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:36.757Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:36.757Z [info]: Received additional message: #r741030504, 😱1
+Source: Trade Market Community @analystkient
+Sender: 🇳🇮 NIC, Isabella Koch 
+30.08.24, 06:43  🌕 6%
+/pattern741030504 · /abuse741030504 · /eng741030504
+2024-08-30T06:46:36.758Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:36.758Z [info]: Starting to process report: #r741030504
+2024-08-30T06:46:36.758Z [info]: Entering processReport for #r741030504. isProcessing: false
+2024-08-30T06:46:36.758Z [info]: Set isProcessing to true for #r741030504
+2024-08-30T06:46:36.758Z [info]: Processing Report: #r741030504, Messages: 0, Media: , Complaints: 1
+2024-08-30T06:46:36.758Z [info]: Message content: undefined
+2024-08-30T06:46:36.758Z [info]: Checking for obvious spam for #r741030504
+2024-08-30T06:46:36.758Z [info]: Checking for obvious spam in report #r741030504
+2024-08-30T06:46:36.758Z [info]: Checking cache for #r741030504
+2024-08-30T06:46:36.758Z [info]: Cache miss for report #r741030504
+2024-08-30T06:46:36.758Z [info]: Checking GPT for #r741030504
+2024-08-30T06:46:37.289Z [info]: GPT decision: SPAM, Confidence: 75%, Based on: System information
+2024-08-30T06:46:37.289Z [info]: GPT decision for #r741030504: SPAM, Confidence: 75%
+2024-08-30T06:46:37.289Z [info]: Final decision for #r741030504: SPAM
+2024-08-30T06:46:37.452Z [info]: Decision sent to bot: 😡 SPAM
+2024-08-30T06:46:37.453Z [info]: Saving report to Redis: #r741030504
+2024-08-30T06:46:37.503Z [info]: Saved to cache: report:#r741030504
+2024-08-30T06:46:37.503Z [info]: Report saved successfully to Redis: #r741030504
+2024-08-30T06:46:37.503Z [info]: Set isProcessing to false for #r741030504
+2024-08-30T06:46:37.503Z [info]: Processing ended at: 2024-08-30T06:46:37.503Z
+2024-08-30T06:46:37.503Z [info]: Queue empty after processing #r741030504
+2024-08-30T06:46:37.574Z [info]: Received message for check: 🌕 0%
+и казахи не ускоглазые😂😂
+2024-08-30T06:46:37.575Z [info]: Received system message: #r741010937, 😱1
+Source: Курский Чат №1 🇷🇺 @kursk_chatik
+Sender: 🇬🇧 GBR, Joseph Hodge, @JosephHodge
+30.08.24, 06:42  🌕 0%
+/pattern741010937 · /abuse741010937 · /eng741010937
+2024-08-30T06:46:37.575Z [info]: Parsed system info: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000397575,
+  "alreadyProcessed": false,
+  "reportId": "#r741010937",
+  "source": "Курский Чат №1 🇷🇺 @kursk_chatik",
+  "sender": "🇬🇧 GBR, Joseph Hodge, @JosephHodge"
+}
+2024-08-30T06:46:37.576Z [info]: Received additional message: Report #r741030504 marked as spam 😡
+Send /undo741030504 to revert your decision.
+2024-08-30T06:46:37.642Z [info]: Report #741030504 completed. Decision: spam 😡
+2024-08-30T06:46:37.693Z [info]: No cached report found for #741030504
+2024-08-30T06:46:37.693Z [info]: Updated current report: {
+  "complaintCount": 1,
+  "isSpam": 0,
+  "timestamp": 1725000397575,
+  "alreadyProcessed": false,
+  "reportId": "#r741010937",
+  "source": "Курский Чат №1 🇷🇺 @kursk_chatik",
+  "sender": "🇬🇧 GBR, Joseph Hodge, @JosephHodge"
+}
+2024-08-30T06:46:37.693Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:37.693Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:37.694Z [info]: Received additional message: #r741010937, 😱1
+Source: Курский Чат №1 🇷🇺 @kursk_chatik
+Sender: 🇬🇧 GBR, Joseph Hodge, @JosephHodge
+30.08.24, 06:42  🌕 0%
+/pattern741010937 · /abuse741010937 · /eng741010937
+2024-08-30T06:46:37.694Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:37.694Z [info]: Starting to process report: #r741010937
+2024-08-30T06:46:37.694Z [info]: Entering processReport for #r741010937. isProcessing: false
+2024-08-30T06:46:37.694Z [info]: Set isProcessing to true for #r741010937
+2024-08-30T06:46:37.694Z [info]: Processing Report: #r741010937, Messages: 0, Media: , Complaints: 1
+2024-08-30T06:46:37.695Z [info]: Message content: undefined
+2024-08-30T06:46:37.695Z [info]: Checking for obvious spam for #r741010937
+2024-08-30T06:46:37.695Z [info]: Checking for obvious spam in report #r741010937
+2024-08-30T06:46:37.695Z [info]: Checking cache for #r741010937
+2024-08-30T06:46:37.695Z [info]: Cache miss for report #r741010937
+2024-08-30T06:46:37.695Z [info]: Checking GPT for #r741010937
+2024-08-30T06:46:38.338Z [info]: GPT decision: NOT SPAM, Confidence: 85%, Based on: System information
+2024-08-30T06:46:38.338Z [info]: GPT decision for #r741010937: NOT SPAM, Confidence: 85%
+2024-08-30T06:46:38.338Z [info]: Final decision for #r741010937: NOT SPAM
+2024-08-30T06:46:38.501Z [info]: Decision sent to bot: 😌 NO
+2024-08-30T06:46:38.502Z [info]: Saving report to Redis: #r741010937
+2024-08-30T06:46:38.551Z [info]: Saved to cache: report:#r741010937
+2024-08-30T06:46:38.551Z [info]: Report saved successfully to Redis: #r741010937
+2024-08-30T06:46:38.551Z [info]: Set isProcessing to false for #r741010937
+2024-08-30T06:46:38.551Z [info]: Processing ended at: 2024-08-30T06:46:38.551Z
+2024-08-30T06:46:38.551Z [info]: Queue empty after processing #r741010937
+2024-08-30T06:46:38.678Z [info]: Received message for check: 🌚 100%
+Пoмoщь в пoлучении крeдитa через личные связи в бaнкаx!
+Рeальнaя пoмoщь c oплатoй зa peзультaт!
+
+✅Бесплатнaя пpоверка крeдитной истории.
+✅Перед нaчaлoм paботы cpaзу скaжем, cмoжeм ли пoмочь, не тpатя вашe время.
+
+☎️ Для того чтoбы пoлучить бесплатную кoнcультaцию, нaпишитe нам📲
+✅ KРEДИТ ДЛЯ БИЗНЕCА:
+- ИП до 50.000.000 рублей. 
+- ООО до 500.000.000 рублей в течение 2-5 дней.
+- Регистрация ИП/ООО от 6 месяцев, без действующих просрочек.
+- Работаем с нулевыми оборотами.
+Удаленно по всей РФРФ
+
+✅ ПОТРЕБИТЕЛЬСКИЙ КРЕДИТ:
+- Без действующих просрочек.
+- Работаем от 1000000 рублей.
+- Без справок и поручителей.
+- С большой финансовой нагрузкой.
+
+✅ КРЕДИТ ПОД ЗАЛОГ:
+- С просрочками.
+- С плохой кредитной историей.
+- С сохранением права собственности.
+
+✅ ИПОТЕКА НА СТРОИТЕЛЬСТВО (ИЖС):
+- Физ. лица до 6.000.000 рублей.
+- Ставка от 7%, срок до 30 лет.
+- Пишите, расскажем подробнее.
+2024-08-30T06:46:38.679Z [info]: Received system message: #r741073149, 😱5
+Source: Работа Кущевская и Кущёвский район @rabotakushevka2023
+Sender: 🇷🇺 RUS, Voji , @Voji8
+30.08.24, 06:45  🌚 100%
+/pattern741073149 · /abuse741073149 · /eng741073149
+2024-08-30T06:46:38.679Z [info]: Parsed system info: {
+  "complaintCount": 5,
+  "isSpam": 0,
+  "timestamp": 1725000398679,
+  "alreadyProcessed": false,
+  "reportId": "#r741073149",
+  "source": "Работа Кущевская и Кущёвский район @rabotakushevka2023",
+  "sender": "🇷🇺 RUS, Voji , @Voji8"
+}
+2024-08-30T06:46:38.680Z [info]: Received additional message: Report #r741010937 marked as not spam 😌
+Send /undo741010937 to revert your decision.
+2024-08-30T06:46:38.726Z [info]: Report #741010937 completed. Decision: not spam 😌
+2024-08-30T06:46:38.805Z [info]: No cached report found for #741010937
+2024-08-30T06:46:38.805Z [info]: Updated current report: {
+  "complaintCount": 5,
+  "isSpam": 0,
+  "timestamp": 1725000398679,
+  "alreadyProcessed": false,
+  "reportId": "#r741073149",
+  "source": "Работа Кущевская и Кущёвский район @rabotakushevka2023",
+  "sender": "🇷🇺 RUS, Voji , @Voji8"
+}
+2024-08-30T06:46:38.805Z [info]: Current report added to queue. Queue length: 1
+2024-08-30T06:46:38.805Z [info]: Calling processNextReport from handleSys
+2024-08-30T06:46:38.806Z [info]: Received additional message: #r741073149, 😱5
+Source: Работа Кущевская и Кущёвский район @rabotakushevka2023
+Sender: 🇷🇺 RUS, Voji , @Voji8
+30.08.24, 06:45  🌚 100%
+/pattern741073149 · /abuse741073149 · /eng741073149
+2024-08-30T06:46:38.806Z [info]: processNextReport called. autoMode: true, isProcessing: false, queue length: 1
+2024-08-30T06:46:38.806Z [info]: Starting to process report: #r741073149
+2024-08-30T06:46:38.806Z [info]: Entering processReport for #r741073149. isProcessing: false
+2024-08-30T06:46:38.806Z [info]: Set isProcessing to true for #r741073149
+2024-08-30T06:46:38.806Z [info]: Processing Report: #r741073149, Messages: 0, Media: , Complaints: 5
+2024-08-30T06:46:38.806Z [info]: Message content: undefined
+2024-08-30T06:46:38.806Z [info]: Checking for obvious spam for #r741073149
+2024-08-30T06:46:38.806Z [info]: Checking for obvious spam in report #r741073149
+2024-08-30T06:46:38.807Z [info]: Checking cache for #r741073149
+2024-08-30T06:46:38.807Z [info]: Cache miss for report #r741073149
+2024-08-30T06:46:38.807Z [info]: Checking GPT for #r741073149
