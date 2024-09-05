@@ -9,6 +9,7 @@
     "yarn": "1.x"
   },
   "dependencies": {
+    "base64-arraybuffer": "^1.0.2",
     "big-integer": "^1.6.52",
     "csv-writer": "^1.6.0",
     "dotenv": "^16.4.5",
