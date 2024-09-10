@@ -32,7 +32,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 const BOT_ACCESS_HASH = process.env.BOT_ACCESS_HASH!;
 
 // Constants
-let COMMAND_DELAY = 1000;
+let COMMAND_DELAY = 200;
 const MAX_CACHE_SIZE = 10000;
 const DB_SCHEMA_VERSION = '1.0';
 const MEDIA_EXPIRY = 30; // 30 seconds
