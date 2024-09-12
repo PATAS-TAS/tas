@@ -618,15 +618,15 @@ async function getMediaFromMessage(messageId: number): Promise<Api.TypeMessageMe
 async function gptCheck(report: Report): Promise<SpamDecision | null> {
   log(`Starting GPT check for report ${report.reportId}`, 'debug');
 
-  const gptPrompt = `As an AI trained in commercial spam detection for Telegram groups, analyze the provided information for potential spam in any language. Use semantic analysis to understand the context and meaning of messages, especially for short texts or potential spam warnings. Consider all aspects, including content, context, metadata, and visual elements. Provide ONLY a single digit as your answer: 1 for spam, 0 for not spam. DO NOT provide any explanation or additional text.
+  const gptPrompt = `As an AI trained in commercial spam detection for Telegram groups, analyze the provided information for potential spam in any language. Consider all aspects, including content, context, metadata, and visual elements. Provide ONLY a single digit as your answer: 1 for spam, 0 for not spam. DO NOT provide any explanation or additional text.
 
   Spam Indicators (Prioritized):
   
   1. High Priority (Strong indicators of spam):
      - Unsolicited commercial content or subtle marketing
      - Phishing attempts, fake giveaways, unrealistic financial promises
-     - Explicit sexual content or coded invitations for sexual services (e.g., "aviliable", "avaible", "свободна")
-     - Attempts to move conversations to private channels or other platforms
+     - Explicit sexual content or coded invitations for sexual services (e.g., "aviliable", "avaible", "свободна", "Скучно? Пиши")
+     - Attempts to move conversations to private channels or other platforms 
      - Sharing personal information of others without consent
      - Messages with over 500 consecutive identical symbols or emojis
      - Clear incitement to violence or illegal activities
@@ -648,23 +648,23 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
      - Higher complaint counts
   
   Context Considerations:
-  - Use semantic analysis to understand the meaning and intent of messages
   - Evaluate messages within the conversation flow and group's theme
   - Consider cultural and linguistic context, including sender's country flag
   - Assess relevance to ongoing discussions or group activities
   - Factor in complaint counts, but don't rely on them exclusively
   - The group's purpose and typical content should guide your judgment
   - The 'Source' field provides the name of the group where the message was sent. Use this for context, not for spam evaluation
+  - Links/contacts/@usernames, if they have less than 3 complaints is not a spam
   
   Not Spam:
   - Normal interactions, casual conversations, jokes
   - Legitimate information sharing, news, educational content
   - Expressive language, including profanity, emotional outbursts, or provocative content
   - Cultural content, local slang, region-specific discussions
-  - Political discussions or criticisms, even if aggressive or controversial
-  - Bot commands (starting with "/"), unless clearly misused
+  - Political discussions or criticisms, even if aggressive or controversial (ecpecially in Russian or Ukrainian - its not a spam)
+  - Bot commands (starting with "/"), unless clearly misused (e.g., "/start" or "/help")
   - Warnings about scams or spam (e.g., messages containing only the word "Scam", "scamer ni" or similar warnings)
-  - Short messages that might be part of an ongoing conversation, or just numbers/symbols
+  - Short messages that might be part of an ongoing conversation, or just numbers/symbols/emojis (e.g., ")", "?", "%", "7", "69", "😂", "😍", "🤣", "👍")
   - Messages that semantically align with the group's theme or current discussion
   - Satirical or ironic content, even if it appears provocative at first glance
   - Controversial opinions or heated debates, as long as they don't incite violence or illegal activities
