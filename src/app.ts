@@ -32,12 +32,11 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 const BOT_ACCESS_HASH = process.env.BOT_ACCESS_HASH!;
 
 // Constants
-let COMMAND_DELAY = 100;
+let COMMAND_DELAY = 50;
 let PROCESSING_DELAY = 0; // Новая переменная для задержки обработки
 const DB_SCHEMA_VERSION = '1.0';
 const MEDIA_EXPIRY = 30; // 30 seconds
 const ENABLE_GPT_MEDIA_ANALYSIS = true;
-const BUFFER_DELAY = 100; // 100 ms
 const MAX_CACHE_SIZE_MB = 100; // 100 MB
 const GPT_RETRY_DELAY = 10000; // 10 seconds
 const MAX_PROCESSING_TIME = 55000; // 55 seconds
@@ -472,17 +471,10 @@ async function processReport(report: Report): Promise<void> {
   const processingStartTime = Date.now();
 
   try {
-    let decision: SpamDecision | null = null;
+    let decision: SpamDecision | null = await fastCheckWithCache(report);
 
-    if (!processingReports.has('undos')) {
-      const cachedDecision = await checkCache(report.reportId);
-      if (cachedDecision && (Date.now() - report.timestamp) < 24 * 60 * 60 * 1000) {
-        decision = cachedDecision;
-      }
-    }
-
-    if (!decision) {
-      decision = await fastCheck(report) || await gptCheck(report);
+    if (!decision && !processingReports.has('undos')) {
+      decision = await gptCheck(report);
     }
 
     await applyDecision(report, decision || { isSpam: 0, reason: "No spam detected", checkType: 'default' });
@@ -502,6 +494,57 @@ async function processReport(report: Report): Promise<void> {
       scheduleNextCommand();
     }
   }
+}
+
+async function fastCheckWithCache(report: Report): Promise<SpamDecision | null> {
+  const cacheKey = `report:${report.reportId}`;
+  const cachedReport = lruCache.get(cacheKey) as Report | undefined;
+
+  if (cachedReport && cachedReport.isSpam !== -1) {
+    log(`Cache hit for report ${report.reportId}`, 'debug');
+    return {
+      isSpam: cachedReport.isSpam,
+      reason: cachedReport.reason || 'Cached decision',
+      checkType: 'fast'
+    };
+  }
+
+  // Fast check logic
+  const hasLinksOrContacts = report.messageContent.some(msg => 
+    msg.includes('http') || msg.includes('@') || /\+?\d{10,}/.test(msg)
+  );
+  
+  const dangerousFileExtensions = ['apk', 'exe', 'js', 'bat', 'cmd', 'vbs', 'ps1', 'jar', 'msi', 'com', 'scr', 'pif'];
+  const hasDangerousFile = report.mediaHashes.some(hash => 
+    dangerousFileExtensions.some(ext => hash.toLowerCase().endsWith(`.${ext}`))
+  );
+  
+  const hasInlineKeyboard = report.mediaHashes.some(hash => 
+    hash.startsWith('url_button:') || hash.startsWith('callback_button:') || hash === 'inline_keyboard:generic'
+  );
+  
+  const hasStory = report.mediaHashes.some(hash => hash.startsWith('story:'));
+  
+  const hasMediaWithComplaints = report.mediaHashes.length > 0 && report.complaintCount > 2;
+
+  if (hasLinksOrContacts || hasDangerousFile || hasInlineKeyboard || hasStory || hasMediaWithComplaints) {
+    let reason = "Fast check:";
+    if (hasLinksOrContacts) reason += " Links/contacts detected";
+    if (hasDangerousFile) reason += " Dangerous file detected";
+    if (hasInlineKeyboard) reason += " Inline keyboard detected";
+    if (hasStory) reason += " Story detected";
+    if (hasMediaWithComplaints) reason += " Media with >2 complaints";
+
+    log(`Fast check detected spam for report ${report.reportId}: ${reason}`, 'debug');
+    return { 
+      isSpam: 1, 
+      reason: reason.trim(), 
+      checkType: 'fast'
+    };
+  }
+
+  log(`Fast check and cache did not detect spam for report ${report.reportId}`, 'debug');
+  return null;
 }
 
 async function fastCheck(report: Report): Promise<SpamDecision | null> {
@@ -704,10 +747,10 @@ try {
       };
     } else {
         log(`Unexpected GPT response format for report ${report.reportId}: ${textContent}`, 'warn');
-        // If GPT-4o-mini gives an inconclusive response, try with GPT-4o
+        // If GPT-4o-mini gives an inconclusive response, try with gpt-3.5-turbo
         const gpt4Response = await retryGptRequest(async () => {
           return openai.chat.completions.create({
-            model: "gpt-4o-2024-08-06",
+            model: "gpt-3.5-turbo",
             messages: textMessages,
             max_tokens: 1,
             temperature: 0.1,
@@ -743,7 +786,7 @@ try {
 
           const mediaResponse = await retryGptRequest(async () => {
             return openai.chat.completions.create({
-              model: "gpt-4o",
+              model: "gpt-4o-mini",
               messages: mediaMessages,
               max_tokens: 1,
               temperature: 0.2,
@@ -795,7 +838,7 @@ try {
 
     const senderAnalysisResponse = await retryGptRequest(async () => {
       return openai.chat.completions.create({
-        model: "gpt-4o-mini-2024-07-18",
+        model: "gpt-3.5-turbo",
         messages: [
           { role: "system", content: gptPrompt },
           { role: "user", content: senderAnalysisPrompt }
