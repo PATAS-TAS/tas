@@ -33,6 +33,7 @@ const BOT_ACCESS_HASH = process.env.BOT_ACCESS_HASH!;
 
 // Constants
 let COMMAND_DELAY = 100;
+let PROCESSING_DELAY = 0; // Новая переменная для задержки обработки
 const DB_SCHEMA_VERSION = '1.0';
 const MEDIA_EXPIRY = 30; // 30 seconds
 const ENABLE_GPT_MEDIA_ANALYSIS = true;
@@ -41,6 +42,9 @@ const MAX_CACHE_SIZE_MB = 100; // 100 MB
 const GPT_RETRY_DELAY = 10000; // 10 seconds
 const MAX_PROCESSING_TIME = 55000; // 55 seconds
 const REDIS_BATCH_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const MIN_BUFFER_DELAY = 100;
+const MAX_BUFFER_DELAY = 500;
+let currentBufferDelay = MIN_BUFFER_DELAY;
 
 // Initialize Express app
 const app = express();
@@ -290,7 +294,7 @@ async function handleCheck(event: NewMessageEvent) {
   if (message instanceof Api.Message && event.isPrivate && botEntity && message.senderId?.toString() === botEntity.userId.toString()) {
     log(`Received check message: ${message.message}`, 'debug');
     
-    let messageContent = message.message || '';
+    const messageContent = message.message || '';
     const mediaHashes: string[] = [];
     let mediaKey: string | null = null;
 
@@ -303,26 +307,7 @@ async function handleCheck(event: NewMessageEvent) {
           (message.media instanceof Api.MessageMediaDocument && 
            message.media.document instanceof Api.Document)) {
         const captionText = message.message;
-        if (captionText) {
-          messageContent = messageContent ? `${messageContent}\n${captionText}` : captionText;
-          log(`Caption found in media: ${captionText}`, 'debug');
-        }
-
-        if (message.media instanceof Api.MessageMediaDocument) {
-          const document = message.media.document;
-          if (document instanceof Api.Document) {
-            const attribute = document.attributes.find(attr => 
-              attr instanceof Api.DocumentAttributeVideo ||
-              attr instanceof Api.DocumentAttributeAudio ||
-              attr instanceof Api.DocumentAttributeAnimated
-            );
-            if (attribute) {
-              log(`Media type detected: ${attribute.className}`, 'debug');
-            }
-          }
-        }
-
-        mediaKey = `media:${message.media instanceof Api.MessageMediaPhoto ? message.media.photo?.id : (message.media instanceof Api.MessageMediaDocument ? message.media.document?.id : 'unknown')}`;
+        mediaKey = `media:${message.media instanceof Api.MessageMediaPhoto ? message.media.photo?.id : message.media.document?.id}`;
         log(`Media key generated: ${mediaKey}`, 'debug');
       }
     }
@@ -338,15 +323,11 @@ async function handleCheck(event: NewMessageEvent) {
       content: preprocess(messageContent),
       timestamp: Date.now(),
       mediaHashes,
-      replyTo: message.replyTo?.replyToMsgId
+      replyTo: message.replyTo?.replyToMsgId,
+      mediaKey: mediaKey || undefined
     };
 
-    if (mediaKey !== null) {
-      bufferItem.mediaKey = mediaKey;
-    }
-
     messageBuffer.push(bufferItem);
-
     log(`Message added to buffer. Content: ${bufferItem.content}`, 'debug');
     scheduleProcessing();
   }
@@ -358,23 +339,25 @@ async function handleSys(event: NewMessageEvent) {
     message instanceof Api.Message &&
     event.isPrivate &&
     botEntity &&
-    message.senderId?.toString() === botEntity.userId.toString() &&
-    message.message?.match(sysRegex.source)
+    message.senderId?.toString() === botEntity.userId.toString()
   ) {
-    log(`Received system message: ${message.message}`, 'debug');
+    const messageContent = message.message || '';
+    if (messageContent.match(sysRegex.source)) {
+      log(`Received system message: ${messageContent}`, 'debug');
 
-    const sysInfo = parseSysMessage(message.message || '');
-    if (sysInfo.reportId) {
-      messageBuffer.push({
-        type: 'sys',
-        content: message.message || '',
-        reportId: sysInfo.reportId,
-        timestamp: Date.now(),
-        replyTo: message.replyTo?.replyToMsgId
-      });
-      scheduleProcessing();
-    } else {
-      log('Received system message without reportId', 'error');
+      const sysInfo = parseSysMessage(messageContent);
+      if (sysInfo.reportId) {
+        messageBuffer.push({
+          type: 'sys',
+          content: messageContent,
+          reportId: sysInfo.reportId,
+          timestamp: Date.now(),
+          replyTo: message.replyTo?.replyToMsgId
+        });
+        scheduleProcessing();
+      } else {
+        log('Received system message without reportId', 'error');
+      }
     }
   }
 }
@@ -431,22 +414,41 @@ function isReportInUndoRange(reportId: string): boolean {
 async function processBuffer(currentTimestamp: number) {
   log(`Processing buffer at timestamp ${currentTimestamp}`, 'debug');
   
-  const checkMessages = messageBuffer.filter(msg => msg.type === 'check' && msg.timestamp <= currentTimestamp);
-  const sysMessages = messageBuffer.filter(msg => msg.type === 'sys' && msg.timestamp <= currentTimestamp);
+  const startTime = Date.now();
+  const checkMessages = new Map<number | undefined, BufferItem>();
+  const sysMessages: BufferItem[] = [];
+
+  for (const msg of messageBuffer) {
+    if (msg.timestamp > currentTimestamp) continue;
+    if (msg.type === 'check') {
+      checkMessages.set(msg.replyTo, msg);
+    } else if (msg.type === 'sys') {
+      sysMessages.push(msg);
+    }
+  }
 
   for (const sysMsg of sysMessages) {
-    let matchingCheckMsg = checkMessages.find(checkMsg => checkMsg.replyTo === sysMsg.replyTo);
+    let matchingCheckMsg = checkMessages.get(sysMsg.replyTo);
     
     if (!matchingCheckMsg) {
-      matchingCheckMsg = checkMessages.find(checkMsg => 
+      matchingCheckMsg = Array.from(checkMessages.values()).find(checkMsg => 
         Math.abs(checkMsg.timestamp - sysMsg.timestamp) < 100
       );
     }
 
     if (matchingCheckMsg && sysMsg.reportId) {
       scheduleDelayedProcessing(sysMsg, matchingCheckMsg);
+      checkMessages.delete(matchingCheckMsg.replyTo);
     }
   }
+
+  // Очищаем обработанные сообщения из буфера
+  messageBuffer = messageBuffer.filter(msg => 
+    msg.timestamp > currentTimestamp || 
+    (msg.type === 'check' && checkMessages.has(msg.replyTo))
+  );
+  const processingTime = Date.now() - startTime;
+  updateBufferDelay(processingTime);
 }
 
 async function processReport(report: Report): Promise<void> {
@@ -456,63 +458,48 @@ async function processReport(report: Report): Promise<void> {
   isProcessingReports = true;
   
   if (processingReports.has(report.reportId)) {
-    log(`Report ${report.reportId} is currently being processed.`, 'warn');
     const processingStartTime = await redis.get(`processing_start:${report.reportId}`);
-    if (processingStartTime) {
-      const elapsedTime = Date.now() - parseInt(processingStartTime);
-      if (elapsedTime < MAX_PROCESSING_TIME) {
-        log(`Skipping report ${report.reportId}. It's been processing for ${elapsedTime}ms`, 'debug');
-        return;
-      } else {
-        log(`Report ${report.reportId} processing timeout. Reprocessing.`, 'warn');
-      }
+    if (processingStartTime && Date.now() - parseInt(processingStartTime) < MAX_PROCESSING_TIME) {
+      log(`Skipping report ${report.reportId}. It's been processing for ${Date.now() - parseInt(processingStartTime)}ms`, 'debug');
+      return;
     }
+    log(`Report ${report.reportId} processing timeout. Reprocessing.`, 'warn');
   }
 
   processingReports.add(report.reportId);
-  await redis.set(`processing_start:${report.reportId}`, Date.now().toString(), 'EX', 600); // 10 минут TTL
+  redis.set(`processing_start:${report.reportId}`, Date.now().toString(), 'EX', 600).catch(error => logErr('redis.set', error));
   
-  let decision: SpamDecision | null = null;
   const processingStartTime = Date.now();
 
   try {
-    if (processingReports.has('undos')) {
-      decision = await gptCheck(report);
-    } else {
+    let decision: SpamDecision | null = null;
+
+    if (!processingReports.has('undos')) {
       const cachedDecision = await checkCache(report.reportId);
-      if (cachedDecision && (Date.now() - report.timestamp) < 24 * 60 * 60 * 1000) { // 24 часа
-        log(`Cache hit for report ${report.reportId}`, 'debug');
-        await applyDecision(report, cachedDecision);
-        return;
-      }
-
-      decision = await fastCheck(report);
-      if (!decision) {
-        decision = await gptCheck(report);
+      if (cachedDecision && (Date.now() - report.timestamp) < 24 * 60 * 60 * 1000) {
+        decision = cachedDecision;
       }
     }
 
-    if (decision) {
-      await applyDecision(report, decision);
-    } else {
-      decision = { isSpam: 0, reason: "No spam detected", checkType: 'default' };
-      await applyDecision(report, decision);
+    if (!decision) {
+      decision = await fastCheck(report) || await gptCheck(report);
     }
+
+    await applyDecision(report, decision || { isSpam: 0, reason: "No spam detected", checkType: 'default' });
 
   } catch (error) {
     logErr(`processReport for ${report.reportId}`, error);
-    await scheduleNextCommand();
   } finally {
     const processingTime = Date.now() - processingStartTime;
     if (processingTime > MAX_PROCESSING_TIME) {
       log(`Processing time exceeded for report ${report.reportId}. Time taken: ${processingTime}ms`, 'warn');
-      await scheduleNextCommand();
     }
     processingReports.delete(report.reportId);
-    await redis.del(`processing_start:${report.reportId}`);
+    redis.del(`processing_start:${report.reportId}`).catch(error => logErr('redis.del', error));
     isProcessingReports = false;
+    
     if (processingReports.size === 0 && messageBuffer.length === 0) {
-      await scheduleNextCommand();
+      scheduleNextCommand();
     }
   }
 }
@@ -595,7 +582,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   1. High Priority (Strong indicators of spam):
      - Unsolicited commercial content or subtle marketing
      - Phishing attempts, fake giveaways, unrealistic financial promises
-     - Explicit sexual content or coded invitations for sexual services
+     - Explicit sexual content or coded invitations for sexual services (e.g., "aviliable", "avaible", "свободна")
      - Attempts to move conversations to private channels or other platforms
      - Sharing personal information of others without consent
      - Messages with over 500 consecutive identical symbols or emojis
@@ -608,11 +595,10 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
      - Excessive use of emojis, especially at line starts
      - Presence of multiple links, especially to bots or channels
      - Non-Latin script used out of cultural context
-     - Encrypted or coded messages resembling adult content sales
+     - Encrypted or coded messages resembling adult content sales (e.g., "CP", "TN", "GV", "TF", "SL", "ID")
      - Requests to write in private messages (e.g., "write + in private")
   
   3. Low Priority (Potential red flags, heavily context-dependent):
-     - Off-topic messages for the group's theme
      - Use of common spam keywords (e.g., 'earnings', 'investments')
      - Short, repetitive messages or single character responses
      - Sender names containing links or solicitations
@@ -634,8 +620,8 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Cultural content, local slang, region-specific discussions
   - Political discussions or criticisms, even if aggressive or controversial
   - Bot commands (starting with "/"), unless clearly misused
-  - Warnings about scams or spam (e.g., messages containing only the word "Scam" or similar warnings)
-  - Short messages that might be part of an ongoing conversation
+  - Warnings about scams or spam (e.g., messages containing only the word "Scam", "scamer ni" or similar warnings)
+  - Short messages that might be part of an ongoing conversation, or just numbers/symbols
   - Messages that semantically align with the group's theme or current discussion
   - Satirical or ironic content, even if it appears provocative at first glance
   - Controversial opinions or heated debates, as long as they don't incite violence or illegal activities
@@ -886,11 +872,19 @@ function preprocess(message: string): string {
   return processedMessage;
 }
 
+function updateBufferDelay(processingTime: number) {
+  if (processingTime < 1000) {
+    currentBufferDelay = Math.max(currentBufferDelay - 50, MIN_BUFFER_DELAY);
+  } else if (processingTime > 2000) {
+    currentBufferDelay = Math.min(currentBufferDelay + 50, MAX_BUFFER_DELAY);
+  }
+}
+
 function scheduleProcessing() {
   if (bufferTimeout) {
     clearTimeout(bufferTimeout);
   }
-  bufferTimeout = setTimeout(() => processBuffer(Date.now()), BUFFER_DELAY);
+  bufferTimeout = setTimeout(() => processBuffer(Date.now()), currentBufferDelay);
 }
 
 function parseSysMessage(message: string): Partial<Report> {
@@ -977,17 +971,13 @@ async function sendDecision(report: Report, decision: SpamDecision): Promise<voi
 
 // Cache functions
 async function saveCache(report: Report): Promise<void> {
-  try {
-    const key = `report:${report.reportId}`;
-    lruCache.set(key, report);
-    redisBatch.push(report);
-    if (redisBatch.length >= 100 || !redisBatchTimeout) {
-      await saveRedisBatch();
-    }
-    log(`Report ${report.reportId} saved to cache`, 'debug');
-  } catch (error) {
-    logErr('saveCache', error);
+  const key = `report:${report.reportId}`;
+  lruCache.set(key, report);
+  redisBatch.push(report);
+  if (redisBatch.length >= 100 || !redisBatchTimeout) {
+    saveRedisBatch().catch(error => logErr('saveRedisBatch', error));
   }
+  log(`Report ${report.reportId} saved to cache`, 'debug');
 }
 
 async function saveRedisBatch(): Promise<void> {
@@ -995,21 +985,23 @@ async function saveRedisBatch(): Promise<void> {
     clearTimeout(redisBatchTimeout);
   }
   if (redisBatch.length > 0) {
+    const batchToSave = [...redisBatch];
+    redisBatch = [];
     const pipeline = redis.pipeline();
-    for (const report of redisBatch) {
+    for (const report of batchToSave) {
       const key = `report:${report.reportId}`;
-      pipeline.set(key, JSON.stringify(report), 'EX', 86400); // 24 hours expiry
+      pipeline.set(key, JSON.stringify(report), 'EX', 86400);
     }
     try {
       await pipeline.exec();
-      log(`Batch of ${redisBatch.length} reports saved to Redis`, 'debug');
+      log(`Batch of ${batchToSave.length} reports saved to Redis`, 'debug');
     } catch (error) {
       logErr('saveRedisBatch', error);
-    } finally {
-      redisBatch = [];
+      // В случае ошибки, возвращаем отчеты обратно в batch
+      redisBatch.unshift(...batchToSave);
     }
   }
-  redisBatchTimeout = setTimeout(saveRedisBatch, REDIS_BATCH_INTERVAL);
+  redisBatchTimeout = setTimeout(() => saveRedisBatch().catch(error => logErr('saveRedisBatch', error)), REDIS_BATCH_INTERVAL);
 }
 
 async function checkCache(reportId: string): Promise<SpamDecision | null> {
@@ -1471,17 +1463,17 @@ async function handleAdmin(event: NewMessageEvent) {
         }
         break;
 
-      case '/time':
+      case '/delay':
         if (commandParts.length === 2) {
           const newDelay = parseInt(commandParts[1]);
           if (!isNaN(newDelay) && newDelay >= 0) {
-            COMMAND_DELAY = newDelay;
-            await notify(`Command delay updated to ${COMMAND_DELAY} ms`);
+            PROCESSING_DELAY = newDelay;
+            await notify(`Processing delay updated to ${PROCESSING_DELAY} ms`);
           } else {
             await notify('Invalid delay value. Please provide a non-negative integer.');
           }
         } else {
-          await notify('Invalid time command. Usage: /time [value]');
+          await notify('Invalid delay command. Usage: /delay [value]');
         }
         break;
 
@@ -1504,7 +1496,7 @@ async function handleAdmin(event: NewMessageEvent) {
         /stop - Stop automatic mode
         /status - Get current status
         /undos [startReportId] [endReportId] - Undo and recheck reports in range
-        /time [value] - Set command delay in milliseconds
+        /delay [value] - Set processing delay in milliseconds
         /reset - Clear Redis and LRU caches
         /db - Perform database operations and generate report
         /cache - Get cache info and generate report`);
@@ -1519,7 +1511,8 @@ async function sendStatus() {
   const status = `
 Current status:
 Auto mode: ${autoMode ? 'On (decisions and bot commands will be sent)' : 'Off (decisions and bot commands will not be sent)'}
-Processing delay: ${COMMAND_DELAY} ms
+Command delay: ${COMMAND_DELAY} ms
+Processing delay: ${PROCESSING_DELAY} ms
 Database connection: ${await checkDB() ? 'Connected' : 'Disconnected'}
 LRU Cache size: ${cacheSize.toFixed(2)} MB
 LRU Cache items: ${cacheItemCount}
