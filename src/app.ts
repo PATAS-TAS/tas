@@ -630,13 +630,15 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   Not Spam:
   - Normal interactions, casual conversations, jokes
   - Legitimate information sharing, news, educational content
-  - Expressive language, including profanity or emotional outbursts
+  - Expressive language, including profanity, emotional outbursts, or provocative content
   - Cultural content, local slang, region-specific discussions
-  - Political discussions or criticisms, even if aggressive
+  - Political discussions or criticisms, even if aggressive or controversial
   - Bot commands (starting with "/"), unless clearly misused
   - Warnings about scams or spam (e.g., messages containing only the word "Scam" or similar warnings)
   - Short messages that might be part of an ongoing conversation
   - Messages that semantically align with the group's theme or current discussion
+  - Satirical or ironic content, even if it appears provocative at first glance
+  - Controversial opinions or heated debates, as long as they don't incite violence or illegal activities
   
   REMEMBER: Your response must be ONLY the digit 1 (for spam) or 0 (for not spam). No other text or explanation is allowed.
   
@@ -666,7 +668,15 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
      - Memes or humorous images that could be used to mask promotional content
      - Visuals that are significantly lower or higher quality than typical group content
   
-REMEMBER: Your response must be ONLY the digit 1 (for spam) or 0 (for not spam). No other text or explanation is allowed.
+  Not Spam:
+  - Legitimate news images or infographics related to the group's theme
+  - Personal photos or images consistent with normal group interactions
+  - Memes, jokes, or satirical content, even if provocative or controversial
+  - Images containing strong language or provocative content, if relevant to discussions
+  - Political or activist imagery, unless it explicitly violates group rules
+  - Artistic or creative content, even if unconventional or shocking
+  
+  REMEMBER: Your response must be ONLY the digit 1 (for spam) or 0 (for not spam). No other text or explanation is allowed.
   
   Your analysis:`;
 
