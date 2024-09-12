@@ -1358,7 +1358,7 @@ async function scheduleNextCommand() {
     if (autoMode && !isProcessingReports) {
       try {
         log('Sending /next 2 command', 'debug');
-        await sendToBot("/next 2");
+        await sendToBot("/undo");
         checkNewReportsTimeout = setTimeout(checkForNewReports, 100000); // 100 секунд
       } catch (error) {
         logErr('Error sending /next 2 command', error);
@@ -2062,7 +2062,7 @@ async function main() {
 
     if (autoMode) {
       log('Starting auto mode', 'info');
-      await scheduleNextCommand();
+      await sendToBot("/next 0");
     }
 
   } catch (error) {
