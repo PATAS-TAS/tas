@@ -45,6 +45,7 @@ const REDIS_BATCH_INTERVAL = 10 * 60 * 1000; // 10 minutes
 const MIN_BUFFER_DELAY = 100;
 const MAX_BUFFER_DELAY = 500;
 let currentBufferDelay = MIN_BUFFER_DELAY;
+let isShuttingDown = false;
 
 // Initialize Express app
 const app = express();
@@ -1001,6 +1002,8 @@ async function sendDecision(report: Report, decision: SpamDecision): Promise<voi
 
 // Оптимизированные функции кэширования
 async function saveCache(report: Report): Promise<void> {
+  if (isShuttingDown) return;
+
   const key = `report:${report.reportId}`;
   lruCache.set(key, report);
   redisBatch.push(report);
@@ -1010,7 +1013,10 @@ async function saveCache(report: Report): Promise<void> {
   log(`Report ${report.reportId} saved to cache`, 'debug');
 }
 
+// Обновите функцию saveRedisBatch
 async function saveRedisBatch(): Promise<void> {
+  if (isShuttingDown) return;
+
   if (redisBatchTimeout) {
     clearTimeout(redisBatchTimeout);
   }
@@ -1026,15 +1032,21 @@ async function saveRedisBatch(): Promise<void> {
       await pipeline.exec();
       log(`Batch of ${batchToSave.length} reports saved to Redis`, 'debug');
     } catch (error) {
-      logErr('saveRedisBatch', error);
-      // В случае ошибки, возвращаем отчеты обратно в batch
-      redisBatch.unshift(...batchToSave);
+      if (!isShuttingDown) {
+        logErr('saveRedisBatch', error);
+        // В случае ошибки, возвращаем отчеты обратно в batch
+        redisBatch.unshift(...batchToSave);
+      }
     }
   }
-  redisBatchTimeout = setTimeout(() => saveRedisBatch().catch(error => logErr('saveRedisBatch', error)), REDIS_BATCH_INTERVAL);
+  if (!isShuttingDown) {
+    redisBatchTimeout = setTimeout(() => saveRedisBatch().catch(error => logErr('saveRedisBatch', error)), REDIS_BATCH_INTERVAL);
+  }
 }
 
 async function checkCache(reportId: string): Promise<SpamDecision | null> {
+  if (isShuttingDown) return null;
+
   try {
     const key = `report:${reportId}`;
     const cachedReport = lruCache.get(key);
@@ -1047,22 +1059,26 @@ async function checkCache(reportId: string): Promise<SpamDecision | null> {
       };
     }
 
-    const redisReport = await redis.get(key);
-    if (redisReport) {
-      const parsedReport = JSON.parse(redisReport) as Report;
-      if (parsedReport.isSpam !== -1) {
-        log(`Redis cache hit for report ${reportId}`, 'debug');
-        // Обновляем LRU кэш
-        lruCache.set(key, parsedReport);
-        return {
-          isSpam: parsedReport.isSpam,
-          reason: parsedReport.reason || 'Cached decision',
-          checkType: 'default'
-        };
+    if (redis.status === 'ready') {
+      const redisReport = await redis.get(key);
+      if (redisReport) {
+        const parsedReport = JSON.parse(redisReport) as Report;
+        if (parsedReport.isSpam !== -1) {
+          log(`Redis cache hit for report ${reportId}`, 'debug');
+          // Обновляем LRU кэш
+          lruCache.set(key, parsedReport);
+          return {
+            isSpam: parsedReport.isSpam,
+            reason: parsedReport.reason || 'Cached decision',
+            checkType: 'default'
+          };
+        }
       }
     }
   } catch (error) {
-    logErr('checkCache', error);
+    if (!isShuttingDown) {
+      logErr('checkCache', error);
+    }
   }
   return null;
 }
@@ -1999,9 +2015,28 @@ async function gracefulShutdown(restart: boolean = false) {
   if (checkNewReportsTimeout) clearTimeout(checkNewReportsTimeout);
   if (redisBatchTimeout) clearTimeout(redisBatchTimeout);
 
-  // Сохранение оставшихся отчетов из пакетной обработки
-  await saveRedisBatch();
+  // Флаг для отслеживания состояния shutdown
+  let isShuttingDown = true;
 
+  // Функция для безопасного выполнения операций с Redis
+  const safeRedisOperation = async (operation: () => Promise<void>) => {
+    if (redis.status === 'ready') {
+      try {
+        await operation();
+      } catch (error) {
+        logErr('Redis operation during shutdown', error);
+      }
+    }
+  };
+
+  // Сохранение оставшихся отчетов из пакетной обработки
+  await safeRedisOperation(async () => {
+    if (redisBatch.length > 0) {
+      await saveRedisBatch();
+    }
+  });
+
+  // Закрытие соединения с базой данных
   try {
     await pool.end();
     log('Database connection closed', 'info');
@@ -2009,8 +2044,9 @@ async function gracefulShutdown(restart: boolean = false) {
     logErr('gracefulShutdown - closing database connection', error);
   }
 
+  // Отключение клиента Telegram
   try {
-    if (client) {
+    if (client && client.connected) {
       await client.disconnect();
       log('Telegram client disconnected', 'info');
     }
@@ -2018,15 +2054,21 @@ async function gracefulShutdown(restart: boolean = false) {
     logErr('gracefulShutdown - disconnecting Telegram client', error);
   }
 
+  // Закрытие соединения с Redis
   try {
-    await redis.quit();
-    log('Redis connection closed', 'info');
+    if (redis.status === 'ready') {
+      await redis.quit();
+      log('Redis connection closed', 'info');
+    }
   } catch (error) {
     logErr('gracefulShutdown - closing Redis connection', error);
   }
 
   log(`Graceful shutdown completed${restart ? ' (Restarting)' : ''}`, 'info');
   await notify(`Application has been ${restart ? 'restarted' : 'shut down'} gracefully.`);
+
+  // Устанавливаем флаг завершения работы
+  isShuttingDown = false;
 
   if (restart) {
     process.exit(1); // Код выхода 1 вызовет перезапуск на Heroku
@@ -2081,26 +2123,28 @@ async function main() {
     schedule.scheduleJob('*/30 * * * *', cleanupCache);
     log('Periodic tasks scheduled', 'info');
 
+    // Обработчики сигналов завершения работы
+    const signalHandler = async (signal: string) => {
+      log(`Received ${signal}. Shutting down gracefully`, 'info');
+      isShuttingDown = true;
+      await gracefulShutdown();
+    };
+
+    process.on('SIGINT', () => signalHandler('SIGINT'));
+    process.on('SIGTERM', () => signalHandler('SIGTERM'));
+
     process.on('uncaughtException', async (error) => {
       logErr('Uncaught Exception', error);
+      isShuttingDown = true;
       await notify(`Uncaught Exception: ${error.message}. Attempting to recover...`);
       await gracefulShutdown(true);
     });
 
     process.on('unhandledRejection', async (reason, promise) => {
       logErr('Unhandled Rejection', reason);
+      isShuttingDown = true;
       await notify(`Unhandled Rejection: ${reason}. Attempting to recover...`);
       await gracefulShutdown(true);
-    });
-
-    process.on('SIGINT', async () => {
-      log('Received SIGINT. Shutting down gracefully', 'info');
-      await gracefulShutdown();
-    });
-
-    process.on('SIGTERM', async () => {
-      log('Received SIGTERM. Shutting down gracefully', 'info');
-      await gracefulShutdown();
     });
 
     log('Application initialized successfully', 'info');
