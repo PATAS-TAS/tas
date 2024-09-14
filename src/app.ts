@@ -12,11 +12,12 @@ import dotenv from 'dotenv';
 import OpenAI, { APIError } from 'openai';
 import Redis from 'ioredis';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import path, { join } from 'path';
 import pkg from 'pg';
 import { LRUCache } from 'lru-cache';
 import { createHash } from 'crypto';
 import os from 'os';
+import { handleFineCommand } from './finetune.js';
 
 dotenv.config();
 
@@ -652,7 +653,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Requests to write in private messages (e.g., "write + in private")
   - Common spam keywords
   - Sender names containing links or solicitations
-  - Higher complaint counts (more than 5)
   
   **Not Spam Indicators:**
   - Normal interactions, casual conversations, jokes (e.g., "haha", "lol", "lmao")
@@ -1573,6 +1573,25 @@ async function handleAdmin(event: NewMessageEvent) {
         case '/cache':
           await handleCacheCommand();
           break;
+
+        case '/fine':
+            try {
+              const filePaths = await handleFineCommand();
+              for (const filePath of filePaths) {
+                await client.sendFile(ADMIN_ID, {
+                  file: filePath,
+                  caption: 'Fine-tuning data file',
+                  attributes: [
+                    new Api.DocumentAttributeFilename({ fileName: path.basename(filePath) })
+                  ]
+                });
+              }
+              await notify('Fine-tuning data files have been generated and sent.');
+            } catch (error) {
+              logErr('Error generating fine-tuning data', error);
+              await notify('Error generating fine-tuning data. Please check the logs.');
+            }
+            break;
 
         default:
           log(`Unrecognized admin command: ${command}`, 'debug');
