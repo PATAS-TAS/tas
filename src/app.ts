@@ -646,7 +646,8 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Factor in complaint counts, but don't rely on them exclusively
   - The group's purpose and typical content should guide your judgment
   - The 'Source' field provides the name of the group where the message was sent. Use this for context, not for spam evaluation
-  
+  - Short messages without promotional content are more likely to be legitimate communication
+
   Not Spam:
   - Normal interactions, casual conversations, jokes
   - Legitimate information sharing, news, educational content
@@ -661,6 +662,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Controversial opinions or heated debates, as long as they don't incite violence or illegal activities
   - Single word greetings or short phrases (e.g., "Hi", "Hello", "How are you?")
   - Emotional expressions or outbursts, even if they contain mild profanity
+  - Brief, non-promotional messages are generally not spam, especially in the context of ongoing conversations
   
   REMEMBER: Your response must be ONLY the digit 1 (for spam) or 0 (for not spam). No other text or explanation is allowed.
   
@@ -998,7 +1000,11 @@ async function sendDecision(report: Report, decision: SpamDecision): Promise<voi
     return;
   }
 
-  await new Promise(resolve => setTimeout(resolve, 100)); // Задержка 100 мс
+  // Apply delay only if the decision is not from GPT
+  if (decision.checkType !== 'gpt' && decision.checkType !== 'gpt4') {
+    await new Promise(resolve => setTimeout(resolve, COMMAND_DELAY));
+  }
+
   await sendToBot(decision.isSpam ? '😡 SPAM' : '😌 NO');
   log(`Sent decision: ${decision.isSpam ? 'SPAM' : 'NOT SPAM'}`, 'debug');
   report.decisionSent = true;
