@@ -9,7 +9,7 @@ import bigInt from "big-integer";
 import winston from 'winston';
 import express from 'express';
 import dotenv from 'dotenv';
-import OpenAI from 'openai';
+import OpenAI, { APIError } from 'openai';
 import Redis from 'ioredis';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -17,7 +17,6 @@ import pkg from 'pg';
 import { LRUCache } from 'lru-cache';
 import { createHash } from 'crypto';
 import os from 'os';
-import { APIError } from 'openai';
 
 dotenv.config();
 
@@ -35,7 +34,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 const BOT_ACCESS_HASH = process.env.BOT_ACCESS_HASH!;
 
 // Constants
-let COMMAND_DELAY = 100;
+let COMMAND_DELAY = 50;
 let PROCESSING_DELAY = 0;
 const DB_SCHEMA_VERSION = '1.0';
 const MEDIA_EXPIRY = 30; // 30 seconds
@@ -418,7 +417,9 @@ async function handleAdd(event: NewMessageEvent) {
           if (cachedReport) {
             const expectedDecision = messageContent.includes("marked as spam 😡") ? 1 : 0;
             if (cachedReport.isSpam !== expectedDecision) {
-              log(`Mismatch in decision for report ${reportId}. Expected: ${expectedDecision}, Actual: ${cachedReport.isSpam}`, 'warn');
+              const mismatchMessage = `Mismatch in decision for report ${reportId}. Expected: ${expectedDecision}, Actual: ${cachedReport.isSpam}`;
+              log(mismatchMessage, 'warn');
+              await notify(mismatchMessage);
             }
           }
         } else {
@@ -487,7 +488,9 @@ async function processReport(report: Report): Promise<void> {
   }
 
   processingReports.add(report.reportId);
-  redis.set(`processing_start:${report.reportId}`, Date.now().toString(), 'EX', 600).catch(error => logErr('redis.set', error));
+  if (redis.status === 'ready') {
+    redis.set(`processing_start:${report.reportId}`, Date.now().toString(), 'EX', 600).catch(error => logErr('redis.set', error));
+  }
   
   const processingStartTime = Date.now();
 
@@ -515,7 +518,9 @@ async function processReport(report: Report): Promise<void> {
       log(`Processing time exceeded for report ${report.reportId}. Time taken: ${processingTime}ms`, 'warn');
     }
     processingReports.delete(report.reportId);
-    redis.del(`processing_start:${report.reportId}`).catch(error => logErr('redis.del', error));
+    if (redis.status === 'ready') {
+      redis.del(`processing_start:${report.reportId}`).catch(error => logErr('redis.del', error));
+    }
     isProcessingReports = false;
     
     if (processingReports.size === 0 && messageBuffer.size === 0) {
@@ -740,7 +745,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
         // If GPT-4o-mini gives an inconclusive response, try with GPT-4o
         const gpt4Response = await retryGptRequest(async () => {
           return openai.chat.completions.create({
-            model: "gpt-4o-2024-08-06",
+            model: "gpt-4-turbo",
             messages: textMessages,
             max_tokens: 10,
             temperature: 0.1,
@@ -777,7 +782,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
               return openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: mediaMessages,
-                max_tokens: 10,
+                max_tokens: 1,
                 temperature: 0.1,
               });
             });
@@ -829,7 +834,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
 
       const senderAnalysisResponse = await retryGptRequest(async () => {
         return openai.chat.completions.create({
-          model: "gpt-4o-mini-2024-07-18",
+          model: "gpt-4",
           messages: [
             { role: "system", content: gptPrompt },
             { role: "user", content: senderAnalysisPrompt }
@@ -967,11 +972,6 @@ function generateUserPrompt(report: Report): string {
 
 async function applyDecision(report: Report, decision: SpamDecision): Promise<void> {
   log(`Applying decision for ${report.reportId}: ${JSON.stringify(decision)}`, 'debug');
-  
-  if (!isReportInUndoRange(report.reportId) && processingReports.has('undos')) {
-    log(`Ignoring decision for report ${report.reportId} as it's outside the undo range`, 'debug');
-    return;
-  }
   
   if (report.decisionSent && !processingReports.has('undos')) {
     log(`Decision already sent for report ${report.reportId}, skipping`, 'debug');
@@ -1261,11 +1261,15 @@ async function getCacheSize(): Promise<number> {
     if (redis.status === 'ready') {
       const redisKeys = await redis.keys('report:*');
       for (const key of redisKeys) {
-        const size = await redis.memory('USAGE', key);
-        if (size !== null) {
-          totalSize += size;
-        } else {
-          log(`Unable to get memory usage for key: ${key}`, 'warn');
+        try {
+          const size = await redis.memory('USAGE', key);
+          if (size !== null) {
+            totalSize += size;
+          } else {
+            log(`Unable to get memory usage for key: ${key}`, 'warn');
+          }
+        } catch (error) {
+          log(`Error getting memory usage for key ${key}: ${error instanceof Error ? error.message : String(error)}`, 'warn');
         }
       }
     } else {
@@ -1481,7 +1485,9 @@ function resetNextCommandTimer() {
 
 function scheduleDelayedProcessing(sysMsg: BufferItem, checkMsg: BufferItem) {
   if (sysMsg.reportId) {
+    const processingDelay = Math.max(50, COMMAND_DELAY - 50); // Минимальная задержка 50 мс
     setTimeout(() => {
+      const startTime = Date.now();
       processReport({
         reportId: sysMsg.reportId!,
         messageContent: [checkMsg.content],
@@ -1493,11 +1499,17 @@ function scheduleDelayedProcessing(sysMsg: BufferItem, checkMsg: BufferItem) {
         timestamp: sysMsg.timestamp,
         replyTo: checkMsg.replyTo,
         ...parseSysMessage(sysMsg.content)
+      }).then(() => {
+        const processingTime = Date.now() - startTime;
+        const targetTime = 100; // Целевое время обработки 200 мс
+        const adjustment = (targetTime - processingTime) / 2;
+        COMMAND_DELAY = Math.max(50, Math.min(500, COMMAND_DELAY + adjustment));
+        log(`Adjusted COMMAND_DELAY to ${COMMAND_DELAY}ms. Processing time: ${processingTime}ms`, 'debug');
       });
       
       messageBuffer.delete(checkMsg.replyTo);
       sysMessages.delete(sysMsg);
-    }, 1000);
+    }, processingDelay);
   } else {
     log('Cannot schedule delayed processing: sysMsg.reportId is undefined', 'error');
   }
@@ -1644,9 +1656,6 @@ Total Memory: ${(totalMemory / 1024 / 1024 / 1024).toFixed(2)} GB
     statusMessage += `OpenAI API Usage:
 Requests made: ${apiRequestsCount}
 Tokens used: ${apiTokensUsed}
-
-Note: These are cumulative values since the last restart. 
-Actual rate limits depend on your OpenAI plan and should be monitored in your OpenAI dashboard.
 `;
 
     log('Enhanced status report generated', 'debug');
@@ -2089,7 +2098,7 @@ async function gracefulShutdown(restart: boolean = false) {
   if (redisBatchTimeout) clearTimeout(redisBatchTimeout);
 
   // Флаг для отслеживания состояния shutdown
-  let isShuttingDown = true;
+  isShuttingDown = true;
 
   // Функция для безопасного выполнения операций с Redis
   const safeRedisOperation = async (operation: () => Promise<void>) => {
@@ -2139,9 +2148,6 @@ async function gracefulShutdown(restart: boolean = false) {
 
   log(`Graceful shutdown completed${restart ? ' (Restarting)' : ''}`, 'info');
   await notify(`Application has been ${restart ? 'restarted' : 'shut down'} gracefully.`);
-
-  // Устанавливаем флаг завершения работы
-  isShuttingDown = false;
 
   if (restart) {
     process.exit(1); // Код выхода 1 вызовет перезапуск на Heroku
