@@ -38,7 +38,7 @@ let COMMAND_DELAY = 50;
 let PROCESSING_DELAY = 0;
 const DB_SCHEMA_VERSION = '1.0';
 const MEDIA_EXPIRY = 30; // 30 seconds
-const ENABLE_GPT_MEDIA_ANALYSIS: boolean = true;
+const ENABLE_GPT_MEDIA_ANALYSIS = true;
 const MAX_CACHE_SIZE_MB = 100; // 100 MB
 const GPT_RETRY_DELAY = 10000; // 10 seconds
 const MAX_PROCESSING_TIME = 55000; // 55 seconds
@@ -332,11 +332,6 @@ async function handleCheck(event: NewMessageEvent) {
         const captionText = message.message;
         mediaKey = `media:${message.media instanceof Api.MessageMediaPhoto ? message.media.photo?.id : message.media.document?.id}`;
         log(`Media key generated: ${mediaKey}`, 'debug');
-        
-        // Process and store media
-        if (mediaKey) {
-          await processAndStoreMedia(message.id, mediaKey);
-        }
       }
     }
 
@@ -591,25 +586,6 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
   return null;
 }
 
-async function processAndStoreMedia(messageId: number, mediaKey: string): Promise<boolean> {
-  try {
-    const media = await getMediaFromMessage(messageId);
-    if (media) {
-      const buffer = await client.downloadMedia(media);
-      if (buffer) {
-        await redis.set(mediaKey, buffer.toString('base64'), 'EX', MEDIA_EXPIRY);
-        log(`Downloaded and stored media: ${mediaKey}`, 'debug');
-        return true;
-      }
-    }
-    log(`Failed to process and store media: ${mediaKey}`, 'warn');
-    return false;
-  } catch (error) {
-    logErr('processAndStoreMedia', error);
-    return false;
-  }
-}
-
 async function getMediaFromMessage(messageId: number): Promise<Api.TypeMessageMedia | null> {
   try {
     const message = await retry(async () => {
@@ -650,7 +626,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   1 for spam
   0 for not spam
   
-  **Spam Indicators:**
+**Spam Indicators:**
   - Unsolicited commercial content or subtle marketing
   - Phishing, fake giveaways, unrealistic financial promises
   - Explicit sexual content or coded invitations for sexual services (e.g., "aviliable", "avaible", "свободна", "Скучно? Пиши")
@@ -670,7 +646,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   **Not Spam Indicators:**
   - Normal interactions, casual conversations, jokes (e.g., "haha", "lol", "lmao")
   - Legitimate information sharing, news, educational content
-  - Expressive language, including mild profanity (e.g., "fuck", "shit", "bitch")
+  - Expressive language, including agressive profanity, even if it appears provocative at first glance or very offensive
   - Cultural content, local slang, region-specific discussions
   - Political discussions or criticisms (ecpecially in Russian or Ukrainian)
   - Bot commands (starting with "/"), unless misused (e.g., "/start" or "/help")
@@ -679,7 +655,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Satirical or ironic content (even if it appears provocative at first glance)
   - Controversial opinions without incitement
   - Single-word greetings or short phrases (e.g., "Hi", "Hello", "How are you?")
-  - Emotional expressions or outbursts (even if they include profanity)
+  - Emotional expressions or outbursts (even if they include profanity or offensive language)
   
   **Context Considerations:**
   - Semantic analysis of meaning and intent
@@ -692,6 +668,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   **REMINDER:** Respond ONLY with 1 or 0. No explanations.
   
   Your analysis:`;
+  
 
   const mediaPrompt = `You are an AI specialized in detecting commercial spam in Telegram groups by analyzing images or media content. Evaluate based on visual elements, embedded text, and context within the group. Respond with only:
   1 for spam
@@ -728,6 +705,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   **REMINDER:** Respond ONLY with 1 or 0. No explanations.
   
   Your analysis:`;
+  
 
   const userPrompt = generateUserPrompt(report);
 
@@ -903,15 +881,9 @@ async function retryGptRequest<T>(request: () => Promise<T>, maxRetries: number 
     try {
       return await request();
     } catch (error) {
-      if (error instanceof APIError && error.status === 429) {
-        // Rate limit error, wait longer before retry
-        await new Promise(resolve => setTimeout(resolve, (i + 1) * 5000));
-      } else if (i === maxRetries - 1) {
-        throw error;
-      } else {
-        log(`GPT request failed, retrying in ${GPT_RETRY_DELAY}ms (${i + 1}/${maxRetries})`, 'warn');
-        await new Promise(resolve => setTimeout(resolve, GPT_RETRY_DELAY));
-      }
+      if (i === maxRetries - 1) throw error;
+      log(`GPT request failed, retrying in ${GPT_RETRY_DELAY}ms (${i + 1}/${maxRetries})`, 'warn');
+      await new Promise(resolve => setTimeout(resolve, GPT_RETRY_DELAY));
     }
   }
   throw new Error('Max retries reached for GPT request');
