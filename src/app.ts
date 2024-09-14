@@ -454,7 +454,20 @@ async function processBuffer(currentTimestamp: number) {
     }
 
     if (matchingCheckMsg && sysMsg.reportId) {
-      scheduleDelayedProcessing(sysMsg, matchingCheckMsg);
+      // Немедленная обработка отчета вместо использования scheduleDelayedProcessing
+      processReport({
+        reportId: sysMsg.reportId,
+        messageContent: [matchingCheckMsg.content],
+        mediaHashes: matchingCheckMsg.mediaHashes || [],
+        complaintCount: 0,
+        source: '',
+        sender: '',
+        isSpam: -1,
+        timestamp: sysMsg.timestamp,
+        replyTo: matchingCheckMsg.replyTo,
+        ...parseSysMessage(sysMsg.content)
+      }).catch(error => logErr(`Error processing report ${sysMsg.reportId}`, error));
+      
       messageBuffer.delete(matchingCheckMsg.replyTo);
     }
     
@@ -609,100 +622,91 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
 
   log(`Starting GPT check for report ${report.reportId}`, 'debug');
 
-  const gptPrompt = `As an AI trained in commercial spam detection for Telegram groups, analyze the provided information for potential spam in any language. Use semantic analysis to understand the context and meaning of messages, especially for short texts or potential spam warnings. Consider all aspects, including content, context, metadata, and visual elements. Provide ONLY a single digit as your answer: 1 for spam, 0 for not spam. DO NOT provide any explanation or additional text.
-
-  Spam Indicators (Prioritized):
+  const gptPrompt = `You are an AI specialized in detecting commercial spam in Telegram groups across any language. Analyze the provided message based on content, context and metadata. Respond with only:
+  1 for spam
+  0 for not spam
   
-  1. High Priority (Strong indicators of spam):
-     - Unsolicited commercial content or subtle marketing
-     - Phishing attempts, fake giveaways, unrealistic financial promises
-     - Explicit sexual content or coded invitations for sexual services
-     - Attempts to move conversations to private channels or other platforms
-     - Sharing personal information of others without consent
-     - Messages with over 500 consecutive identical symbols or emojis
-     - Clear incitement to violence or illegal activities
+  **Spam Indicators:**
+  - Unsolicited commercial content or subtle marketing
+  - Phishing, fake giveaways, unrealistic financial promises
+  - Explicit sexual content or coded invitations for sexual services (e.g., "aviliable", "avaible", "свободна", "Скучно? Пиши")
+  - Attempts to move conversations to private channels or other platforms
+  - Sharing personal information without consent
+  - >500 identical symbols or emojis
+  - Self-promotion of unrelated channels/groups
+  - Cryptocurrency/airdrop mentions with urgent calls to action
+  - Any job offers, vacancies, or job postings
+  - Excessive emojis, especially at line starts
+  - Multiple links, especially to bots or channels (e.g., "https://t.me/channel", "https://t.me/botbot")
+  - Encrypted or coded messages resembling adult content sales (e.g., "CP", "TN", "GV", "TF", "SL", "ID")
+  - Requests to write in private messages (e.g., "write + in private")
+  - Common spam keywords
+  - Sender names containing links or solicitations
+  - Higher complaint counts (more than 5)
   
-  2. Medium Priority (Suspicious, requires context):
-     - Self-promotion of unrelated channels/groups
-     - Cryptocurrency/airdrop mentions, especially with urgent calls to action
-     - Any job offers, vacancies, or job postings
-     - Excessive use of emojis, especially at line starts
-     - Presence of multiple links, especially to bots or channels
-     - Non-Latin script used out of cultural context
-     - Encrypted or coded messages resembling adult content sales
-     - Requests to write in private messages
-  
-  3. Low Priority (Potential red flags, heavily context-dependent):
-     - Use of common spam keywords (e.g., 'earnings', 'investments')
-     - Short, repetitive messages or single character responses
-     - Sender names containing links or solicitations
-     - Higher complaint counts
-  
-  Context Considerations:
-  - Use semantic analysis to understand the meaning and intent of messages
-  - Evaluate messages within the conversation flow and group's theme
-  - Consider cultural and linguistic context, including sender's country flag
-  - Assess relevance to ongoing discussions or group activities
-  - Factor in complaint counts, but don't rely on them exclusively
-  - The group's purpose and typical content should guide your judgment
-  - The 'Source' field provides the name of the group where the message was sent. Use this for context, not for spam evaluation
-  - Short messages without promotional content are more likely to be legitimate communication
-
-  Not Spam:
-  - Normal interactions, casual conversations, jokes
+  **Not Spam Indicators:**
+  - Normal interactions, casual conversations, jokes (e.g., "haha", "lol", "lmao")
   - Legitimate information sharing, news, educational content
-  - Expressive language, including profanity, emotional outbursts, or provocative content
+  - Expressive language, including mild profanity (e.g., "fuck", "shit", "bitch")
   - Cultural content, local slang, region-specific discussions
-  - Political discussions or criticisms, even if aggressive or controversial
-  - Bot commands (starting with "/"), unless clearly misused
-  - Warnings about scams or spam
-  - Short messages that might be part of an ongoing conversation, or just numbers/symbols
-  - Messages that semantically align with the group's theme or current discussion
-  - Satirical or ironic content, even if it appears provocative at first glance
-  - Controversial opinions or heated debates, as long as they don't incite violence or illegal activities
-  - Single word greetings or short phrases (e.g., "Hi", "Hello", "How are you?")
-  - Emotional expressions or outbursts, even if they contain mild profanity
-  - Brief, non-promotional messages are generally not spam, especially in the context of ongoing conversations
+  - Political discussions or criticisms (ecpecially in Russian or Ukrainian)
+  - Bot commands (starting with "/"), unless misused (e.g., "/start" or "/help")
+  - Warnings about scams or spam (e.g., "Scam", "scamer ni" or similar warnings)
+  - Short messages part of ongoing conversations
+  - Satirical or ironic content (even if it appears provocative at first glance)
+  - Controversial opinions without incitement
+  - Single-word greetings or short phrases (e.g., "Hi", "Hello", "How are you?")
+  - Emotional expressions or outbursts (even if they include profanity)
   
-  REMEMBER: Your response must be ONLY the digit 1 (for spam) or 0 (for not spam). No other text or explanation is allowed.
+  **Context Considerations:**
+  - Semantic analysis of meaning and intent
+  - Conversation flow and group theme
+  - Cultural and linguistic context, sender's country
+  - Relevance to ongoing discussions or group activities
+  - Complaint counts (not solely relied upon)
+  - 'Source' field used for context, not spam evaluation
+  
+  **REMINDER:** Respond ONLY with 1 or 0. No explanations.
   
   Your analysis:`;
+  
 
-  const mediaPrompt = `As an AI trained in commercial spam detection for Telegram groups, analyze the provided image or media content for potential spam. Consider visual elements, text within images, and the context of the media in the group. Provide a definitive classification: 1 (spam) or 0 (not spam).
+  const mediaPrompt = `You are an AI specialized in detecting commercial spam in Telegram groups by analyzing images or media content. Evaluate based on visual elements, embedded text, and context within the group. Respond with only:
+  1 for spam
+  0 for not spam
   
-  Spam Indicators (Prioritized):
+  **High Priority Indicators:**
+  - Unrelated promotional content or advertisements
+  - Visuals with unrealistic financial promises or get-rich-quick schemes
+  - Sexually explicit or suggestive imagery inappropriate for the group
+  - Excessive branding or watermarks from unrelated sources
+  - Encouragement to join other groups, channels, or external websites
+  - Screenshots promoting specific services or products
   
-  1. High Priority (Strong indicators of spam):
-     - Explicit promotional content or advertisements unrelated to the group's theme
-     - Visuals containing unrealistic financial promises or get-rich-quick schemes
-     - Sexually explicit imagery or suggestive content inappropriate for the group
-     - Images with excessive branding or watermarks from unrelated sources
-     - Visuals encouraging users to join other groups, channels, or external websites
-     - Screenshots of conversations or apps promoting specific services or products
+  **Medium Priority Indicators:**
+  - Infographics or charts about cryptocurrency or financial opportunities
+  - Images with multiple QR codes or links
+  - Visuals out of place with the group's usual content
+  - Stock photos or generic imagery commonly used in spam
+  - Screenshots of promotional social media posts
   
-  2. Medium Priority (Suspicious, requires context):
-     - Infographics or charts about cryptocurrency or financial opportunities
-     - Images with multiple QR codes or links
-     - Visuals that seem out of place or unrelated to the group's usual content
-     - Stock photos or generic imagery commonly used in spam
-     - Screenshots of social media posts with promotional content
+  **Low Priority Indicators:**
+  - Text in a different language than the group's primary language
+  - Memes or humorous images potentially masking promotional content
+  - Significantly lower or higher quality than typical group content
   
-  3. Low Priority (Potential red flags, heavily context-dependent):
-     - Images with text in a different language than the group's primary language
-     - Memes or humorous images that could be used to mask promotional content
-     - Visuals that are significantly lower or higher quality than typical group content
-  
-  Not Spam:
+  **Not Spam Indicators:**
   - Legitimate news images or infographics related to the group's theme
-  - Personal photos or images consistent with normal group interactions
-  - Memes, jokes, or satirical content, even if provocative or controversial
-  - Images containing strong language or provocative content, if relevant to discussions
-  - Political or activist imagery, unless it explicitly violates group rules
+  - Personal photos or images consistent with normal interactions
+  - Memes, jokes, or satirical content, even if provocative
+  - Images with strong language or provocative content relevant to discussions
+  - Political or activist imagery, unless violating group rules
   - Artistic or creative content, even if unconventional or shocking
   
-  REMEMBER: Your response must be ONLY the digit 1 (for spam) or 0 (for not spam). No other text or explanation is allowed.
+  **REMINDER:** Respond ONLY with 1 or 0. No explanations.
   
   Your analysis:`;
+  
 
   const userPrompt = generateUserPrompt(report);
 
@@ -1487,38 +1491,6 @@ function resetNextCommandTimer() {
   }
   isProcessingReports = true;
   log('Next command timer reset due to ongoing report processing', 'debug');
-}
-
-function scheduleDelayedProcessing(sysMsg: BufferItem, checkMsg: BufferItem) {
-  if (sysMsg.reportId) {
-    const processingDelay = Math.max(50, COMMAND_DELAY - 50); // Минимальная задержка 50 мс
-    setTimeout(() => {
-      const startTime = Date.now();
-      processReport({
-        reportId: sysMsg.reportId!,
-        messageContent: [checkMsg.content],
-        mediaHashes: checkMsg.mediaHashes || [],
-        complaintCount: 0,
-        source: '',
-        sender: '',
-        isSpam: -1,
-        timestamp: sysMsg.timestamp,
-        replyTo: checkMsg.replyTo,
-        ...parseSysMessage(sysMsg.content)
-      }).then(() => {
-        const processingTime = Date.now() - startTime;
-        const targetTime = 100; // Целевое время обработки 200 мс
-        const adjustment = (targetTime - processingTime) / 2;
-        COMMAND_DELAY = Math.max(50, Math.min(500, COMMAND_DELAY + adjustment));
-        log(`Adjusted COMMAND_DELAY to ${COMMAND_DELAY}ms. Processing time: ${processingTime}ms`, 'debug');
-      });
-      
-      messageBuffer.delete(checkMsg.replyTo);
-      sysMessages.delete(sysMsg);
-    }, processingDelay);
-  } else {
-    log('Cannot schedule delayed processing: sysMsg.reportId is undefined', 'error');
-  }
 }
 
 // Admin functions
