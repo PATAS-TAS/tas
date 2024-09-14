@@ -652,7 +652,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Political discussions or criticisms (ecpecially in Russian or Ukrainian)
   - Bot commands (starting with "/"), unless misused (e.g., "/start" or "/help")
   - Warnings about scams or spam (e.g., "Scam", "scamer ni" or similar warnings)
-  - Short messages part of ongoing conversations
+  - Short messages part of ongoing conversations (e.g., short symbols, numbers, emoticons, or phrases)
   - Satirical or ironic content (even if it appears provocative at first glance)
   - Controversial opinions without incitement
   - Single-word greetings or short phrases (e.g., "Hi", "Hello", "How are you?")
