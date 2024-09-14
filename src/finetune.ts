@@ -5,23 +5,18 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
-import OpenAI from 'openai';
-import { ChatCompletionCreateParams } from 'openai/resources/chat/completions';
+import { ChatCompletionCreateParams, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
 dotenv.config();
 
 // Environment variables
 const DATABASE_URL = process.env.DATABASE_URL!;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 
 // Initialize PostgreSQL pool
 const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
-
-// Initialize OpenAI client
-const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
 // Interface for the report data
 interface Report {
@@ -81,7 +76,7 @@ Non-spam indicators:
 - Bot commands, short messages in ongoing chats
 - Expressive language, including aggressive profanity
 
-Respond only with 1 (spam) or 0 (not spam).`;
+Respond only with 0 (not spam) or 1 (spam).`;
 
   const userMessage = `Message: ${report.message_content.join('\n')}
 Complaint count: ${report.complaint_count}
@@ -102,16 +97,65 @@ Media types: ${report.media_hashes.map(hash => hash.split(':')[0]).join(', ') ||
   };
 }
 
+function estimateMessageLength(message: ChatCompletionMessageParam): number {
+  if (typeof message.content === 'string') {
+    return message.content.length;
+  } else if (Array.isArray(message.content)) {
+    return message.content.reduce((contentSum, part) => {
+      return contentSum + estimateContentPartLength(part);
+    }, 0);
+  } else if (message.content === null || message.content === undefined) {
+    return 0;
+  } else {
+    console.warn('Unexpected message content type:', typeof message.content);
+    return 0;
+  }
+}
+
+function estimateContentPartLength(part: unknown): number {
+  if (typeof part === 'string') {
+    return part.length;
+  } else if (typeof part === 'object' && part !== null) {
+    if ('type' in part && typeof part.type === 'string') {
+      switch (part.type) {
+        case 'text':
+          return 'text' in part && typeof part.text === 'string' ? part.text.length : 0;
+        case 'image_url':
+          return 100;
+        default:
+          console.warn('Unexpected content part type:', part.type);
+          return 0;
+      }
+    } else {
+      console.warn('Content part object does not have a valid "type" property:', part);
+      return 0;
+    }
+  } else {
+    console.warn('Unexpected content part:', part);
+    return 0;
+  }
+}
+
+function estimateTokenCount(example: ChatCompletionCreateParams): number {
+  const totalCharacters = example.messages.reduce((sum, message) => {
+    return sum + estimateMessageLength(message);
+  }, 0);
+  return Math.ceil(totalCharacters / 4); // Грубая оценка: 1 токен ≈ 4 символа
+}
+
 // Function to split data into chunks of approximately 1 million tokens
-async function splitDataIntoChunks(data: ChatCompletionCreateParams[]): Promise<ChatCompletionCreateParams[][]> {
+function splitDataIntoChunks(data: ChatCompletionCreateParams[]): ChatCompletionCreateParams[][] {
+  console.log(`Starting to split ${data.length} examples into chunks...`);
   const chunks: ChatCompletionCreateParams[][] = [];
   let currentChunk: ChatCompletionCreateParams[] = [];
   let currentTokenCount = 0;
+  const TARGET_CHUNK_SIZE = 1000000; // 1 million tokens
 
   for (const example of data) {
-    const tokenCount = await getTokenCount(example);
-    if (currentTokenCount + tokenCount > 1000000) {
+    const tokenCount = estimateTokenCount(example);
+    if (currentTokenCount + tokenCount > TARGET_CHUNK_SIZE && currentChunk.length > 0) {
       chunks.push(currentChunk);
+      console.log(`Chunk created with ${currentChunk.length} examples and approximately ${currentTokenCount} tokens`);
       currentChunk = [];
       currentTokenCount = 0;
     }
@@ -121,33 +165,15 @@ async function splitDataIntoChunks(data: ChatCompletionCreateParams[]): Promise<
 
   if (currentChunk.length > 0) {
     chunks.push(currentChunk);
+    console.log(`Final chunk created with ${currentChunk.length} examples and approximately ${currentTokenCount} tokens`);
   }
 
+  console.log(`Splitting completed. Created ${chunks.length} chunks.`);
   return chunks;
 }
 
-// Function to get token count for a chat completion example
-async function getTokenCount(example: ChatCompletionCreateParams): Promise<number> {
-  try {
-    const response = await openai.chat.completions.create({
-      ...example,
-      stream: false
-    });
-    
-    if ('usage' in response && response.usage) {
-      return response.usage.total_tokens;
-    } else {
-      console.warn('Unable to get token count from API response');
-      return 0;
-    }
-  } catch (error) {
-    console.error('Error getting token count:', error);
-    return 0;
-  }
-}
-
 // Function to export data to JSONL files
-async function exportDataToJSONL(data: ChatCompletionCreateParams[][]): Promise<string[]> {
+function exportDataToJSONL(data: ChatCompletionCreateParams[][]): string[] {
   const filePaths: string[] = [];
 
   for (let i = 0; i < data.length; i++) {
@@ -180,12 +206,12 @@ async function handleFineCommand(): Promise<string[]> {
     
     console.log('Splitting data into chunks...');
     const startSplit = Date.now();
-    const dataChunks = await splitDataIntoChunks(fineTuningData);
+    const dataChunks = splitDataIntoChunks(fineTuningData);
     console.log(`Data split into chunks. Time taken: ${(Date.now() - startSplit) / 1000} seconds. Number of chunks: ${dataChunks.length}`);
     
     console.log('Exporting data to JSONL files...');
     const startExport = Date.now();
-    const filePaths = await exportDataToJSONL(dataChunks);
+    const filePaths = exportDataToJSONL(dataChunks);
     console.log(`Data export completed. Time taken: ${(Date.now() - startExport) / 1000} seconds. Files created: ${filePaths.length}`);
     
     console.log('Fine-tuning data preparation completed successfully.');
@@ -200,10 +226,7 @@ async function handleFineCommand(): Promise<string[]> {
 export { handleFineCommand };
 
 // For testing purposes
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (import.meta.url === fileURLToPath(import.meta.resolve('./finetune.ts'))) {
   handleFineCommand()
     .then(filePaths => {
       console.log('JSONL files created:');
