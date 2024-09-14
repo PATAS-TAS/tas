@@ -166,19 +166,29 @@ async function exportDataToJSONL(data: ChatCompletionCreateParams[][]): Promise<
 // Main function to handle the /fine command
 async function handleFineCommand(): Promise<string[]> {
   try {
+    console.log('Starting fine-tuning data preparation...');
+    
     console.log('Preparing data...');
+    const startPrepare = Date.now();
     const rawData = await prepareData();
+    console.log(`Data preparation completed. Time taken: ${(Date.now() - startPrepare) / 1000} seconds. Records retrieved: ${rawData.length}`);
     
     console.log('Creating fine-tuning examples...');
+    const startCreate = Date.now();
     const fineTuningData = rawData.map(createFineTuningExample);
+    console.log(`Fine-tuning examples created. Time taken: ${(Date.now() - startCreate) / 1000} seconds. Examples created: ${fineTuningData.length}`);
     
     console.log('Splitting data into chunks...');
+    const startSplit = Date.now();
     const dataChunks = await splitDataIntoChunks(fineTuningData);
+    console.log(`Data split into chunks. Time taken: ${(Date.now() - startSplit) / 1000} seconds. Number of chunks: ${dataChunks.length}`);
     
     console.log('Exporting data to JSONL files...');
+    const startExport = Date.now();
     const filePaths = await exportDataToJSONL(dataChunks);
+    console.log(`Data export completed. Time taken: ${(Date.now() - startExport) / 1000} seconds. Files created: ${filePaths.length}`);
     
-    console.log('Data export completed.');
+    console.log('Fine-tuning data preparation completed successfully.');
     return filePaths;
   } catch (error) {
     console.error('Error in handleFineCommand:', error);
