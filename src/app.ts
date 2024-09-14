@@ -809,7 +809,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
 
             const mediaResponse = await retryGptRequest(async () => {
               return openai.chat.completions.create({
-                model: "gpt-4o",
+                model: "gpt-4-vision-preview",
                 messages: mediaMessages,
                 max_tokens: 1,
                 temperature: 0.1,
