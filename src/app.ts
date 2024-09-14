@@ -397,6 +397,7 @@ async function handleAdd(event: NewMessageEvent) {
   ) {
     const messageContent = message.message || '';
     if (messageContent.includes("Hello there! Send /next to start processing reports.") ||
+        messageContent.includes("Send /next for a new spam report.") ||
         messageContent.includes("Sorry, this action can no longer be undone.")) {
       if (autoMode && !processingReports.has('undos')) {
         await sendToBot("/next 1");
