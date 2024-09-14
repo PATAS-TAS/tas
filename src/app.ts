@@ -406,22 +406,10 @@ async function handleAdd(event: NewMessageEvent) {
              messageContent.includes("Sorry, an error has occurred during your request. Please try again later.") ||
              messageContent.includes("No reports found.")) {
       if (!processingReports.has('undos')) {
-        let undoSuccess = false;
-        let attempts = 0;
-        const maxAttempts = 5; // Максимальное количество попыток undo
-
-        while (!undoSuccess && attempts < maxAttempts) {
-          undoSuccess = await undo();
-          if (!undoSuccess) {
-            attempts++;
-            log(`Undo attempt ${attempts} did not process any reports`, 'debug');
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Пауза в 1 секунду между попытками
-          }
-        }
-
+        const undoSuccess = await undo();
         if (!undoSuccess) {
-          log(`Undo process did not successfully process any reports after ${maxAttempts} attempts, sending next command`, 'debug');
-          await sendToBot("/next 1");
+          log('Undo process did not successfully process any reports', 'warn');
+          await sendToBot("/undo");
         }
       }
     } else if (messageContent.includes("marked as spam 😡") || messageContent.includes("marked as not spam 😌")) {
@@ -1481,24 +1469,11 @@ async function scheduleNextCommand() {
     if (autoMode && !isProcessingReports) {
       try {
         log('Initiating undo process before next command', 'debug');
-        let undoSuccess = false;
-        let attempts = 0;
-        const maxAttempts = 5; // Максимальное количество попыток undo
-
-        while (!undoSuccess && attempts < maxAttempts) {
-          undoSuccess = await undo();
-          if (!undoSuccess) {
-            attempts++;
-            log(`Undo attempt ${attempts} did not process any reports`, 'debug');
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Пауза в 1 секунду между попытками
-          }
-        }
-
+        const undoSuccess = await undo();
         if (!undoSuccess) {
-          log(`Undo process did not successfully process any reports after ${maxAttempts} attempts, sending next command`, 'debug');
-          await sendToBot("/next 2");
+          log('Undo process did not successfully process any reports, sending next command', 'debug');
+          await sendToBot("/undo");
         }
-        
         checkNewReportsTimeout = setTimeout(checkForNewReports, 100000); // 100 секунд
       } catch (error) {
         logErr('Error in scheduleNextCommand', error);
