@@ -403,10 +403,14 @@ async function handleAdd(event: NewMessageEvent) {
       }
     }
     else if (messageContent.includes("Please select 😡 BAN or 😌 NO.") ||
-               messageContent.includes("Sorry, an error has occurred during your request. Please try again later.") ||
-               messageContent.includes("No reports found.")) {
+             messageContent.includes("Sorry, an error has occurred during your request. Please try again later.") ||
+             messageContent.includes("No reports found.")) {
       if (!processingReports.has('undos')) {
-        await sendToBot("/undo");
+        const undoSuccess = await undo();
+        if (!undoSuccess) {
+          log('Undo process did not successfully process any reports', 'warn');
+          await sendToBot("/next 1");
+        }
       }
     } else if (messageContent.includes("marked as spam 😡") || messageContent.includes("marked as not spam 😌")) {
       const reportIdMatch = messageContent.match(/#r(\d+)/);
@@ -1456,27 +1460,30 @@ async function scheduleNextCommand() {
     clearTimeout(checkNewReportsTimeout);
   }
   
-  // Проверяем, есть ли необработанные отчеты в буфере
   if (messageBuffer.size > 0 || processingReports.size > 0) {
-    log('Skipping /next 2 command as there are unprocessed reports', 'debug');
+    log('Skipping next command as there are unprocessed reports', 'debug');
     return;
   }
 
   nextCommandTimeout = setTimeout(async () => {
     if (autoMode && !isProcessingReports) {
       try {
-        log('Sending /next 2 command', 'debug');
-        await sendToBot("/undo");
+        log('Initiating undo process before next command', 'debug');
+        const undoSuccess = await undo();
+        if (!undoSuccess) {
+          log('Undo process did not successfully process any reports, sending next command', 'debug');
+          await sendToBot("/next 2");
+        }
         checkNewReportsTimeout = setTimeout(checkForNewReports, 100000); // 100 секунд
       } catch (error) {
-        logErr('Error sending /next 2 command', error);
-        await notify('Failed to send /next 2 command. Attempting to recover...');
+        logErr('Error in scheduleNextCommand', error);
+        await notify('Failed to process next command. Attempting to recover...');
         await gracefulShutdown();
       }
     } else {
-      log('Skipping /next 2 command as reports are being processed', 'debug');
+      log('Skipping next command as reports are being processed or auto mode is off', 'debug');
     }
-  }, 5000); // 5 seconds delay before sending the next command
+  }, 5000);
 }
 
 async function checkForNewReports() {
@@ -1501,6 +1508,96 @@ function resetNextCommandTimer() {
   }
   isProcessingReports = true;
   log('Next command timer reset due to ongoing report processing', 'debug');
+}
+
+async function undo(reportId?: string): Promise<boolean> {
+  log(`Starting undo process${reportId ? ` for report ${reportId}` : ''}`, 'debug');
+  
+  const recentReportIds = reportId ? [reportId] : await getRecentReportIds();
+  let successfulUndo = false;
+  
+  for (const id of recentReportIds) {
+    const report = await getFromCache(id);
+    if (!report) {
+      log(`Report ${id} not found in cache, skipping`, 'debug');
+      continue;
+    }
+
+    if (!report.decisionSent) {
+      log(`Decision not sent for report ${id}, skipping undo`, 'debug');
+      continue;
+    }
+
+    const undoCommand = `/undo${id}`;
+    log(`Sending undo command for report ${id}`, 'debug');
+    await sendToBot(undoCommand);
+
+    const undoResponse = await waitForUndoResponse(id);
+    
+    if (undoResponse === 'success') {
+      log(`Successful undo for report ${id}`, 'debug');
+      report.decisionSent = false;
+      report.isOpen = true;
+      await saveCache(report);
+      
+      try {
+        await processReport(report);
+        successfulUndo = true;
+        log(`Successfully processed undone report ${id}`, 'debug');
+        
+        if (reportId) {
+          // Если был указан конкретный reportId и он успешно обработан, завершаем функцию
+          return true;
+        }
+        // Если конкретный reportId не был указан, продолжаем перебор
+      } catch (error) {
+        logErr(`Error processing undone report ${id}`, error);
+        // Продолжаем перебор, даже если не удалось обработать этот отчет
+      }
+    } else if (undoResponse === 'toolate') {
+      log(`Undo action no longer possible for report ${id}`, 'warn');
+    } else {
+      log(`Unexpected response for undo of report ${id}`, 'warn');
+    }
+  }
+
+  log(`Undo process completed. Successfully undone and processed: ${successfulUndo}`, 'debug');
+  return successfulUndo;
+}
+
+async function getFromCache(reportId: string): Promise<Report | null> {
+  const key = `report:${reportId}`;
+  
+  // Сначала проверяем LRU кэш
+  const lruCachedReport = lruCache.get(key);
+  if (lruCachedReport) {
+    log(`Retrieved report ${reportId} from LRU cache`, 'debug');
+    return lruCachedReport;
+  }
+
+  // Если не найдено в LRU кэше, проверяем Redis
+  if (redis.status === 'ready') {
+    const redisCachedReport = await redis.get(key);
+    if (redisCachedReport) {
+      const parsedReport = JSON.parse(redisCachedReport) as Report;
+      log(`Retrieved report ${reportId} from Redis cache`, 'debug');
+      // Обновляем LRU кэш
+      lruCache.set(key, parsedReport);
+      return parsedReport;
+    }
+  }
+
+  log(`Report ${reportId} not found in cache`, 'debug');
+  return null;
+}
+
+async function getRecentReportIds(): Promise<string[]> {
+  return redis.lrange('recent_report_ids', 0, 9);
+}
+
+async function addToRecentReportIds(reportId: string): Promise<void> {
+  await redis.lpush('recent_report_ids', reportId);
+  await redis.ltrim('recent_report_ids', 0, 9); // Keep only the 10 most recent report IDs
 }
 
 // Admin functions
