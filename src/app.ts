@@ -406,9 +406,21 @@ async function handleAdd(event: NewMessageEvent) {
              messageContent.includes("Sorry, an error has occurred during your request. Please try again later.") ||
              messageContent.includes("No reports found.")) {
       if (!processingReports.has('undos')) {
-        const undoSuccess = await undo();
+        let undoSuccess = false;
+        let attempts = 0;
+        const maxAttempts = 5; // Максимальное количество попыток undo
+
+        while (!undoSuccess && attempts < maxAttempts) {
+          undoSuccess = await undo();
+          if (!undoSuccess) {
+            attempts++;
+            log(`Undo attempt ${attempts} did not process any reports`, 'debug');
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Пауза в 1 секунду между попытками
+          }
+        }
+
         if (!undoSuccess) {
-          log('Undo process did not successfully process any reports', 'warn');
+          log(`Undo process did not successfully process any reports after ${maxAttempts} attempts, sending next command`, 'debug');
           await sendToBot("/next 1");
         }
       }
@@ -1469,11 +1481,24 @@ async function scheduleNextCommand() {
     if (autoMode && !isProcessingReports) {
       try {
         log('Initiating undo process before next command', 'debug');
-        const undoSuccess = await undo();
+        let undoSuccess = false;
+        let attempts = 0;
+        const maxAttempts = 5; // Максимальное количество попыток undo
+
+        while (!undoSuccess && attempts < maxAttempts) {
+          undoSuccess = await undo();
+          if (!undoSuccess) {
+            attempts++;
+            log(`Undo attempt ${attempts} did not process any reports`, 'debug');
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Пауза в 1 секунду между попытками
+          }
+        }
+
         if (!undoSuccess) {
-          log('Undo process did not successfully process any reports, sending next command', 'debug');
+          log(`Undo process did not successfully process any reports after ${maxAttempts} attempts, sending next command`, 'debug');
           await sendToBot("/next 2");
         }
+        
         checkNewReportsTimeout = setTimeout(checkForNewReports, 100000); // 100 секунд
       } catch (error) {
         logErr('Error in scheduleNextCommand', error);
