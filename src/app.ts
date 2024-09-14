@@ -332,6 +332,11 @@ async function handleCheck(event: NewMessageEvent) {
         const captionText = message.message;
         mediaKey = `media:${message.media instanceof Api.MessageMediaPhoto ? message.media.photo?.id : message.media.document?.id}`;
         log(`Media key generated: ${mediaKey}`, 'debug');
+        
+        // Process and store media
+        if (mediaKey) {
+          await processAndStoreMedia(message.id, mediaKey);
+        }
       }
     }
 
@@ -586,6 +591,25 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
   return null;
 }
 
+async function processAndStoreMedia(messageId: number, mediaKey: string): Promise<boolean> {
+  try {
+    const media = await getMediaFromMessage(messageId);
+    if (media) {
+      const buffer = await client.downloadMedia(media);
+      if (buffer) {
+        await redis.set(mediaKey, buffer.toString('base64'), 'EX', MEDIA_EXPIRY);
+        log(`Downloaded and stored media: ${mediaKey}`, 'debug');
+        return true;
+      }
+    }
+    log(`Failed to process and store media: ${mediaKey}`, 'warn');
+    return false;
+  } catch (error) {
+    logErr('processAndStoreMedia', error);
+    return false;
+  }
+}
+
 async function getMediaFromMessage(messageId: number): Promise<Api.TypeMessageMedia | null> {
   try {
     const message = await retry(async () => {
@@ -636,7 +660,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Self-promotion of unrelated channels/groups
   - Cryptocurrency/airdrop mentions with urgent calls to action
   - Any job offers, vacancies, or job postings
-  - Excessive emojis, especially at line starts
   - Multiple links, especially to bots or channels (e.g., "https://t.me/channel", "https://t.me/botbot")
   - Encrypted or coded messages resembling adult content sales (e.g., "CP", "TN", "GV", "TF", "SL", "ID")
   - Requests to write in private messages (e.g., "write + in private")
@@ -652,7 +675,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Political discussions or criticisms (ecpecially in Russian or Ukrainian)
   - Bot commands (starting with "/"), unless misused (e.g., "/start" or "/help")
   - Warnings about scams or spam (e.g., "Scam", "scamer ni" or similar warnings)
-  - Short messages part of ongoing conversations (e.g., short symbols, numbers, emoticons, or phrases)
+  - Short messages part of ongoing conversations (e.g., short symbols, numbers, emoticons, or phrases - even if they have a high complaint count)
   - Satirical or ironic content (even if it appears provocative at first glance)
   - Controversial opinions without incitement
   - Single-word greetings or short phrases (e.g., "Hi", "Hello", "How are you?")
