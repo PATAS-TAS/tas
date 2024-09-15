@@ -2388,8 +2388,8 @@ async function main() {
     const { shouldDelay, isAnomalous } = manageRestarts();
 
     if (shouldDelay) {
-      log('Application restarting. Delaying initialization for 2 minutes...', 'info');
-      await new Promise(resolve => setTimeout(resolve, 120000)); // 2 minutes delay
+      log('Application restarting. Delaying initialization for 4 minutes...', 'info');
+      await new Promise(resolve => setTimeout(resolve, 240000)); // 4 minutes delay
     }
 
     if (isAnomalous) {
