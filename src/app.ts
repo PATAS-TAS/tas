@@ -416,15 +416,15 @@ async function handleAdd(event: NewMessageEvent) {
     }
 
     if (messageContent.includes("Hello there! Send /next to start processing reports.") ||
-        messageContent.includes("Send /next for a new spam report.") ||
-        messageContent.includes("No reports found.")) {
+        messageContent.includes("Send /next for a new spam report.")) {
       if (autoMode && !processingReports.has('undos')) {
         await sendToBot("/next 1");
       }
       consecutiveErrorCount = 0; // Сбрасываем счетчик ошибок при успешном сообщении
     }
     else if (messageContent.includes("Please select 😡 BAN or 😌 NO.") ||
-             messageContent.includes("Sorry, an error has occurred during your request. Please try again later.")) {
+             messageContent.includes("Sorry, an error has occurred during your request. Please try again later.") ||
+             messageContent.includes("No reports found.")) {
       consecutiveErrorCount++;
       log(`Consecutive error count: ${consecutiveErrorCount}`, 'warn');
       
