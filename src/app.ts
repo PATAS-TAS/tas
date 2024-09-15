@@ -18,6 +18,8 @@ import { LRUCache } from 'lru-cache';
 import { createHash } from 'crypto';
 import os from 'os';
 import { handleFineCommand } from './finetune.js';
+import fs from 'fs';
+
 
 dotenv.config();
 
@@ -46,6 +48,9 @@ const MAX_PROCESSING_TIME = 55000; // 55 seconds
 const REDIS_BATCH_INTERVAL = 10 * 60 * 1000; // 10 minutes
 const MIN_BUFFER_DELAY = 100;
 const MAX_BUFFER_DELAY = 500;
+const RESTART_FILE = path.join(tmpdir(), 'app_restarts.json');
+const MAX_RESTARTS = 10;
+const RESTART_WINDOW = 10 * 60 * 1000; // 10 minutes
 let currentBufferDelay = MIN_BUFFER_DELAY;
 let isShuttingDown = false;
 let apiRequestsCount = 0;
@@ -152,11 +157,16 @@ type SpamDecision = {
   checkType: 'fast' | 'gpt' | 'gpt4' | 'default';
 };
 
+interface RestartData {
+  count: number;
+  lastRestart: number;
+}
+
 // Regular expressions
 const sysRegex = {
   reportId: /#r(\d+)/,
   complaintCount: /😱(\d+)/,
-  source: /^(?:🗣\s*)?Source:\s*(.+)/m,
+  source: /^Source:\s*(.+)/m,
   sender: /^Sender:\s*(.+)/m,
 };
 
@@ -410,7 +420,8 @@ async function handleAdd(event: NewMessageEvent) {
         const undoSuccess = await undo();
         if (!undoSuccess) {
           log('Undo process did not successfully process any reports', 'warn');
-          await sendToBot("/undo");
+          // Здесь мы больше не отправляем "/undo"
+          await scheduleNextCommand();
         }
       }
     } else if (messageContent.includes("marked as spam 😡") || messageContent.includes("marked as not spam 😌")) {
@@ -460,7 +471,6 @@ async function processBuffer(currentTimestamp: number) {
     }
 
     if (matchingCheckMsg && sysMsg.reportId) {
-      // Немедленная обработка отчета вместо использования scheduleDelayedProcessing
       processReport({
         reportId: sysMsg.reportId,
         messageContent: [matchingCheckMsg.content],
@@ -475,6 +485,9 @@ async function processBuffer(currentTimestamp: number) {
       }).catch(error => logErr(`Error processing report ${sysMsg.reportId}`, error));
       
       messageBuffer.delete(matchingCheckMsg.replyTo);
+    } else if (sysMsg.reportId) {
+      // Если нет соответствующего check message, обрабатываем только sys message
+      await processSysMsgOnly(sysMsg);
     }
     
     sysMessages.delete(sysMsg);
@@ -684,7 +697,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   **REMINDER:** Respond ONLY with 1 or 0. No explanations.
   
   Your analysis:`;
-  
 
   const mediaPrompt = `You are an AI specialized in detecting commercial spam in Telegram groups by analyzing images or media content. Evaluate based on visual elements, embedded text, and context within the group. Respond with only:
   1 for spam
@@ -721,7 +733,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   **REMINDER:** Respond ONLY with 1 or 0. No explanations.
   
   Your analysis:`;
-  
 
   const userPrompt = generateUserPrompt(report);
 
@@ -840,41 +851,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
       log(`GPT media check decision for report ${report.reportId}: ${JSON.stringify(mediaDecision)}`, 'debug');
     }
 
-    // Если решение не было принято, но есть информация о sender и complaintCount
-    if (!finalDecision && report.sender && report.complaintCount > 0) {
-      const senderAnalysisPrompt = `Analyze the following information for potential spam:
-      Sender: ${report.sender}
-      Complaint count: ${report.complaintCount}
-      
-      Consider the sender's name for any indicators of spam (e.g., unusual characters, numbers, or promotional content in the name).
-      Factor in the complaint count, but remember it's not definitive proof of spam.
-      
-      Provide a classification (1 for spam, 0 for not spam).
-      Output format: [classification]
-      Example: 1 or 0`;
-
-      const senderAnalysisResponse = await retryGptRequest(async () => {
-        return openai.chat.completions.create({
-          model: "gpt-4",
-          messages: [
-            { role: "system", content: gptPrompt },
-            { role: "user", content: senderAnalysisPrompt }
-          ],
-          max_tokens: 1,
-          temperature: 0.1,
-        });
-      });
-
-      const senderAnalysisContent = senderAnalysisResponse.choices[0]?.message?.content?.trim();
-      if (senderAnalysisContent === '0' || senderAnalysisContent === '1') {
-        finalDecision = {
-          isSpam: Number(senderAnalysisContent),
-          reason: Number(senderAnalysisContent) === 1 ? "GPT sender analysis: potential spam" : "GPT sender analysis: likely not spam",
-          checkType: 'gpt'
-        };
-      }
-    }
-
     if (finalDecision) {
       gptCheckCache.set(messageHash, finalDecision);
       log(`Cached GPT decision for report ${report.reportId}`, 'debug');
@@ -889,6 +865,68 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
     logErr('gptCheck', error);
     log(`GPT check failed for report ${report.reportId}`, 'error');
     throw error;
+  }
+}
+
+async function processSysMsgOnly(sysMsg: BufferItem): Promise<void> {
+  if (!sysMsg.reportId) {
+    log('System message without reportId, skipping', 'warn');
+    return;
+  }
+
+  const report: Report = {
+    reportId: sysMsg.reportId,
+    messageContent: [],
+    mediaHashes: [],
+    complaintCount: 0,
+    source: '',
+    sender: '',
+    isSpam: -1,
+    timestamp: sysMsg.timestamp,
+    ...parseSysMessage(sysMsg.content)
+  };
+
+  const gptPrompt = `Analyze the following Telegram message metadata for potential spam, even without the actual message content:
+
+Sender: ${report.sender}
+Source: ${report.source}
+Complaint count: ${report.complaintCount}
+
+Consider:
+1. Sender's name for spam indicators (unusual characters, numbers, promotional content)
+2. Source information for context
+3. Complaint count as a general indicator, not definitive proof
+
+Classify as:
+1 for likely spam
+0 for likely not spam
+
+Respond ONLY with 1 or 0.`;
+
+  try {
+    const gptResponse = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        { role: "system", content: gptPrompt },
+        { role: "user", content: `Analyze for spam:\nSender: ${report.sender}\nSource: ${report.source}\nComplaint count: ${report.complaintCount}` }
+      ],
+      max_tokens: 1,
+      temperature: 0.1
+    });
+
+    const decision = gptResponse.choices[0]?.message?.content?.trim();
+    if (decision === '0' || decision === '1') {
+      report.isSpam = Number(decision);
+      report.reason = `GPT-4 analysis based on metadata: ${Number(decision) === 1 ? 'likely spam' : 'likely not spam'}`;
+    } else {
+      log(`Unexpected GPT-4 response for report ${report.reportId}: ${decision}`, 'warn');
+      report.isSpam = 0;
+      report.reason = "Unable to classify based on metadata alone";
+    }
+
+    await processReport(report);
+  } catch (error) {
+    logErr(`Error processing system message only for report ${report.reportId}`, error);
   }
 }
 
@@ -1024,11 +1062,19 @@ async function sendDecision(report: Report, decision: SpamDecision): Promise<voi
     await new Promise(resolve => setTimeout(resolve, COMMAND_DELAY));
   }
 
-  await sendToBot(decision.isSpam ? '😡 SPAM' : '😌 NO');
-  log(`Sent decision: ${decision.isSpam ? 'SPAM' : 'NOT SPAM'}`, 'debug');
-  report.decisionSent = true;
-  await saveCache(report);
-  log(`Decision sent for report ${report.reportId}`, 'debug');
+  try {
+    await sendToBot(decision.isSpam ? '😡 SPAM' : '😌 NO');
+    log(`Sent decision: ${decision.isSpam ? 'SPAM' : 'NOT SPAM'}`, 'debug');
+    report.decisionSent = true;
+    await saveCache(report);
+    log(`Decision sent for report ${report.reportId}`, 'debug');
+
+    // Reset restart counter after successful decision
+    resetRestartCounter();
+  } catch (error) {
+    logErr(`Error sending decision for report ${report.reportId}`, error);
+    throw error;
+  }
 }
 
 // Оптимизированные функции кэширования
@@ -1473,7 +1519,7 @@ async function scheduleNextCommand() {
         const undoSuccess = await undo();
         if (!undoSuccess) {
           log('Undo process did not successfully process any reports, sending next command', 'debug');
-          await sendToBot("/undo");
+          await sendToBot("/next 2");
         }
         checkNewReportsTimeout = setTimeout(checkForNewReports, 100000); // 100 секунд
       } catch (error) {
@@ -2261,10 +2307,68 @@ async function gracefulShutdown(restart: boolean = false) {
   }
 }
 
+function resetRestartCounter(): void {
+  try {
+    if (fs.existsSync(RESTART_FILE)) {
+      fs.unlinkSync(RESTART_FILE);
+      log('Restart counter reset after successful decision', 'info');
+    }
+  } catch (error) {
+    logErr('resetRestartCounter', error);
+  }
+}
+
+function manageRestarts(): { shouldDelay: boolean; isAnomalous: boolean } {
+  let data: RestartData;
+
+  try {
+    if (fs.existsSync(RESTART_FILE)) {
+      data = JSON.parse(fs.readFileSync(RESTART_FILE, 'utf-8'));
+    } else {
+      data = { count: 0, lastRestart: 0 };
+    }
+
+    const now = Date.now();
+    if (now - data.lastRestart > RESTART_WINDOW) {
+      // Reset if last restart was more than 10 minutes ago
+      data = { count: 1, lastRestart: now };
+    } else {
+      data.count++;
+      data.lastRestart = now;
+    }
+
+    fs.writeFileSync(RESTART_FILE, JSON.stringify(data));
+
+    const isAnomalous = data.count >= 3;
+    const shouldDelay = data.count > 1;
+
+    if (data.count >= MAX_RESTARTS) {
+      log(`Maximum number of restarts (${MAX_RESTARTS}) reached. Exiting.`, 'error');
+      process.exit(1);
+    }
+
+    return { shouldDelay, isAnomalous };
+  } catch (error) {
+    logErr('manageRestarts', error);
+    return { shouldDelay: false, isAnomalous: false };
+  }
+}
+
 // Main function
 async function main() {
   try {
     log('Starting application...', 'info');
+    const { shouldDelay, isAnomalous } = manageRestarts();
+
+    if (shouldDelay) {
+      log('Application restarting. Delaying initialization for 2 minutes...', 'info');
+      await new Promise(resolve => setTimeout(resolve, 120000)); // 2 minutes delay
+    }
+
+    if (isAnomalous) {
+      await notify('Anomaly detected: Application has restarted 3 or more times in quick succession.');
+    }
+
     try {
       await initDB();
       log('Database initialized successfully', 'info');
@@ -2306,30 +2410,6 @@ async function main() {
     schedule.scheduleJob('0 2 * * *', cleanupOldData);
     schedule.scheduleJob('*/30 * * * *', cleanupCache);
     log('Periodic tasks scheduled', 'info');
-
-    // Обработчики сигналов завершения работы
-    const signalHandler = async (signal: string) => {
-      log(`Received ${signal}. Shutting down gracefully`, 'info');
-      isShuttingDown = true;
-      await gracefulShutdown();
-    };
-
-    process.on('SIGINT', () => signalHandler('SIGINT'));
-    process.on('SIGTERM', () => signalHandler('SIGTERM'));
-
-    process.on('uncaughtException', async (error) => {
-      logErr('Uncaught Exception', error);
-      isShuttingDown = true;
-      await notify(`Uncaught Exception: ${error.message}. Attempting to recover...`);
-      await gracefulShutdown(true);
-    });
-
-    process.on('unhandledRejection', async (reason, promise) => {
-      logErr('Unhandled Rejection', reason);
-      isShuttingDown = true;
-      await notify(`Unhandled Rejection: ${reason}. Attempting to recover...`);
-      await gracefulShutdown(true);
-    });
 
     log('Application initialized successfully', 'info');
     await notify('Application initialized successfully');

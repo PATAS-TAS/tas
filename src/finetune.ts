@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
-import { ChatCompletionCreateParams, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
 dotenv.config();
 
@@ -58,7 +58,7 @@ async function prepareData(): Promise<Report[]> {
 }
 
 // Function to create fine-tuning examples
-function createFineTuningExample(report: Report): ChatCompletionCreateParams {
+function createFineTuningExample(report: Report): { prompt: string; completion: string } {
   const systemMessage = `Classify Telegram multilingual messages as spam (1) or not spam (0). Analyze:
 
 1. Message content and context
@@ -85,15 +85,8 @@ Sender: ${report.sender}
 Media types: ${report.media_hashes.map(hash => hash.split(':')[0]).join(', ') || 'None'}`;
 
   return {
-    model: "gpt-4o-mini-2024-07-18",
-    messages: [
-      { role: "system", content: systemMessage },
-      { role: "user", content: userMessage },
-      { role: "assistant", content: report.is_spam.toString() }
-    ],
-    temperature: 0.1,
-    max_tokens: 1,
-    stream: false
+    prompt: `${systemMessage}\n\n${userMessage}`,
+    completion: report.is_spam.toString()
   };
 }
 
@@ -136,18 +129,16 @@ function estimateContentPartLength(part: unknown): number {
   }
 }
 
-function estimateTokenCount(example: ChatCompletionCreateParams): number {
-  const totalCharacters = example.messages.reduce((sum, message) => {
-    return sum + estimateMessageLength(message);
-  }, 0);
+function estimateTokenCount(example: { prompt: string; completion: string }): number {
+  const totalCharacters = example.prompt.length + example.completion.length;
   return Math.ceil(totalCharacters / 4); // Грубая оценка: 1 токен ≈ 4 символа
 }
 
 // Function to split data into chunks of approximately 1 million tokens
-function splitDataIntoChunks(data: ChatCompletionCreateParams[]): ChatCompletionCreateParams[][] {
+function splitDataIntoChunks(data: { prompt: string; completion: string }[]): { prompt: string; completion: string }[][] {
   console.log(`Starting to split ${data.length} examples into chunks...`);
-  const chunks: ChatCompletionCreateParams[][] = [];
-  let currentChunk: ChatCompletionCreateParams[] = [];
+  const chunks: { prompt: string; completion: string }[][] = [];
+  let currentChunk: { prompt: string; completion: string }[] = [];
   let currentTokenCount = 0;
   const TARGET_CHUNK_SIZE = 1000000; // 1 million tokens
 
@@ -173,14 +164,18 @@ function splitDataIntoChunks(data: ChatCompletionCreateParams[]): ChatCompletion
 }
 
 // Function to export data to JSONL files
-function exportDataToJSONL(data: ChatCompletionCreateParams[][]): string[] {
+function exportDataToJSONL(data: { prompt: string; completion: string }[][]): string[] {
   const filePaths: string[] = [];
 
   for (let i = 0; i < data.length; i++) {
     const chunk = data[i];
     const filePath = path.join(tmpdir(), `fine_tuning_data_${i + 1}.jsonl`);
     
-    const jsonlContent = chunk.map(example => JSON.stringify(example)).join('\n');
+    const jsonlContent = chunk.map(example => JSON.stringify({
+      prompt: example.prompt,
+      completion: example.completion
+    })).join('\n');
+    
     fs.writeFileSync(filePath, jsonlContent);
     
     filePaths.push(filePath);
