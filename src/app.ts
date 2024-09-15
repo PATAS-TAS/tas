@@ -437,15 +437,9 @@ async function handleAdd(event: NewMessageEvent) {
         return;
       }
 
-      if (!processingReports.has('undos')) {
-        const undoSuccess = await undo();
-        if (!undoSuccess) {
-          log('Undo process did not successfully process any reports', 'warn');
-          await scheduleNextCommand();
-        } else {
-          consecutiveErrorCount = 0; // Сбрасываем счетчик ошибок при успешном undo
-        }
-      }
+      // Отправляем команду /undo вместо вызова функции undo
+      await sendToBot("/undo");
+      log('Sent /undo command due to error', 'debug');
     } else if (messageContent.includes("marked as spam 😡") || messageContent.includes("marked as not spam 😌")) {
       const reportIdMatch = messageContent.match(/#r(\d+)/);
       if (reportIdMatch) {
