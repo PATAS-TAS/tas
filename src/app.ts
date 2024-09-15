@@ -669,7 +669,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
 
   log(`Starting GPT check for report ${report.reportId}`, 'debug');
 
-  const gptPrompt = `You are an AI specialized in detecting commercial spam in Telegram groups across any language. Analyze the provided message based on content, context and metadata. Respond with only:
+  const gptPrompt = `You are an AI specialized in detecting commercial spam in Telegram groups across any language. Analyze the provided message based on content, context, and metadata. Respond ONLY with:
   1 for spam
   0 for not spam
   
@@ -690,7 +690,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Sender names containing links or solicitations
   
   **Not Spam Indicators:**
-  - Normal interactions, casual conversations, jokes (e.g., "haha", "lol", "lmao")
+  - Normal interactions, casual conversations, jokes (e.g., "haha", "lol", "lmao", "😂")
   - Legitimate information sharing, news, educational content
   - Expressive language, including agressive profanity, even if it appears provocative at first glance or very offensive
   - Cultural content, local slang, region-specific discussions
@@ -711,45 +711,61 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Complaint counts (not solely relied upon)
   - 'Source' field used for context, not spam evaluation
   
-  **REMINDER:** Respond ONLY with 1 or 0. No explanations.
-  
-  Your analysis:`;
+  **Example Spam Message:**
+"""
+🔥 Limited time offer! Earn $1000 daily by joining our crypto scheme. Click here: https://t.me/crypto_bot 🔥
+"""
 
-  const mediaPrompt = `You are an AI specialized in detecting commercial spam in Telegram groups by analyzing images or media content. Evaluate based on visual elements, embedded text, and context within the group. Respond with only:
-  1 for spam
-  0 for not spam
-  
-  **High Priority Indicators:**
-  - Unrelated promotional content or advertisements
-  - Visuals with unrealistic financial promises or get-rich-quick schemes
-  - Sexually explicit or suggestive imagery inappropriate for the group
-  - Excessive branding or watermarks from unrelated sources
-  - Encouragement to join other groups, channels, or external websites
-  - Screenshots promoting specific services or products
-  
-  **Medium Priority Indicators:**
-  - Infographics or charts about cryptocurrency or financial opportunities
-  - Images with multiple QR codes or links
-  - Visuals out of place with the group's usual content
-  - Stock photos or generic imagery commonly used in spam
-  - Screenshots of promotional social media posts
-  
-  **Low Priority Indicators:**
-  - Text in a different language than the group's primary language
-  - Memes or humorous images potentially masking promotional content
-  - Significantly lower or higher quality than typical group content
-  
-  **Not Spam Indicators:**
-  - Legitimate news images or infographics related to the group's theme
-  - Personal photos or images consistent with normal interactions
-  - Memes, jokes, or satirical content, even if provocative
-  - Images with strong language or provocative content relevant to discussions
-  - Political or activist imagery, unless violating group rules
-  - Artistic or creative content, even if unconventional or shocking
-  
-  **REMINDER:** Respond ONLY with 1 or 0. No explanations.
-  
-  Your analysis:`;
+**Example Not Spam Message:**
+"""
+@username Thanks for sharing the update! Really insightful.
+"""
+
+**REMINDER:** Respond ONLY with 1 or 0. No explanations.
+
+Your analysis:`;
+
+const mediaPrompt = `You are an AI specialized in detecting commercial spam in Telegram groups by analyzing images or media content. Evaluate based on visual elements, embedded text, and context within the group. Respond ONLY with:
+1 for spam
+0 for not spam
+
+**High Priority Indicators:**
+- Unrelated promotional content or advertisements
+- Visuals with unrealistic financial promises or get-rich-quick schemes
+- Sexually explicit or suggestive imagery inappropriate for the group
+- Excessive branding or watermarks from unrelated sources
+- Encouragement to join other groups, channels, or external websites
+- Screenshots promoting specific services or products
+
+**Medium Priority Indicators:**
+- Infographics or charts about cryptocurrency or financial opportunities
+- Images with multiple QR codes or links
+- Visuals out of place with the group's usual content
+- Stock photos or generic imagery commonly used in spam
+- Screenshots of promotional social media posts
+
+**Low Priority Indicators:**
+- Text in a different language than the group's primary language
+- Memes or humorous images potentially masking promotional content
+- Significantly lower or higher quality than typical group content
+
+**Not Spam Indicators:**
+- Legitimate news images or infographics related to the group's theme
+- Personal photos or images consistent with normal interactions
+- Memes, jokes, or satirical content, even if provocative
+- Images with strong language or provocative content relevant to discussions
+- Political or activist imagery, unless violating group rules
+- Artistic or creative content, even if unconventional or shocking
+
+**Example Spam Image:**
+- An image promoting a fake investment scheme with excessive branding.
+
+**Example Not Spam Image:**
+- A meme related to the ongoing conversation in the group.
+
+**REMINDER:** Respond ONLY with 1 or 0. No explanations.
+
+Your analysis:`;
 
   const userPrompt = generateUserPrompt(report);
 
