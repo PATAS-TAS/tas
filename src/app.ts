@@ -1326,27 +1326,37 @@ async function getCachedReport(reportId: string): Promise<Report | null> {
 async function cleanupCache() {
   try {
     const now = Date.now();
-    let deletedCount = 0;
+    let deletedLRUCount = 0;
+    let deletedRedisCount = 0;
 
+    // Очистка LRU кэша
     for (const [key, report] of lruCache.entries()) {
       if (now - report.timestamp > 24 * 60 * 60 * 1000) { // 24 hours
         lruCache.delete(key);
-        deletedCount++;
+        deletedLRUCount++;
       }
     }
 
-    const redisKeys = await redis.keys('report:*');
-    const pipeline = redis.pipeline();
-    for (const key of redisKeys) {
-      const report = JSON.parse(await redis.get(key) || '{}') as Report;
-      if (now - report.timestamp > 24 * 60 * 60 * 1000) {
-        pipeline.del(key);
-        deletedCount++;
+    // Очистка Redis кэша
+    if (redis.status === 'ready') {
+      const redisKeys = await redis.keys('report:*');
+      const pipeline = redis.pipeline();
+      for (const key of redisKeys) {
+        const report = JSON.parse(await redis.get(key) || '{}') as Report;
+        if (now - report.timestamp > 24 * 60 * 60 * 1000) {
+          pipeline.del(key);
+          deletedRedisCount++;
+        }
       }
+      await pipeline.exec();
     }
-    await pipeline.exec();
 
-    log(`Cleaned up ${deletedCount} old reports from cache`, 'info');
+    log(`Cleaned up ${deletedLRUCount} old reports from LRU cache and ${deletedRedisCount} from Redis cache`, 'info');
+    
+    // Проверка размера кэша после очистки
+    const cacheSize = await getCacheSize();
+    log(`Cache size after cleanup: ${cacheSize.toFixed(2)} MB`, 'info');
+
   } catch (error) {
     logErr('cleanupCache', error);
   }
@@ -1355,32 +1365,30 @@ async function cleanupCache() {
 async function getCacheSize(): Promise<number> {
   try {
     let totalSize = 0;
+    let lruCount = 0;
+    let redisCount = 0;
 
     // Подсчет размера LRU кэша
     for (const [key, value] of lruCache.entries()) {
       totalSize += JSON.stringify(value).length + key.length;
+      lruCount++;
     }
 
-    // Подсчет размера Redis кэша только если соединение активно
+    // Подсчет размера Redis кэша
     if (redis.status === 'ready') {
       const redisKeys = await redis.keys('report:*');
       for (const key of redisKeys) {
-        try {
-          const size = await redis.memory('USAGE', key);
-          if (size !== null) {
-            totalSize += size;
-          } else {
-            log(`Unable to get memory usage for key: ${key}`, 'warn');
-          }
-        } catch (error) {
-          log(`Error getting memory usage for key ${key}: ${error instanceof Error ? error.message : String(error)}`, 'warn');
+        const size = await redis.memory('USAGE', key);
+        if (size !== null) {
+          totalSize += size;
+          redisCount++;
         }
       }
-    } else {
-      log('Redis connection is not ready, skipping Redis cache size calculation', 'warn');
     }
 
-    return totalSize / (1024 * 1024); // Convert to MB
+    const totalSizeMB = totalSize / (1024 * 1024);
+    log(`Cache size: ${totalSizeMB.toFixed(2)} MB (LRU: ${lruCount} items, Redis: ${redisCount} items)`, 'info');
+    return totalSizeMB;
   } catch (error) {
     if (isShuttingDown) {
       log('getCacheSize: Application is shutting down, cache size calculation skipped', 'debug');
@@ -1803,27 +1811,28 @@ function updateApiUsage(tokensUsed: number) {
 async function sendStatus() {
   log('Generating enhanced status report', 'debug');
   try {
-    let statusMessage = `
+    const statusParts = [];
+    
+    // Part 1: Basic Status
+    statusParts.push(`
 Current status:
-Auto mode: ${autoMode ? 'On (decisions and bot commands will be sent)' : 'Off (decisions and bot commands will not be sent)'}
+Auto mode: ${autoMode ? 'On' : 'Off'}
 Command delay: ${COMMAND_DELAY} ms
+`);
 
-Server Resources:
-`;
-
-    // Check server resources
+    // Part 2: Server Resources
     const totalMemory = os.totalmem();
     const freeMemory = os.freemem();
     const usedMemory = totalMemory - freeMemory;
-
-    statusMessage += `CPU Usage: ${os.loadavg()[0].toFixed(2)}%
+    statusParts.push(`
+Server Resources:
+CPU Usage: ${os.loadavg()[0].toFixed(2)}%
 Memory Usage: ${((usedMemory / totalMemory) * 100).toFixed(2)}%
 Free Memory: ${(freeMemory / 1024 / 1024 / 1024).toFixed(2)} GB
 Total Memory: ${(totalMemory / 1024 / 1024 / 1024).toFixed(2)} GB
+`);
 
-`;
-
-    // Check OpenAI API latency
+    // Part 3: OpenAI API Status
     const start = Date.now();
     try {
       const response = await openai.chat.completions.create({
@@ -1833,23 +1842,31 @@ Total Memory: ${(totalMemory / 1024 / 1024 / 1024).toFixed(2)} GB
       });
       const end = Date.now();
       updateApiUsage(response.usage?.total_tokens || 0);
-      statusMessage += `OpenAI API latency: ${end - start}ms
-
-`;
-    } catch (error) {
-      statusMessage += `Error checking OpenAI latency: ${error instanceof Error ? error.message : String(error)}
-
-`;
-    }
-
-    // Report API usage
-    statusMessage += `OpenAI API Usage:
+      statusParts.push(`
+OpenAI API Status:
+Latency: ${end - start}ms
 Requests made: ${apiRequestsCount}
 Tokens used: ${apiTokensUsed}
-`;
+`);
+    } catch (error) {
+      statusParts.push(`
+OpenAI API Status:
+Error checking latency: ${error instanceof Error ? error.message : String(error)}
+`);
+    }
 
-    log('Enhanced status report generated', 'debug');
-    await notify(statusMessage);
+    // Part 4: Cache Status
+    const cacheSize = await getCacheSize();
+    statusParts.push(`
+Cache Status:
+Total size: ${cacheSize.toFixed(2)} MB
+`);
+
+    // Send status parts
+    for (let i = 0; i < statusParts.length; i++) {
+      await notify(`Status Report (${i + 1}/${statusParts.length}):\n${statusParts[i]}`);
+    }
+
     log('Enhanced status report sent', 'debug');
   } catch (error) {
     logErr('Error generating enhanced status report', error);
