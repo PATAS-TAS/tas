@@ -648,8 +648,14 @@ async function processReport(report: Report): Promise<void> {
 async function fastCheck(report: Report): Promise<SpamDecision | null> {
   log(`Starting fast check for report ${report.reportId}`, 'debug');
   
-  const hasLinksOrContacts = report.messageContent.some(msg => 
-    msg.includes('http') || msg.includes('@') || /\+?\d{10,}/.test(msg)
+  // Регулярное выражение для обнаружения ссылок
+  const urlRegex = /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)/gi;
+  
+  // Регулярное выражение для обнаружения @юзернеймов
+  const usernameRegex = /@[a-zA-Z0-9_]{5,}/g;
+  
+  const hasLinksOrUsernames = report.messageContent.some(msg => 
+    urlRegex.test(msg) || usernameRegex.test(msg)
   );
   
   const dangerousFileExtensions = ['apk', 'exe', 'js', 'bat', 'cmd', 'vbs', 'ps1', 'jar', 'msi', 'com', 'scr', 'pif'];
@@ -666,13 +672,13 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
   
   const hasMediaWithComplaints = report.mediaHashes.length > 0 && report.complaintCount > 1;
 
-  if (hasLinksOrContacts || 
+  if (hasLinksOrUsernames || 
       hasDangerousFile || 
       hasInlineKeyboard || 
       hasStory || 
       hasMediaWithComplaints) {
     let reason = "Fast check:";
-    if (hasLinksOrContacts) reason += " Links/contacts detected";
+    if (hasLinksOrUsernames) reason += " Links or usernames detected";
     if (hasDangerousFile) reason += " Dangerous file detected";
     if (hasInlineKeyboard) reason += " Inline keyboard detected";
     if (hasStory) reason += " Story detected";
