@@ -807,7 +807,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
    - **Obfuscated Text and Symbols:**
      - Use of numbers or symbols to replace letters (e.g., "h3ll0" instead of "hello").
      - Excessive use of emojis or repetitive symbols (>10).
-     - Obfuscated or intentionally misspelled keywords related to spam.
+     - Obfuscated or intentionally misspelled keywords related to spam. (e.g., "TN", "TF", "CP", "SL", "ID")
    - **Urgency and Incentives:**
      - Phrases that create a sense of urgency (e.g., "hurry", "limited time offer").
      - Promises of bonuses, gifts, or free items as incentives.
@@ -841,6 +841,10 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
    - **Unsolicited Software or Apps:**
      - Promotions for apps or software, especially those claiming to generate income.
      - References to trading bots or automated income generation tools.
+   - **Repeating Structure:**
+     - Messages with a repeating structure, especially if each repetition includes numbers (like prices) and mentions or links.
+   - **Mixed Languages:**
+     - Use of multiple languages in a single message, especially when combining local languages with English terms related to finance or promotions.
 
 2. **Context-Based Indicators:**
    - **Sender Analysis:**
@@ -885,14 +889,21 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
      - Short informational updates about group activities or moderation.
      - Messages referring to previous conversations or ongoing discussions.
 
-**Instructions:**
-- Analyze the message based on the above spam and not spam indicators.
-- Consider the sender's name for any spam-related patterns (spam @usernames in sender's name are not considered spam).
-- Ensure multi-language support by recognizing spam indicators across different languages and scripts.
+**Instructions (continued):**
 - For very short messages (1-2 words), consider the full context, especially the source group name and sender information.
 - Be cautious with financial-related content, especially when combined with promises of easy money or high returns.
 - Pay extra attention to messages that combine multiple spam indicators, especially those related to social media promotion and urgency.
 - Be aware of cultural and linguistic differences that might influence the interpretation of potential spam content.
+- Look for patterns of repetitive structure, especially in messages with mixed languages or those containing numbers and channel mentions.
+- Consider the use of non-standard characters or unicode symbols that might be used to obfuscate spam content.
+- Be vigilant for messages that seem to be offering products or services without explicit pricing, as they may be attempts to move conversations to private channels.
+
+**Additional Considerations:**
+- Messages with a high density of numbers, especially if they appear to be prices or codes, should be scrutinized more closely.
+- Pay attention to messages that use a mix of languages, particularly if one language is used for numbers or product names and another for descriptive text.
+- Be wary of messages that contain multiple instances of the same channel or user mention, as this could indicate mass advertising.
+- Consider the overall coherence of the message. Legitimate messages usually have a clear purpose and context, while spam often lacks coherence or seems out of place.
+- Messages that use unusual formatting or spacing to bypass text filters should be treated with suspicion.
 
 **REMINDER:** 
 - Do not consider the 'Source' field as definitive; it is only for contextual information.
@@ -900,6 +911,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
 - High complaint counts alone do not automatically indicate spam. Always consider the full context and content of the message.
 - Short, casual greetings are typically not spam, but consider the full context, especially if the source or sender name suggests spam-related activities.
 - Messages promoting social media services, especially with promises of quick gains and urgent calls to action, are very likely to be spam.
+- Be cautious of messages that seem to be using code words or have an unusually structured format, as these might be attempts to evade spam detection.
 
 **Respond ONLY with number 1 (for spam) or 0 (for not spam), without any explanations.**
 **Your analysis:**
