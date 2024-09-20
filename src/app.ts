@@ -9,7 +9,7 @@ import bigInt from "big-integer";
 import winston from 'winston';
 import express from 'express';
 import dotenv from 'dotenv';
-import OpenAI, { APIError } from 'openai';
+import OpenAI from 'openai';
 import Redis from 'ioredis';
 import { tmpdir } from 'os';
 import path, { join } from 'path';
@@ -58,6 +58,8 @@ let consecutiveErrorCount = 0;
 const MAX_CONSECUTIVE_ERRORS = 5;
 const SUSPEND_DURATION = 5 * 60 * 1000; // 5 минут в миллисекундах
 let suspendedUntil: number | null = null;
+let redisBatch: Report[] = [];
+
 
 // Initialize Express app
 const app = express();
@@ -121,7 +123,10 @@ let checkNewReportsTimeout: NodeJS.Timeout | null = null;
 let undoRange: { start: string; end: string } | null = null;
 let isProcessingReports = false;
 let redisBatchTimeout: NodeJS.Timeout | null = null;
-let redisBatch: Report[] = [];
+let lastReportProcessTime: number = Date.now();
+let noReportsFoundCount: number = 0;
+let idleTimeout: NodeJS.Timeout | null = null;
+let idleResumeTimeout: NodeJS.Timeout | null = null;
 
 // Оптимизированная структура для буфера сообщений
 const messageBuffer = new Map<number | undefined, BufferItem>();
@@ -436,16 +441,54 @@ async function handleAdd(event: NewMessageEvent) {
       return;
     }
 
-    if (messageContent.includes("Hello there! Send /next to start processing reports.") ||
-        messageContent.includes("Send /next for a new spam report.")) {
+    if (messageContent.includes("No reports found.")) {
+      noReportsFoundCount++;
+      log(`Received "No reports found" message. Count: ${noReportsFoundCount}`, 'debug');
+      
+      if (idleTimeout) {
+        clearTimeout(idleTimeout);
+      }
+      
+      idleTimeout = setTimeout(async () => {
+        if (Date.now() - lastReportProcessTime > 180000) { // 3 minutes
+          log('No reports processed for 3 minutes. Entering idle mode.', 'warn');
+          await notify('Application entered idle mode due to lack of reports.');
+          
+          if (idleResumeTimeout) {
+            clearTimeout(idleResumeTimeout);
+          }
+          
+          idleResumeTimeout = setTimeout(async () => {
+            log('Resuming from idle mode', 'info');
+            await notify('Application resuming from idle mode.');
+            await sendToBot("/next");
+          }, 3600000); // 1 hour
+        }
+      }, 180000); // 3 minutes
+      
+      // Отправляем /next с задержкой в 0.5 секунды
+      setTimeout(() => sendToBot("/next"), 500);
+    } else if (messageContent.includes("Please select 😡 BAN or 😌 NO.")) {
+      // Сбрасываем счетчики и очищаем таймеры при получении нового отчета
+      noReportsFoundCount = 0;
+      lastReportProcessTime = Date.now();
+      
+      if (idleTimeout) {
+        clearTimeout(idleTimeout);
+        idleTimeout = null;
+      }
+      
+      if (idleResumeTimeout) {
+        clearTimeout(idleResumeTimeout);
+        idleResumeTimeout = null;
+      }
+    } else if (messageContent.includes("Hello there! Send /next to start processing reports.") ||
+               messageContent.includes("Send /next for a new spam report.")) {
       if (autoMode && !processingReports.has('undos')) {
         await sendToBot("/next 1");
       }
       consecutiveErrorCount = 0; // Сбрасываем счетчик ошибок при успешном сообщении
-    }
-    else if (messageContent.includes("Please select 😡 BAN or 😌 NO.") ||
-             messageContent.includes("Sorry, an error has occurred during your request. Please try again later.") ||
-             messageContent.includes("No reports found.")) {
+    } else if (messageContent.includes("Sorry, an error has occurred during your request. Please try again later.")) {
       consecutiveErrorCount++;
       log(`Consecutive error count: ${consecutiveErrorCount}`, 'warn');
       
@@ -462,6 +505,9 @@ async function handleAdd(event: NewMessageEvent) {
       await sendToBot("/undo");
       log('Sent /undo command due to error', 'debug');
     } else if (messageContent.includes("marked as spam 😡") || messageContent.includes("marked as not spam 😌")) {
+      // Обновляем время последней обработки отчета
+      lastReportProcessTime = Date.now();
+      
       const reportIdMatch = messageContent.match(/#r(\d+)/);
       if (reportIdMatch) {
         const reportId = reportIdMatch[1];
@@ -714,6 +760,9 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Mentions of financial incentives tied to minimal effort.
        - Suspicious percentage returns (e.g., "23.450% за сутки").
        - Claims of "free" services combined with financial or investment themes.
+       - Asks to write in private messages (e.g., "ЛС", "DM", "write + in private").
+       - Any part-time work, especially if it is not related to the topic of the group. (e.g. "нужны люди", "есть подработка").
+       - Offers to borrow money (e.g., "займу деньги", "помогу разобраться с долгами").
      - **Sexual Content:**
        - Explicit sexual content or coded invitations for sexual services (e.g., "available", "avaible", "свободна", "Скучно? Пиши").
        - Offers of adult or escort services, even if indirect (e.g. "проведем эту ночь вместе", "ищу мужчину").
@@ -1406,6 +1455,20 @@ async function getCachedReport(reportId: string): Promise<Report | null> {
   return null;
 }
 
+function cleanupLRUCache(): void {
+  const maxSize = MAX_CACHE_SIZE_MB * 1024 * 1024; // Переводим в байты
+  let currentSize = 0;
+
+  for (const [key, value] of lruCache.entries()) {
+    currentSize += JSON.stringify(value).length + key.length;
+    if (currentSize > maxSize) {
+      lruCache.delete(key);
+      log(`Removed old entry from LRU cache: ${key}`, 'debug');
+    }
+  }
+}
+
+
 async function cleanupCache() {
   try {
     const now = Date.now();
@@ -1767,6 +1830,14 @@ async function getRecentReportIds(): Promise<string[]> {
 async function addToRecentReportIds(reportId: string): Promise<void> {
   await redis.lpush('recent_report_ids', reportId);
   await redis.ltrim('recent_report_ids', 0, 9); // Keep only the 10 most recent report IDs
+}
+
+function initializeRedisBatch() {
+  if (redisBatchTimeout) {
+    clearTimeout(redisBatchTimeout);
+  }
+  redisBatchTimeout = setTimeout(() => saveRedisBatch().catch(error => logErr('saveRedisBatch', error)), REDIS_BATCH_INTERVAL);
+  log('Redis batch saving initialized', 'debug');
 }
 
 // Admin functions
@@ -2530,11 +2601,16 @@ async function main() {
 
     app.listen(PORT, () => log(`Server running on port ${PORT}`, 'info'));
 
+    // Инициализация пакетного сохранения в Redis
+    initializeRedisBatch();
+    log('Redis batch saving initialized', 'info');
+
     schedule.scheduleJob('0 */2 * * *', saveRedisToPostgres);
     schedule.scheduleJob('*/15 * * * *', checkSystemHealth);
     schedule.scheduleJob('*/5 * * * *', limitCacheSize);
     schedule.scheduleJob('0 2 * * *', cleanupOldData);
     schedule.scheduleJob('*/30 * * * *', cleanupCache);
+    schedule.scheduleJob('*/5 * * * *', cleanupLRUCache);
     log('Periodic tasks scheduled', 'info');
 
     log('Application initialized successfully', 'info');
