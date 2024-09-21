@@ -755,7 +755,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Any offers of services (even household ones).
        - Any invitations to join some activity.
      - **Sexual Content:**
-       - Explicit sexual content or coded invitations for sexual services (e.g., "available", "avaible", "свободна", "Скучно? Пиши").
+       - Explicit sexual content or coded invitations for sexual services (e.g., "Meet up", "встречусь", "available", "avaible", "свободна", "Скучно? Пиши").
        - Offers of adult or escort services, even if indirect (e.g. "проведем эту ночь вместе", "ищу мужчину").
        - Encrypted or coded messages resembling adult content sales (e.g., "CP", "TN", "GV", "TF", "SL", "ID")
        - If there is any type of media and attraction write in PM, (e.g. "message: 'hii dmm' media type: 'video'")
