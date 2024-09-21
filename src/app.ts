@@ -19,6 +19,7 @@ import { createHash } from 'crypto';
 import os from 'os';
 import { handleFineCommand } from './finetune.js';
 import fs from 'fs';
+import { Worker, isMainThread, parentPort } from 'worker_threads';
 
 dotenv.config();
 
@@ -2403,50 +2404,136 @@ async function checkSystemHealth() {
 
 // Cleanup function for old data
 async function cleanupOldData() {
-  const oneMonthAgo = new Date();
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+  if (isMainThread) {
+    // Создаем worker для выполнения очистки в фоновом режиме
+    const worker = new Worker(__filename);
+    
+    worker.on('message', (message) => {
+      log(message, 'info');
+    });
 
-  // Cleanup LRU Cache
-  for (const [key, report] of lruCache.entries()) {
-    if (new Date(report.timestamp) < oneMonthAgo) {
-      lruCache.delete(key);
-    }
+    worker.on('error', (error) => {
+      logErr('Error in cleanup worker', error);
+    });
+
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        log(`Cleanup worker stopped with exit code ${code}`, 'warn');
+      } else {
+        log('Cleanup worker completed successfully', 'info');
+      }
+    });
+
+    return;
   }
 
-  // Cleanup Redis
-  const keys = await redis.keys('report:*');
-  const pipeline = redis.pipeline();
-  for (const key of keys) {
-    const report = JSON.parse(await redis.get(key) || '{}') as Report;
-    if (new Date(report.timestamp) < oneMonthAgo) {
-      pipeline.del(key);
-    }
-  }
-  await pipeline.exec();
+  // Код, выполняемый в worker thread
+  const startTime = Date.now();
+  log('Starting cleanup of old data in background', 'info');
 
-  // Cleanup PostgreSQL
-  const client = await pool.connect();
   try {
-    await client.query('DELETE FROM reports WHERE created_at < $1', [oneMonthAgo]);
-    
-    const oldPartitions = await client.query(`
-      SELECT tablename 
-      FROM pg_tables 
-      WHERE schemaname = 'public' AND tablename LIKE 'reports_y%_m%'
-    `);
-    
-    for (const row of oldPartitions.rows) {
-      const partitionDate = new Date(row.tablename.substring(9, 13), parseInt(row.tablename.substring(15)) - 1);
-      if (partitionDate < oneMonthAgo) {
-        await client.query(`DROP TABLE IF EXISTS ${row.tablename}`);
-        log(`Dropped old partition: ${row.tablename}`, 'info');
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+    // Cleanup LRU Cache
+    let lruDeletedCount = 0;
+    for (const [key, report] of lruCache.entries()) {
+      if (new Date(report.timestamp) < oneMonthAgo) {
+        lruCache.delete(key);
+        lruDeletedCount++;
       }
     }
-  } finally {
-    client.release();
+    parentPort?.postMessage(`LRU Cache cleanup completed. Deleted ${lruDeletedCount} items.`);
+
+    // Cleanup Redis
+    if (redis.status === 'ready') {
+      const keys = await redis.keys('report:*');
+      const batchSize = 1000;
+      let redisDeletedCount = 0;
+
+      for (let i = 0; i < keys.length; i += batchSize) {
+        const batch = keys.slice(i, i + batchSize);
+        const pipeline = redis.pipeline();
+
+        for (const key of batch) {
+          const report = JSON.parse(await redis.get(key) || '{}') as Report;
+          if (new Date(report.timestamp) < oneMonthAgo) {
+            pipeline.del(key);
+            redisDeletedCount++;
+          }
+        }
+
+        await pipeline.exec();
+        parentPort?.postMessage(`Redis cleanup progress: ${i + batch.length}/${keys.length}`);
+
+        // Проверка времени выполнения
+        if (Date.now() - startTime > 10 * 60 * 1000) { // 10 минут
+          parentPort?.postMessage('Cleanup taking too long, will continue in next run');
+          break;
+        }
+      }
+      parentPort?.postMessage(`Redis cleanup completed. Deleted ${redisDeletedCount} items.`);
+    } else {
+      parentPort?.postMessage('Redis is not ready, skipping Redis cleanup');
+    }
+
+    // Cleanup PostgreSQL
+    const client = await pool.connect();
+    try {
+      // Удаление старых записей небольшими порциями
+      let totalDeleted = 0;
+      const batchSize = 10000;
+      while (true) {
+        const result = await client.query(
+          'WITH deleted AS (DELETE FROM reports WHERE created_at < $1 LIMIT $2 RETURNING *) SELECT COUNT(*) FROM deleted',
+          [oneMonthAgo, batchSize]
+        );
+        const deletedCount = parseInt(result.rows[0].count);
+        totalDeleted += deletedCount;
+        parentPort?.postMessage(`Postgres cleanup progress: deleted ${totalDeleted} records`);
+
+        if (deletedCount < batchSize) break;
+
+        // Проверка времени выполнения
+        if (Date.now() - startTime > 10 * 60 * 1000) { // 10 минут
+          parentPort?.postMessage('Postgres cleanup taking too long, will continue in next run');
+          break;
+        }
+      }
+      parentPort?.postMessage(`Postgres cleanup completed. Deleted ${totalDeleted} records.`);
+
+      // Удаление старых партиций
+      const oldPartitions = await client.query(`
+        SELECT tablename 
+        FROM pg_tables 
+        WHERE schemaname = 'public' AND tablename LIKE 'reports_y%_m%'
+      `);
+      
+      for (const row of oldPartitions.rows) {
+        const partitionDate = new Date(row.tablename.substring(9, 13), parseInt(row.tablename.substring(15)) - 1);
+        if (partitionDate < oneMonthAgo) {
+          await client.query(`DROP TABLE IF EXISTS ${row.tablename}`);
+          parentPort?.postMessage(`Dropped old partition: ${row.tablename}`);
+        }
+
+        // Проверка времени выполнения
+        if (Date.now() - startTime > 10 * 60 * 1000) { // 10 минут
+          parentPort?.postMessage('Partition cleanup taking too long, will continue in next run');
+          break;
+        }
+      }
+    } finally {
+      client.release();
+    }
+
+    const duration = (Date.now() - startTime) / 1000;
+    parentPort?.postMessage(`Cleanup of old data completed in ${duration.toFixed(2)} seconds`);
+  } catch (error) {
+    parentPort?.postMessage(`Error during cleanup of old data: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  log('Cleanup of old data completed', 'info');
+  // Завершаем worker thread
+  if (parentPort) parentPort.close();
 }
 
 // Graceful shutdown
@@ -2621,10 +2708,11 @@ async function main() {
 
     app.listen(PORT, () => log(`Server running on port ${PORT}`, 'info'));
 
+    // Планирование задач
     schedule.scheduleJob('0 */2 * * *', saveRedisToPostgres);
     schedule.scheduleJob('*/15 * * * *', checkSystemHealth);
     schedule.scheduleJob('*/5 * * * *', limitCacheSize);
-    schedule.scheduleJob('0 2 * * *', cleanupOldData);
+    schedule.scheduleJob('0 2 * * *', cleanupOldData); // Теперь запускает фоновый процесс
     schedule.scheduleJob('*/30 * * * *', cleanupCache);
     schedule.scheduleJob('*/5 * * * *', cleanupLRUCache);
 
