@@ -805,6 +805,10 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Requests for urgent action or personal information updates related to accounts or services.
        - Mentioning of system upgrades, maintenance, or service interruptions with specific time frames.
        - Use of official-sounding language combined with unprofessional formatting or excessive emoji use.
+     - **Pattern-Based Spam:**
+       - Messages consisting primarily of repetitive patterns of emojis or symbols.
+       - ASCII art or emoji art that forms shapes or patterns, especially when combined with promotional content.
+       - Messages that use a large number of Unicode characters to create visual patterns.
   
   2. **Context-Based Indicators:**
      - **Sender Analysis:**
@@ -840,7 +844,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Bot commands (starting with "/") unless misused.
        - Warnings about scams or spam.
        - Satirical, ironic, or controversial opinions without commercial intent.
-       - Phrases for test the spam filter (e.g., "Spam test [number phone]", "test the bot").
      - **Greetings and Updates:**
        - Greetings or short phrases in any language (e.g., "Hello", "Привет", "Yoo").
        - Short informational updates about group activities or moderation.
@@ -853,6 +856,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - For very short messages (1-2 words), consider the full context, especially the source group name and sender information.
   - Be cautious with financial-related content, especially when combined with promises of easy money or high returns.
   - Pay extra attention to messages that combine multiple spam indicators, especially those related to social media promotion and urgency.
+  - Be particularly vigilant of messages consisting primarily of repetitive emoji or symbol patterns, especially when combined with promotional content in the sender's name or other context.
   
   **REMINDER:** 
   - Do not consider the 'Source' field as definitive; it is only for contextual information.
@@ -860,6 +864,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - High complaint counts alone do not automatically indicate spam. Always consider the full context and content of the message.
   - Short, casual greetings are typically not spam, but consider the full context, especially if the source or sender name suggests spam-related activities.
   - Messages promoting social media services, especially with promises of quick gains and urgent calls to action, are very likely to be spam.
+  - Messages consisting primarily of repetitive emoji patterns or ASCII/emoji art, especially when combined with promotional content, are likely to be spam.
   
   **Respond ONLY with number 1 (for spam) or 0 (for not spam), without any explanations.**
   **Your analysis:**
