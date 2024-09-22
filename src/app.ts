@@ -440,7 +440,7 @@ async function handleAdd(event: NewMessageEvent) {
         }
       }, 180000);
       
-      setTimeout(() => sendToBot("/next 3"), 100);
+      setTimeout(() => sendToBot("/next"), 100);
     } else if (messageContent.includes("Please select 😡 BAN or 😌 NO.")) {
       noReportsFoundCount = 0;
       lastReportProcessTime = Date.now();
@@ -764,7 +764,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
      - **Sexual Content:**
        - Explicit sexual content or coded invitations for sexual services (e.g., "Meet up", "встречусь", "available", "avaible", "свободна", "Скучно? Пиши").
        - Offers of adult or escort services, even if indirect (e.g. "проведем эту ночь вместе", "ищу мужчину").
-       - Encrypted or coded messages resembling adult content sales (e.g., "CP", "TN", "GV", "TF", "SL", "ID")
+       - Encrypted or coded messages resembling adult content sales (e.g., "CP", "TN", "GV", "TF", "SL", "ID" - in any register)
        - If there is any type of media and attraction write in PM, (e.g. "message: 'hii dmm' media type: 'video'")
      - **Excessive Links and URLs:**
        - Presence of multiple links (more than 2) in a single message.
