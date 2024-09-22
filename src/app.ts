@@ -1509,29 +1509,38 @@ async function getCacheSize(): Promise<number> {
   try {
     let totalSize = 0;
 
+    // Размер LRU кэша
     for (const [key, value] of lruCache.entries()) {
       totalSize += JSON.stringify(value).length + key.length;
     }
 
+    // Оценка размера Redis кэша
     if (redis.status === 'ready') {
       const redisKeys = await redis.keys('report:*');
-      for (const key of redisKeys) {
+      const sampleSize = Math.min(100, redisKeys.length); // Берем выборку из 100 ключей или меньше
+      let sampleTotalSize = 0;
+
+      for (let i = 0; i < sampleSize; i++) {
+        const randomIndex = Math.floor(Math.random() * redisKeys.length);
+        const key = redisKeys[randomIndex];
         try {
-          const size = await redis.memory('USAGE', key);
-          if (size !== null) {
-            totalSize += size;
-          } else {
-            log(`Unable to get memory usage for key: ${key}`, 'warn');
+          const value = await redis.get(key);
+          if (value) {
+            sampleTotalSize += key.length + value.length;
           }
         } catch (error) {
-          log(`Error getting memory usage for key ${key}: ${error instanceof Error ? error.message : String(error)}`, 'warn');
+          log(`Error getting value for key ${key}: ${error instanceof Error ? error.message : String(error)}`, 'warn');
         }
       }
+
+      // Экстраполируем размер на весь кэш
+      const estimatedRedisSize = (sampleTotalSize / sampleSize) * redisKeys.length;
+      totalSize += estimatedRedisSize;
     } else {
       log('Redis connection is not ready, skipping Redis cache size calculation', 'warn');
     }
 
-    return totalSize / (1024 * 1024);
+    return totalSize / (1024 * 1024); // Возвращаем размер в МБ
   } catch (error) {
     if (isShuttingDown) {
       log('getCacheSize: Application is shutting down, cache size calculation skipped', 'debug');
@@ -1553,13 +1562,18 @@ async function limitCacheSize() {
     log(`Current cache size: ${currentSize.toFixed(2)} MB`, 'debug');
 
     if (currentSize > MAX_CACHE_SIZE_MB) {
-      const keysToRemove = Math.ceil((currentSize - MAX_CACHE_SIZE_MB) / 0.1);
-      const lruKeys = Array.from(lruCache.keys()).slice(0, keysToRemove);
+      const excessSize = currentSize - MAX_CACHE_SIZE_MB;
+      const removalRatio = excessSize / currentSize;
+
+      // Удаляем часть ключей из LRU кэша
+      const lruKeysToRemove = Math.ceil(lruCache.size * removalRatio);
+      const lruKeys = Array.from(lruCache.keys()).slice(0, lruKeysToRemove);
       lruKeys.forEach(key => lruCache.delete(key));
       
       if (redis.status === 'ready') {
         const redisKeys = await redis.keys('report:*');
-        const oldestKeys = redisKeys.sort().slice(0, keysToRemove);
+        const redisKeysToRemove = Math.ceil(redisKeys.length * removalRatio);
+        const oldestKeys = redisKeys.sort().slice(0, redisKeysToRemove);
         
         if (oldestKeys.length > 0) {
           await redis.del(...oldestKeys);
@@ -1568,6 +1582,8 @@ async function limitCacheSize() {
       } else {
         log('Redis connection is not ready, skipping Redis cache cleanup', 'warn');
       }
+
+      log(`Removed approximately ${excessSize.toFixed(2)} MB from cache`, 'info');
     }
   } catch (error) {
     logErr('limitCacheSize', error);
@@ -2269,10 +2285,16 @@ async function checkSystemHealth() {
       throw new Error('Telegram client is not connected');
     }
 
+    // Проверка обработки отчетов
+    const currentTime = Date.now();
+    if (currentTime - lastReportProcessTime > 10 * 60 * 1000) { // 10 минут
+      throw new Error('No reports processed in the last 10 minutes');
+    }
+
     log('System health check passed', 'info');
   } catch (error) {
     logErr('System health check failed', error);
-    await notify('System health check failed. Attempting restart...');
+    await notify(`System health check failed: ${error instanceof Error ? error.message : String(error)}. Attempting restart...`);
     process.exit(1);
   }
 }
