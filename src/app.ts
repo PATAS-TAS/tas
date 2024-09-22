@@ -809,6 +809,12 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Messages consisting primarily of repetitive patterns of emojis or symbols.
        - ASCII art or emoji art that forms shapes or patterns, especially when combined with promotional content.
        - Messages that use a large number of Unicode characters to create visual patterns.
+     - **Illegal Services and Documents:**
+       - Offers to provide or assist in obtaining official documents through unofficial means (e.g., driver's licenses, passports, certificates).
+       - Mentions of bypassing official procedures or databases (e.g., "с внесением в базу").
+       - Offers to help with exams, tests, or qualifications without proper study (e.g., "помощь на экзаменах").
+       - Any services that suggest circumventing legal processes or regulations.
+       - Offers related to fake or forged documents.
   
   2. **Context-Based Indicators:**
      - **Sender Analysis:**
@@ -870,7 +876,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   **Your analysis:**
   `;
 
-const mediaPrompt = `You are an AI specialized in detecting commercial spam in Telegram groups by analyzing images or media content. Evaluate based on visual elements, embedded text, and context within the group. Respond ONLY with:
+  const mediaPrompt = `You are an AI specialized in detecting commercial spam in Telegram groups by analyzing images or media content. Evaluate based on visual elements, embedded text, and context within the group. Respond ONLY with:
 1 for spam
 0 for not spam
 
@@ -881,6 +887,7 @@ const mediaPrompt = `You are an AI specialized in detecting commercial spam in T
 - Excessive branding or watermarks from unrelated sources
 - Encouragement to join other groups, channels, or external websites
 - Screenshots promoting specific services or products
+- Images of official documents or cards that could be related to illegal services
 
 **Medium Priority Indicators:**
 - Infographics or charts about cryptocurrency or financial opportunities
@@ -904,6 +911,7 @@ const mediaPrompt = `You are an AI specialized in detecting commercial spam in T
 
 **Example Spam Image:**
 - An image promoting a fake investment scheme with excessive branding.
+- A photo of a driver's license or passport with an offer to provide similar documents.
 
 **Example Not Spam Image:**
 - A meme related to the ongoing conversation in the group.
