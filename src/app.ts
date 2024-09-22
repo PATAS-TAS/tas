@@ -327,7 +327,7 @@ function getMessageHash(message: string, mediaHashes: string[]): string {
 async function handleCheck(event: NewMessageEvent) {
   const message = event.message;
   if (message instanceof Api.Message && event.isPrivate && botEntity && message.senderId?.toString() === botEntity.userId.toString()) {
-    log(`Received check message: ${message.message}`, 'debug');
+    log(`Received check message: ${message.message}`, 'info');
     
     const messageContent = message.message || '';
     const mediaHashes: string[] = [];
@@ -336,7 +336,7 @@ async function handleCheck(event: NewMessageEvent) {
     if (message.media) {
       const hash = await getHash(message.media);
       mediaHashes.push(hash);
-      log(`Media hash: ${hash}`, 'debug');
+      log(`Media hash: ${hash}`, 'info');
 
       if (message.media instanceof Api.MessageMediaPhoto || 
           (message.media instanceof Api.MessageMediaDocument && 
@@ -379,7 +379,7 @@ async function handleSys(event: NewMessageEvent) {
   ) {
     const messageContent = message.message || '';
     if (messageContent.match(sysRegex.source)) {
-      log(`Received system message: ${messageContent}`, 'debug');
+      log(`Received system message: ${messageContent}`, 'info');
 
       const sysInfo = parseSysMessage(messageContent);
       if (sysInfo.reportId) {
@@ -840,6 +840,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Bot commands (starting with "/") unless misused.
        - Warnings about scams or spam.
        - Satirical, ironic, or controversial opinions without commercial intent.
+       - Phrases for test the spam filter (e.g., "Spam test [number phone]", "test the bot").
      - **Greetings and Updates:**
        - Greetings or short phrases in any language (e.g., "Hello", "Привет", "Yoo").
        - Short informational updates about group activities or moderation.
@@ -1230,7 +1231,7 @@ async function sendDecision(report: Report, decision: SpamDecision): Promise<voi
 
   try {
     await sendToBot(decision.isSpam ? '😡 SPAM' : '😌 NO');
-    log(`Sent decision: ${decision.isSpam ? 'SPAM' : 'NOT SPAM'}`, 'debug');
+    log(`Sent decision: ${decision.isSpam ? 'SPAM' : 'NOT SPAM'}`, 'info');
     report.decisionSent = true;
     await saveCache(report);
     log(`Decision sent for report ${report.reportId}`, 'debug');
