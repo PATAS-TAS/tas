@@ -762,9 +762,9 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Mentions of "cases" or "portfolios" in profile descriptions.
        - Unsolicited offers to improve search rankings or "get to the top".
      - **Sexual Content:**
-       - Explicit sexual content or coded invitations for sexual services (e.g., "Meet up", "встречусь", "available", "avaible", "свободна", "Скучно? Пиши").
+       - Explicit sexual content or coded invitations for sexual services (e.g., "Open vcs", "Meet up", "встречусь", "available", "avaible", "свободна", "Скучно? Пиши").
        - Offers of adult or escort services, even if indirect (e.g. "проведем эту ночь вместе", "ищу мужчину").
-       - Encrypted or coded messages resembling adult content sales (e.g., "CP", "TN", "GV", "TF", "SL", "ID" - in any register)
+       - Encrypted or coded messages resembling adult content sales (e.g., "Ready vc,,s full face pc aja", "CP", "TN", "GV", "TF", "SL", "ID" - in any register)
        - If there is any type of media and attraction write in PM, (e.g. "message: 'hii dmm' media type: 'video'")
      - **Excessive Links and URLs:**
        - Presence of multiple links (more than 2) in a single message.
@@ -847,7 +847,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Local slang, cultural references, or region-specific discussions.
        - Political discussions or criticisms, even if controversial or using strong language.
      - **Functional Messages:**
-       - Bot commands (starting with "/") unless misused.
+       - Bot commands (starting with "/", e.g., "/start", "/help", /start@AdmiinLyLy_bot) - if they have less than 3 complaints.
        - Warnings about scams or spam.
        - Satirical, ironic, or controversial opinions without commercial intent.
      - **Greetings and Updates:**
