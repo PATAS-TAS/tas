@@ -587,7 +587,12 @@ async function processReport(report: Report): Promise<void> {
       decision = await fastCheck(report) || await gptCheck(report);
     }
 
-    await applyDecision(report, decision || { isSpam: 0, reason: "No spam detected", checkType: 'default' });
+    if (!decision) {
+      log(`All checks returned null for report ${report.reportId}. Marking as spam.`, 'warn');
+      decision = { isSpam: 1, reason: "All checks inconclusive, defaulting to spam", checkType: 'default' };
+    }
+
+    await applyDecision(report, decision);
 
   } catch (error) {
     logErr(`processReport for ${report.reportId}`, error);
@@ -603,6 +608,7 @@ async function processReport(report: Report): Promise<void> {
     isProcessingReports = false;
     
     if (processingReports.size === 0 && messageBuffer.size === 0 && autoMode) {
+      // Здесь может быть дополнительная логика, если необходимо
     }
   }
 }
@@ -772,7 +778,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Encouragement to use referral codes or links for purchases.
        - Affiliate marketing messages for any products or platforms.
      - **Sexual Content:**
-       - Explicit sexual content or coded invitations for sexual services. (e.g., "Open vcs", "Meet up", "встречусь", "available", "avaible", "свободна", "Скучно? Пиши")
+       - Explicit sexual content or coded invitations for sexual services. (e.g., "Open vcs", "Meet up", "Meet now", "встречусь", "available", "avaible", "свободна", "Скучно? Пиши")
        - Offers of adult or escort services, even if indirect. (e.g. "проведем эту ночь вместе", "ищу мужчину")
        - Encrypted or coded messages resembling adult content sales. (e.g. "Ready vcs", "CP", "TN", "GV", "TF", "SL", "ID" - in any register)
      - **Excessive Links and URLs:**
@@ -1237,8 +1243,19 @@ async function sendDecision(report: Report, decision: SpamDecision): Promise<voi
     await new Promise(resolve => setTimeout(resolve, COMMAND_DELAY));
   }
 
+  const startTime = Date.now();
+
   try {
     await sendToBot(decision.isSpam ? '😡 SPAM' : '😌 NO');
+    const endTime = Date.now();
+    const executionTime = endTime - startTime;
+
+    if (executionTime < 20) {
+      log(`Decision sent too quickly (${executionTime}ms) for report ${report.reportId}. Stopping application.`, 'error');
+      await notify(`Critical error: Decision sent too quickly (${executionTime}ms) for report ${report.reportId}. Application stopped.`);
+      process.exit(1);
+    }
+
     log(`Sent decision: ${decision.isSpam ? 'SPAM' : 'NOT SPAM'}`, 'info');
     report.decisionSent = true;
     await saveCache(report);
@@ -2296,7 +2313,12 @@ async function checkSystemHealth() {
 
     // Проверка обработки отчетов
     const currentTime = Date.now();
-    if (currentTime - lastReportProcessTime > 10 * 60 * 1000) { // 10 минут
+    const timeSinceLastReport = currentTime - lastReportProcessTime;
+    
+    if (timeSinceLastReport > 5 * 60 * 1000 && timeSinceLastReport <= 10 * 60 * 1000) { // 5-10 минут
+      log('No reports processed in the last 5 minutes. Sending "/next 7" command.', 'warn');
+      await sendToBot("/next 7");
+    } else if (timeSinceLastReport > 10 * 60 * 1000) { // более 10 минут
       throw new Error('No reports processed in the last 10 minutes');
     }
 
