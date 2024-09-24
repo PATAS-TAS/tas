@@ -276,6 +276,12 @@ async function sendToBot(message: string) {
 
   if (!botEntity) throw new Error('Bot entity not initialized');
 
+  // Проверяем, является ли команда /next или /undo
+  if ((message.startsWith('/next') || message === '/undo') && processingReports.size > 0) {
+    log(`Command ${message} not sent because there are reports being processed`, 'debug');
+    return;
+  }
+
   log(`Attempting to send message to bot: ${message}`, 'debug');
   const startTime = Date.now();
   try {
@@ -426,9 +432,28 @@ async function handleAdd(event: NewMessageEvent) {
       
       idleTimeout = setTimeout(async () => {
         if (Date.now() - lastReportProcessTime > 180000) {
-          await enterIdleMode();
+          log('No reports processed for 3 minutes. Entering idle mode.', 'warn');
+          autoMode = false;
+          await notify('Application entered idle mode due to lack of reports. Automatic mode is now OFF.');
+          
+          if (idleResumeTimeout) {
+            clearTimeout(idleResumeTimeout);
+          }
+          
+          idleResumeTimeout = setTimeout(async () => {
+            log('Resuming from idle mode', 'info');
+            autoMode = true;
+            await notify('Application resuming from idle mode. Automatic mode is now ON.');
+            if (autoMode && processingReports.size === 0) {
+              await sendToBot("/next 1");
+            }
+          }, 180000);
         }
       }, 180000);
+      
+      if (autoMode && processingReports.size === 0) {
+        setTimeout(() => sendToBot("/next"), 100);
+      }
     } else if (messageContent.includes("Please select 😡 BAN or 😌 NO.")) {
       noReportsFoundCount = 0;
       lastReportProcessTime = Date.now();
@@ -437,10 +462,15 @@ async function handleAdd(event: NewMessageEvent) {
         clearTimeout(idleTimeout);
         idleTimeout = null;
       }
+      
+      if (idleResumeTimeout) {
+        clearTimeout(idleResumeTimeout);
+        idleResumeTimeout = null;
+      }
     } else if (messageContent.includes("Hello there! Send /next to start processing reports.") ||
                messageContent.includes("Send /next for a new spam report.")) {
-      if (autoMode) {
-        await sendToBot("/next 5");
+      if (autoMode && processingReports.size === 0) {
+        await sendToBot("/next 1");
       }
       consecutiveErrorCount = 0;
     } else if (messageContent.includes("Sorry, an error has occurred during your request. Please try again later.")) {
@@ -455,8 +485,12 @@ async function handleAdd(event: NewMessageEvent) {
         return;
       }
 
-      await sendToBot("/undo");
-      log('Sent /undo command due to error', 'debug');
+      if (processingReports.size === 0) {
+        await sendToBot("/undo");
+        log('Sent /undo command due to error', 'debug');
+      } else {
+        log('Skipped sending /undo command due to ongoing report processing', 'debug');
+      }
     } else if (messageContent.includes("marked as spam 😡") || messageContent.includes("marked as not spam 😌")) {
       lastReportProcessTime = Date.now();
       
@@ -2311,24 +2345,6 @@ async function checkSystemHealth() {
     await notify(`System health check failed: ${error instanceof Error ? error.message : String(error)}. Attempting restart...`);
     process.exit(1);
   }
-}
-
-async function enterIdleMode() {
-  log('Entering idle mode due to lack of reports', 'warn');
-  await notify('Application entered idle mode due to lack of reports. Will restart in 30 minutes.');
-  
-  // Остановка автоматического режима
-  autoMode = false;
-  
-  // Очистка всех существующих таймеров
-  clearExistingTimers();
-  
-  // Планирование перезапуска через 30 минут
-  setTimeout(async () => {
-    log('Idle mode timeout reached. Restarting application.', 'info');
-    await notify('Idle mode timeout reached. Restarting application.');
-    await gracefulShutdown(true);
-  }, 30 * 60 * 1000); // 30 минут
 }
 
 // Cleanup function for old data
