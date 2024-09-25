@@ -39,7 +39,6 @@ const BOT_ACCESS_HASH = process.env.BOT_ACCESS_HASH!;
 const REDIS_BATCH_INTERVAL = 10 * 60 * 1000;
 const ENABLE_GPT_MEDIA_ANALYSIS = true;
 const SUSPEND_DURATION = 5 * 60 * 1000;
-const RESTART_WINDOW = 10 * 60 * 1000;
 const MAX_PROCESSING_TIME = 55000;
 const MAX_CONSECUTIVE_ERRORS = 5;
 const DB_SCHEMA_VERSION = '1.0';
@@ -47,7 +46,6 @@ const MAX_CACHE_SIZE_MB = 100;
 const GPT_RETRY_DELAY = 10000;
 const MAX_BUFFER_DELAY = 500;
 const MIN_BUFFER_DELAY = 100;
-const MAX_RESTARTS = 10;
 
 // Global variables
 let autoMode = true;
@@ -1329,7 +1327,7 @@ async function sendDecision(report: Report, decision: SpamDecision): Promise<voi
     await saveReportToRedis(report);
     log(`Decision sent for report ${report.reportId}`, 'debug');
 
-    resetRestartCounter();
+    // Удален вызов resetRestartCounter();
   } catch (error) {
     logErr(`Error sending decision for report ${report.reportId}`, error);
     throw error;
@@ -2094,7 +2092,8 @@ async function handleAdmin(event: NewMessageEvent) {
           /delay [value] - Set processing delay in milliseconds
           /reset - Clear Redis and LRU caches
           /db - Perform database operations and generate report
-          /cache - Get cache info and generate report
+          /redis - Get cache info and generate report
+          /lru - Get cache info and generate report)
           /fine - Generate fine-tuning data`);
       }
     } catch (error) {
@@ -2190,21 +2189,6 @@ async function handleDbCommand() {
   } catch (error) {
     logErr('handleDbCommand', error);
     await notify(`Error executing DB command: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleCacheCommand() {
-  try {
-    log('Handling /cache command', 'debug');
-    const cacheSize = await getCacheSize();
-    const cacheContent = await getCacheContent();
-    const csvFilePath = await generateCacheCsvReport(cacheContent);
-    await sendCsvToAdmin(csvFilePath);
-    log('Cache command executed successfully', 'debug');
-    await notify(`Cache size: ${cacheSize.toFixed(2)} MB. CSV report of cache content sent.`);
-  } catch (error) {
-    logErr('handleCacheCommand', error);
-    await notify(`Error executing cache command: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -2741,8 +2725,6 @@ async function gracefulShutdown(restart: boolean = false) {
   await notify(`Application has been ${restart ? 'restarted' : 'shut down'} gracefully.`);
 
   if (restart) {
-    // Здесь можно добавить логику для перезапуска приложения
-    // Например, использовать child_process для запуска нового экземпляра
     const { spawn } = require('child_process');
     spawn(process.argv[0], process.argv.slice(1), {
       detached: true,
@@ -2753,46 +2735,6 @@ async function gracefulShutdown(restart: boolean = false) {
   process.exit(restart ? 1 : 0);
 }
 
-async function resetRestartCounter(): Promise<void> {
-  try {
-    await redis.del('app_restart_count');
-    await redis.del('app_last_restart');
-    log('Restart counter reset after successful decision', 'debug');
-  } catch (error) {
-    logErr('resetRestartCounter', error);
-  }
-}
-
-async function manageRestarts(): Promise<{ shouldDelay: boolean; isAnomalous: boolean }> {
-  try {
-    const now = Date.now();
-    let restartCount = parseInt(await redis.get('app_restart_count') || '0');
-    const lastRestart = parseInt(await redis.get('app_last_restart') || '0');
-
-    if (now - lastRestart > RESTART_WINDOW) {
-      restartCount = 1;
-    } else {
-      restartCount++;
-    }
-
-    await redis.set('app_restart_count', restartCount.toString());
-    await redis.set('app_last_restart', now.toString());
-
-    const isAnomalous = restartCount >= 3;
-    const shouldDelay = restartCount > 1;
-
-    if (restartCount >= MAX_RESTARTS) {
-      log(`Maximum number of restarts (${MAX_RESTARTS}) reached. Exiting.`, 'error');
-      process.exit(1);
-    }
-
-    return { shouldDelay, isAnomalous };
-  } catch (error) {
-    logErr('manageRestarts', error);
-    return { shouldDelay: false, isAnomalous: false };
-  }
-}
-
 function clearExistingTimers() {
   if (redisBatchTimeout) clearTimeout(redisBatchTimeout);
 }
@@ -2801,16 +2743,6 @@ function clearExistingTimers() {
 async function main() {
   try {
     log('Starting application...', 'info');
-    const { shouldDelay, isAnomalous } = await manageRestarts();
-
-    if (shouldDelay) {
-      log('Application restarting. Delaying initialization for 4 minutes...', 'info');
-      await new Promise(resolve => setTimeout(resolve, 240000));
-    }
-
-    if (isAnomalous) {
-      await notify('Anomaly detected: Application has restarted 3 or more times in quick succession.');
-    }
 
     try {
       await initDB();
