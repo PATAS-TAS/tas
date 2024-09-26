@@ -851,7 +851,8 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Legitimate information sharing, news, or educational content without promotional elements.
      - **Expressive Language:**
        - Use of profanity, insults, or offensive language, even if aggressive or vulgar, unless combined with commercial content.
-       - Emotional expressions or outbursts without sales pitches. 
+       - Emotional expressions or outbursts without sales pitches.
+       - Use of nationalistic or racist language, even if it's not related to commercial content. Or if it's just a joke or symbols (e.g., "卍卍卍" (if this symbol not used more 200 times in a single message)).
      - **Cultural and Contextual Content:**
        - Local slang, cultural references, or region-specific discussions without commercial elements.
        - Political discussions or criticisms, even if controversial or using strong language.
@@ -860,12 +861,12 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Warnings about scams or spam.
        - Satirical, ironic, or controversial opinions without commercial intent.
      - **Greetings and Updates:**
-       - Simple greetings or short phrases in any language (e.g., "Hello", "Привет", "Yoo").
+       - Simple greetings or short phrases in any language (e.g., "Hello", "Привет", "Yoo", "ЫЭЫЭЫХЫХЫ").
        - Short informational updates about group activities or moderation.
        - Messages referring to previous conversations or ongoing discussions without sales elements.
      - **Cryptocurrency and Financial Discussions:**
        - Legitimate discussions about cryptocurrency prices, market trends, or trading strategies without promotional content.
-       - Sharing of cryptocurrency wallet addresses without accompanying promotional or sales messages.
+       - Sharing of cryptocurrency wallet addresses without accompanying promotional or sales messages. (e.g. "0x123456789...", "UQA-aBE6_uNKRUCXdsh...")
      - **Numerical Formats:**
        - Standard numerical formats like "$500,000.00" are not inherently spam unless accompanied by suspicious claims or offers.
   
