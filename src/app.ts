@@ -46,6 +46,7 @@ const MAX_CACHE_SIZE_MB = 100;
 const GPT_RETRY_DELAY = 10000;
 const MAX_BUFFER_DELAY = 500;
 const MIN_BUFFER_DELAY = 100;
+const MAX_DUPLICATE_COUNT = 1000; // Maximum value for the duplicate counter
 
 // Global variables
 let autoMode = true;
@@ -70,7 +71,7 @@ let redisBatchTimeout: NodeJS.Timeout | null = null;
 let idleResumeTimeout: NodeJS.Timeout | null = null;
 let undoRange: { start: string; end: string } | null = null;
 let lastCommandSentTime = 0;
-
+let isProcessingScheduled = false;
 
 // Initialize Express app
 const app = express();
@@ -116,7 +117,7 @@ const logger = winston.createLogger({
 interface CachedDecision {
   isSpam: number;
   reason: string;
-  checkType: 'default' | 'fast' | 'gpt' | 'gpt4';
+  checkType: 'default' | 'fast' | 'gpt' | 'gpt4' | 'manual';
   reportId: string;
   timestamp: number;
 }
@@ -129,19 +130,16 @@ const lruCache = new LRUCache<string, CachedDecision>({
 });
 
 // Optimized structure for message buffer
-const messageBuffer = new Map<number | undefined, BufferItem>();
-const sysMessages = new Set<BufferItem>();
+const messageBuffer: BufferItem[] = [];
 
 // Interfaces and types
 interface BufferItem {
   type: 'check' | 'sys';
-  content: string;
+  content: string[];
   reportId?: string;
   timestamp: number;
   mediaHashes?: string[];
-  replyTo?: number;
   mediaKey?: string | null;
-  expirationTime: number;
 }
 
 interface Report {
@@ -156,14 +154,14 @@ interface Report {
   timestamp: number;
   decisionSent?: boolean;
   isOpen?: boolean;
-  replyTo?: number;
-  checkType?: 'default' | 'fast' | 'gpt' | 'gpt4';
+  checkType?: 'default' | 'fast' | 'gpt' | 'gpt4' | 'manual';
+  duplicateCount?: number;
 }
 
 type SpamDecision = {
   isSpam: number;
   reason: string;
-  checkType: 'fast' | 'gpt' | 'gpt4' | 'default';
+  checkType: 'default' | 'fast' | 'gpt' | 'gpt4' | 'manual';
 };
 
 // Regular expressions
@@ -358,7 +356,6 @@ async function handleCheck(event: NewMessageEvent) {
       if (message.media instanceof Api.MessageMediaPhoto || 
           (message.media instanceof Api.MessageMediaDocument && 
            message.media.document instanceof Api.Document)) {
-        const captionText = message.message;
         mediaKey = `media:${message.media instanceof Api.MessageMediaPhoto ? message.media.photo?.id : message.media.document?.id}`;
         log(`Media key generated: ${mediaKey}`, 'debug');
       }
@@ -372,16 +369,14 @@ async function handleCheck(event: NewMessageEvent) {
 
     const bufferItem: BufferItem = {
       type: 'check',
-      content: preprocess(messageContent),
+      content: [preprocess(messageContent)],
       timestamp: Date.now(),
       mediaHashes,
-      replyTo: message.replyTo?.replyToMsgId,
-      mediaKey: mediaKey || undefined,
-      expirationTime: Date.now() + 5 * 60 * 1000 // 5 minutes expiration
+      mediaKey: mediaKey || undefined
     };
 
-    messageBuffer.set(bufferItem.replyTo, bufferItem);
-    log(`Message added to buffer. Content: ${bufferItem.content}`, 'debug');
+    messageBuffer.push(bufferItem);
+    log(`Check message added to buffer. Content: ${messageContent}`, 'debug');
     scheduleProcessing();
   }
 }
@@ -400,15 +395,15 @@ async function handleSys(event: NewMessageEvent) {
 
       const sysInfo = parseSysMessage(messageContent);
       if (sysInfo.reportId) {
-        const sysItem: BufferItem = {
+        const bufferItem: BufferItem = {
           type: 'sys',
-          content: messageContent,
+          content: [messageContent],
           reportId: sysInfo.reportId,
-          timestamp: Date.now(),
-          replyTo: message.replyTo?.replyToMsgId,
-          expirationTime: Date.now() + 5 * 60 * 1000 // 5 minutes expiration
+          timestamp: Date.now()
         };
-        sysMessages.add(sysItem);
+
+        messageBuffer.push(bufferItem);
+        log(`System message added to buffer. ReportId: ${sysInfo.reportId}`, 'debug');
         scheduleProcessing();
       } else {
         log('Received system message without reportId', 'error');
@@ -515,110 +510,70 @@ async function handleAdd(event: NewMessageEvent) {
   }
 }
 
-async function undoRecentReports() {
-  const MAX_UNDO_ATTEMPTS = 100;
-  let undoCount = 0;
-  const recentReportIds = await getRecentReportIds(MAX_UNDO_ATTEMPTS);
+async function processBuffer() {
+  log('Processing buffer', 'debug');
+  
+  const currentTime = Date.now();
+  const timeThreshold = 30; // 30 milliseconds threshold
 
-  for (const reportId of recentReportIds) {
-    log(`Attempting to undo report ${reportId}`, 'debug');
-    await sendToBot(`/undo${reportId}`);
-    const undoResponse = await waitForUndoResponse(reportId);
+  // Группируем сообщения по времени
+  const groupedMessages = messageBuffer.reduce((acc, item) => {
+    const group = acc.find(g => Math.abs(g[0].timestamp - item.timestamp) <= timeThreshold);
+    if (group) {
+      group.push(item);
+    } else {
+      acc.push([item]);
+    }
+    return acc;
+  }, [] as BufferItem[][]);
 
-    if (undoResponse === 'success') {
-      log(`Successfully undone report ${reportId}`, 'debug');
-      const report = await getReportFromCaches(reportId);
-      if (report) {
-        await processReport(report);
-      } else {
-        log(`Failed to retrieve report ${reportId} from caches`, 'warn');
+  for (const group of groupedMessages) {
+    const checkMsg = group.find(item => item.type === 'check');
+    const sysMsg = group.find(item => item.type === 'sys');
+
+    if (sysMsg && sysMsg.reportId) {
+      try {
+        if (checkMsg) {
+          // Обработка полного отчета (check + sys)
+          await processReport({
+            reportId: sysMsg.reportId,
+            messageContent: checkMsg.content,
+            mediaHashes: checkMsg.mediaHashes || [],
+            complaintCount: 0,
+            source: '',
+            sender: '',
+            isSpam: -1,
+            timestamp: checkMsg.timestamp,
+            ...parseSysMessage(sysMsg.content[0])
+          });
+          log(`Processed full report ${sysMsg.reportId} from buffer`, 'debug');
+        } else {
+          // Обработка только sys сообщения
+          await processSysMsgOnly({
+            type: 'sys',
+            content: sysMsg.content,
+            reportId: sysMsg.reportId,
+            timestamp: sysMsg.timestamp
+          });
+          log(`Processed sys-only report ${sysMsg.reportId} from buffer`, 'debug');
+        }
+      } catch (error) {
+        logErr(`Error processing report ${sysMsg.reportId} from buffer`, error);
       }
-      return; // Exit the function if undo is successful and processing continues
-    } else if (undoResponse === 'toolate') {
-      log(`Undo action no longer possible for report ${reportId}`, 'warn');
-    }
-
-    undoCount++;
-    if (undoCount >= MAX_UNDO_ATTEMPTS) {
-      log(`Reached maximum undo attempts (${MAX_UNDO_ATTEMPTS}). Stopping bot for 30 minutes.`, 'warn');
-      await stopBotTemporarily();
-      return;
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second between undo attempts
-  }
-}
-
-async function stopBotTemporarily() {
-  autoMode = false;
-  await notify('Bot stopped due to reaching maximum undo attempts. Will restart in 30 minutes.');
-
-  // Schedule restart after 30 minutes
-  const restartTime = new Date(Date.now() + 30 * 60 * 1000);
-  schedule.scheduleJob(restartTime, async () => {
-    log('Restarting application after 30 minutes pause', 'info');
-    await gracefulShutdown(true);
-  });
-}
-
-function isReportInUndoRange(reportId: string): boolean {
-  if (!undoRange) return false;
-  const id = BigInt(reportId);
-  return id >= BigInt(undoRange.start) && id <= BigInt(undoRange.end);
-}
-
-async function processBuffer(currentTimestamp: number) {
-  log(`Processing buffer at timestamp ${currentTimestamp}`, 'debug');
-  
-  const startTime = Date.now();
-  
-  for (const sysMsg of sysMessages) {
-    if (sysMsg.timestamp > currentTimestamp) continue;
-    
-    let matchingCheckMsg = messageBuffer.get(sysMsg.replyTo);
-    
-    if (!matchingCheckMsg) {
-      matchingCheckMsg = Array.from(messageBuffer.values()).find(checkMsg => 
-        Math.abs(checkMsg.timestamp - sysMsg.timestamp) < 100
-      );
-    }
-
-    if (matchingCheckMsg && sysMsg.reportId) {
-      processReport({
-        reportId: sysMsg.reportId,
-        messageContent: [matchingCheckMsg.content],
-        mediaHashes: matchingCheckMsg.mediaHashes || [],
-        complaintCount: 0,
-        source: '',
-        sender: '',
-        isSpam: -1,
-        timestamp: sysMsg.timestamp,
-        replyTo: matchingCheckMsg.replyTo,
-        ...parseSysMessage(sysMsg.content)
-      }).catch(error => logErr(`Error processing report ${sysMsg.reportId}`, error));
-      
-      messageBuffer.delete(matchingCheckMsg.replyTo);
-    } else if (sysMsg.reportId) {
-      await processSysMsgOnly(sysMsg);
-    }
-    
-    sysMessages.delete(sysMsg);
-  }
-
-  for (const [replyTo, msg] of messageBuffer) {
-    if (msg.timestamp <= currentTimestamp || Date.now() > msg.expirationTime) {
-      messageBuffer.delete(replyTo);
+    } else if (checkMsg) {
+      log(`Orphaned check message in buffer, timestamp: ${checkMsg.timestamp}`, 'warn');
     }
   }
 
-  const processingTime = Date.now() - startTime;
-  updateBufferDelay(processingTime);
+  // Очищаем обработанные сообщения из буфера
+  messageBuffer.length = 0;
 }
 
 async function processReport(report: Report): Promise<void> {
   log(`Processing report ${report.reportId}`, 'debug');
   
   isProcessingReports = true;
+  log(`Started processing report ${report.reportId}`, 'debug');
   
   if (processingReports.has(report.reportId)) {
     const processingStartTime = await redis.get(`processing_start:${report.reportId}`);
@@ -669,6 +624,9 @@ async function processReport(report: Report): Promise<void> {
     await applyDecision(report, decision);
     await saveCache(report, decision);
 
+    // Increment the duplicate count
+    await incrementDuplicateCount(report);
+
   } catch (error) {
     logErr(`processReport for ${report.reportId}`, error);
   } finally {
@@ -681,10 +639,8 @@ async function processReport(report: Report): Promise<void> {
       redis.del(`processing_start:${report.reportId}`).catch(error => logErr('redis.del', error));
     }
     isProcessingReports = false;
+    log(`Finished processing report ${report.reportId}`, 'debug');
     
-    if (processingReports.size === 0 && messageBuffer.size === 0 && autoMode) {
-      // Здесь может быть дополнительная логика, если необходимо
-    }
   }
 }
 
@@ -716,7 +672,7 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
   
   const hasStory = report.mediaHashes.some(hash => hash.startsWith('story:'));
   
-  const hasMediaWithComplaints = report.mediaHashes.length > 0 && report.complaintCount > 1;
+  const hasMediaWithComplaints = report.mediaHashes.length > 0 && report.complaintCount > 2;
 
   const repeatedContent = report.messageContent.some(msg => {
     const words = msg.split(/\s+/);
@@ -743,7 +699,7 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
     if (hasDangerousFile) reason += " Dangerous file detected";
     if (hasInlineKeyboard) reason += " Inline keyboard detected";
     if (hasStory) reason += " Story detected";
-    if (hasMediaWithComplaints) reason += " Media with >1 complaints";
+    if (hasMediaWithComplaints) reason += " Media with >2 complaints";
     if (excessiveEmoji) reason += " Excessive use of emoji";
     if (repeatedContent) reason += " Repeated content detected";
     if (hasSuspiciousKeywords) reason += " Suspicious keywords detected";
@@ -751,7 +707,7 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
     log(`Fast check detected spam for report ${report.reportId}: ${reason}`, 'debug');
     return { 
       isSpam: 1, 
-      reason: reason.trim(), 
+      reason: reason.trim(),
       checkType: 'fast'
     };
   }
@@ -767,30 +723,6 @@ function getFileTypeFromHash(hash: string): string {
     return extensionMatch ? extensionMatch[1] : '';
   }
   return mediaType;
-}
-
-async function getMediaFromMessage(messageId: number): Promise<Api.TypeMessageMedia | null> {
-  try {
-    const message = await retry(async () => {
-      const messages = await client.getMessages(botEntity!, { ids: [messageId] });
-      return messages[0];
-    }, 3, 1000);
-
-    if (message && message instanceof Api.Message && message.media) {
-      log(`Retrieved media from message ${messageId}`, 'debug');
-      return message.media
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('FLOOD_WAIT')) {
-      const waitTime = parseInt(error.message.split('_')[2]) || 30;
-      log(`FLOOD_WAIT encountered. Waiting for ${waitTime} seconds before retrying.`, 'warn');
-      await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
-      return getMediaFromMessage(messageId);
-    }
-    logErr('getMediaFromMessage', error);
-  }
-  log(`No media found for message ${messageId}`, 'debug');
-  return null;
 }
 
 async function gptCheck(report: Report): Promise<SpamDecision | null> {
@@ -817,7 +749,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Phishing attempts, fake giveaways, or unrealistic financial promises.
        - Mentions of cryptocurrencies, airdrops, or similar financial schemes.
        - Offers of work-from-home or remote job opportunities with high earnings potential.
-       - Specific earnings claims (e.g., "earn $1000 daily").
+       - Specific earnings claims (e.g., "earn $1000 daily", "100$ в день").
        - Mentions of financial incentives tied to minimal effort.
        - Suspicious percentage returns (e.g., "23.450% за сутки").
        - Claims of "free" services combined with financial or investment themes.
@@ -846,7 +778,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
      - **Sexual Content:**
        - Explicit sexual content or coded invitations for sexual services. (e.g., "Open vcs", "Meet up", "Meet now", "встречусь", "available", "Content available", "avaible", "свободна", "Скучно? Пиши")
        - Offers of adult or escort services, even if indirect. (e.g. "проведем эту ночь вместе", "ищу мужчину")
-       - Encrypted or coded messages resembling adult content sales. (e.g. "Ready vcs", "CP", "TN", "GV", "TF", "SL", "ID" - in any register)
+       - Encrypted or coded messages resembling adult content sales. (e.g. "Ready vcs", "CP", "TN", "GV", "TF", "SL", "ID", "SVC" - in any register)
      - **Excessive Links and URLs:**
        - Presence of multiple links (more than 2) in a single message.
        - Use of URL shorteners or suspicious domains.
@@ -884,6 +816,14 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Offers to provide or assist in obtaining official documents through unofficial means.
        - Mentions of bypassing official procedures or databases for commercial gain.
        - Offers related to fake or forged documents, especially if tied to financial transactions.
+     - **Job Offers and Temporary Work:**
+       - Any messages offering temporary work, part-time jobs, or quick earning opportunities, regardless of the group's theme.
+       - Requests for help with tasks like loading/unloading, delivery, or any other work promising payment.
+     - **Repetitive Symbols:**
+       - Messages containing repeated patterns of symbols or emojis, such as "🔤🔤🔤🔤🔤".
+     - **Short Messages with Spam Indicators:**
+       - Brief messages like "Пиши", "Готов?", "Интересно?", especially when followed by emojis, should be considered potential spam if the context is suspicious.
+       - Short phrases that imply availability for services, especially in dating or adult-themed groups.
   
   2. **Context-Based Indicators:**
      - **Sender Analysis:**
@@ -891,6 +831,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - For very short messages, pay extra attention to the sender's name for commercial indicators.
      - **Complaint Counts:**
        - Messages with an extremely high number of complaints (e.g., >50) should be closely evaluated, but not automatically classified as spam.
+       - Messages with more than 2 complaints and containing phone numbers are likely spam.
        - Consider the overall context and content of the message, regardless of complaint count.
      - **Message Length:**
        - Very short messages (less than 5 words) without spam indicators are typically not spam.
@@ -922,6 +863,11 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Simple greetings or short phrases in any language (e.g., "Hello", "Привет", "Yoo").
        - Short informational updates about group activities or moderation.
        - Messages referring to previous conversations or ongoing discussions without sales elements.
+     - **Cryptocurrency and Financial Discussions:**
+       - Legitimate discussions about cryptocurrency prices, market trends, or trading strategies without promotional content.
+       - Sharing of cryptocurrency wallet addresses without accompanying promotional or sales messages.
+     - **Numerical Formats:**
+       - Standard numerical formats like "$500,000.00" are not inherently spam unless accompanied by suspicious claims or offers.
   
   **Instructions:**
   - Analyze the message based on the above spam and not spam indicators.
@@ -930,6 +876,11 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - For very short messages (1-2 words), consider the full context, especially the source group name and sender information.
   - Be particularly vigilant of messages that combine multiple spam indicators, especially those related to product sales and promotions.
   - ANY message primarily focused on selling goods or services should be classified as spam, regardless of the product's nature or the group's theme.
+  - Messages offering temporary work or quick earning opportunities should always be classified as spam, regardless of the group's theme.
+  - Cryptocurrency wallet addresses alone are not spam, but be cautious if they're accompanied by promotional content.
+  - Bot commands and slash (/) messages are generally not spam unless they contain explicit promotional content.
+  - Messages with repetitive symbol patterns like "🔤🔤🔤🔤🔤" should be considered spam.
+  - Short, vague messages that could be interpreted as invitations for commercial or adult services should be carefully evaluated in context.
   
   **REMINDER:** 
   - Do not consider the 'Source' field as definitive; it is only for contextual information.
@@ -937,6 +888,9 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - High complaint counts alone do not automatically indicate spam. Always consider the full context and content of the message.
   - Short, casual greetings are typically not spam, but consider the full context, especially if the source or sender name suggests spam-related activities.
   - Messages promoting social media services or any kind of product, especially with promises of quick gains and urgent calls to action, are very likely to be spam.
+  - Legitimate discussions about cryptocurrencies or sharing of wallet addresses without promotional content are not spam.
+  - Any offers of part-time work, temporary jobs, or requests for paid help should be classified as spam.
+  - Be cautious with short, ambiguous messages that could be interpreted as solicitations, especially in groups with adult or dating themes.
   
   **Respond ONLY with number 1 (for spam) or 0 (for not spam), without any explanations.**
   **Your analysis:**
@@ -1131,7 +1085,7 @@ async function processSysMsgOnly(sysMsg: BufferItem): Promise<void> {
     sender: '',
     isSpam: -1,
     timestamp: sysMsg.timestamp,
-    ...parseSysMessage(sysMsg.content)
+    ...parseSysMessage(sysMsg.content[0])
   };
 
   const gptPrompt = `Analyze the following Telegram message metadata for potential spam, even without the actual message content:
@@ -1198,6 +1152,13 @@ async function isGPT4VisionCompatible(mediaHash: string): Promise<boolean> {
 }
 
 async function getMediaFromRedis(mediaKey: string): Promise<Buffer | null> {
+  // Проверяем, существует ли ключ в Redis, прежде чем пытаться получить данные
+  const exists = await redis.exists(mediaKey);
+  if (!exists) {
+    log(`No media found in Redis for key: ${mediaKey}`, 'debug');
+    return null;
+  }
+
   try {
     const mediaBase64 = await redis.get(mediaKey);
     if (mediaBase64) {
@@ -1207,7 +1168,6 @@ async function getMediaFromRedis(mediaKey: string): Promise<Buffer | null> {
   } catch (error) {
     logErr('getMediaFromRedis', error);
   }
-  log(`No media found in Redis for key: ${mediaKey}`, 'debug');
   return null;
 }
 
@@ -1223,16 +1183,14 @@ function preprocess(message: string): string {
   return processedMessage;
 }
 
-function updateBufferDelay(processingTime: number) {
-  if (processingTime < 100) {
-    currentBufferDelay = Math.max(currentBufferDelay - 50, MIN_BUFFER_DELAY);
-  } else if (processingTime > 200) {
-    currentBufferDelay = Math.min(currentBufferDelay + 50, MAX_BUFFER_DELAY);
-  }
-}
-
 function scheduleProcessing() {
-  setTimeout(() => processBuffer(Date.now()), currentBufferDelay);
+  if (!isProcessingScheduled) {
+    isProcessingScheduled = true;
+    setImmediate(() => {
+      processBuffer();
+      isProcessingScheduled = false;
+    });
+  }
 }
 
 function parseSysMessage(message: string): Partial<Report> {
@@ -1296,6 +1254,10 @@ async function applyDecision(report: Report, decision: SpamDecision): Promise<vo
   
   await saveReportToRedis(updatedReport);
   log(`Updated report saved to Redis: ${report.reportId}`, 'debug');
+
+  // Очищаем буфер после отправки решения
+  messageBuffer.length = 0;
+  log('Buffer cleared after decision sent', 'debug');
 }
 
 async function sendDecision(report: Report, decision: SpamDecision): Promise<void> {
@@ -1326,8 +1288,6 @@ async function sendDecision(report: Report, decision: SpamDecision): Promise<voi
     report.decisionSent = true;
     await saveReportToRedis(report);
     log(`Decision sent for report ${report.reportId}`, 'debug');
-
-    // Удален вызов resetRestartCounter();
   } catch (error) {
     logErr(`Error sending decision for report ${report.reportId}`, error);
     throw error;
@@ -1396,9 +1356,21 @@ async function checkCache(report: Report): Promise<SpamDecision | null> {
 
   try {
     const messageHash = getMessageHash(report.messageContent, report.sender);
-    const cachedDecision = lruCache.get(messageHash);
+    let cachedDecision = lruCache.get(messageHash);
+    
+    // If not found in LRU cache and message content is long enough, try Redis cache
+    if (!cachedDecision && report.messageContent.join('').length > 500) {
+      const redisKey = `cache:${messageHash}`;
+      const redisDecision = await redis.get(redisKey);
+      if (redisDecision) {
+        cachedDecision = JSON.parse(redisDecision) as CachedDecision;
+        // Add to LRU cache for faster future access
+        lruCache.set(messageHash, cachedDecision);
+      }
+    }
+
     if (cachedDecision) {
-      log(`LRU cache hit for report ${report.reportId}`, 'debug');
+      log(`Cache hit for report ${report.reportId}`, 'debug');
       return {
         isSpam: cachedDecision.isSpam,
         reason: cachedDecision.reason,
@@ -1411,6 +1383,41 @@ async function checkCache(report: Report): Promise<SpamDecision | null> {
     }
   }
   return null;
+}
+
+async function incrementDuplicateCount(report: Report): Promise<void> {
+  const messageHash = getMessageHash(report.messageContent, report.sender);
+  const redisKey = `duplicate:${messageHash}`;
+  
+  try {
+    const count = await redis.incr(redisKey);
+    if (count > MAX_DUPLICATE_COUNT) {
+      await redis.set(redisKey, MAX_DUPLICATE_COUNT);
+    }
+    log(`Incremented duplicate count for report ${report.reportId} to ${count}`, 'debug');
+    
+    // Sync with PostgreSQL periodically
+    if (count % 10 === 0) {
+      await syncDuplicateCountWithPostgres(messageHash, count);
+    }
+  } catch (error) {
+    logErr(`Error incrementing duplicate count for report ${report.reportId}`, error);
+  }
+}
+
+async function syncDuplicateCountWithPostgres(messageHash: string, count: number): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      'INSERT INTO duplicate_counts (message_hash, count) VALUES ($1, $2) ON CONFLICT (message_hash) DO UPDATE SET count = $2',
+      [messageHash, count]
+    );
+    log(`Synced duplicate count for message hash ${messageHash} with PostgreSQL`, 'debug');
+  } catch (error) {
+    logErr(`Error syncing duplicate count with PostgreSQL for message hash ${messageHash}`, error);
+  } finally {
+    client.release();
+  }
 }
 
 async function handleUndosCommand(startReportId?: string, endReportId?: string) {
@@ -1463,7 +1470,7 @@ async function getReportsBetween(startReportId: string, endReportId: string): Pr
   const startId = BigInt(startReportId);
   const endId = BigInt(endReportId);
 
-  // Получаем отчеты из LRU кэша
+  // Get reports from LRU cache
   const lruReports = Array.from(lruCache.values())
     .filter(decision => {
       const reportId = BigInt(decision.reportId);
@@ -1471,19 +1478,19 @@ async function getReportsBetween(startReportId: string, endReportId: string): Pr
     })
     .map(decision => decision.reportId);
 
-  // Получаем отчеты из Redis, исключая те, которые уже есть в LRU кэше
+  // Get reports from Redis, excluding those already in LRU cache
   const redisKeys = await redis.keys('report:*');
   const redisReports = (await Promise.all(redisKeys.map(async key => {
     const reportId = key.split(':')[1];
     if (lruReports.includes(reportId)) {
-      return null; // Пропускаем отчеты, которые уже есть в LRU кэше
+      return null; // Skip reports already in LRU cache
     }
     const report = JSON.parse(await redis.get(key) || '{}') as Report;
     const id = BigInt(report.reportId);
     return (id >= startId && id <= endId) ? report.reportId : null;
   }))).filter((id): id is string => id !== null);
 
-  // Объединяем и сортируем результаты
+  // Combine and sort results
   return [...new Set([...lruReports, ...redisReports])].sort((a, b) => {
     const aId = BigInt(a);
     const bId = BigInt(b);
@@ -1519,12 +1526,12 @@ async function handleLruCommand() {
   }
 }
 
-// Функция для получения содержимого LRU кэша
+// Function to get LRU cache content
 function getLruContent(): CachedDecision[] {
   return Array.from(lruCache.values());
 }
 
-// Функция для генерации CSV-отчета о содержимом LRU кэша
+// Function to generate CSV report of LRU cache content
 async function generateLruCsvReport(lruContent: CachedDecision[]): Promise<string> {
   const csvFilePath = join(tmpdir(), 'lru_report.csv');
   const csvWriter = createObjectCsvWriter({
@@ -1587,6 +1594,46 @@ async function waitForReport(reportId: string): Promise<Report | null> {
       }
     }, 500);
   });
+}
+
+async function undoRecentReports() {
+  const MAX_UNDO_ATTEMPTS = 100;
+  let undoCount = 0;
+  const recentReportIds = await getRecentReportIds(MAX_UNDO_ATTEMPTS);
+
+  for (const reportId of recentReportIds) {
+    log(`Attempting to undo report ${reportId}`, 'debug');
+    await sendToBot(`/undo${reportId}`);
+    const undoResponse = await waitForUndoResponse(reportId);
+
+    if (undoResponse === 'success') {
+      log(`Successfully undone report ${reportId}`, 'debug');
+      const report = await getReportFromCaches(reportId);
+      if (report) {
+        await processReport(report);
+      } else {
+        log(`Failed to retrieve report ${reportId} from caches`, 'warn');
+      }
+      return; // Exit the function if undo is successful and processing continues
+    } else if (undoResponse === 'toolate') {
+      log(`Undo action no longer possible for report ${reportId}`, 'warn');
+    }
+
+    undoCount++;
+    if (undoCount >= MAX_UNDO_ATTEMPTS) {
+      log(`Reached maximum undo attempts (${MAX_UNDO_ATTEMPTS}). Stopping bot for 30 minutes.`, 'warn');
+      await stopBotTemporarily();
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second between undo attempts
+  }
+}
+
+function isReportInUndoRange(reportId: string): boolean {
+  if (!undoRange) return false;
+  const id = BigInt(reportId);
+  return id >= BigInt(undoRange.start) && id <= BigInt(undoRange.end);
 }
 
 async function getCachedReport(reportId: string): Promise<Report | null> {
@@ -1830,7 +1877,7 @@ function processInlineMarkup(markup: Api.ReplyInlineMarkup): string {
 async function undo(reportId?: string): Promise<boolean> {
   log(`Starting undo process${reportId ? ` for report ${reportId}` : ''}`, 'debug');
   
-  const recentReportIds = reportId ? [reportId] : await getRecentReportIds(10); // Используем лимит 10 для последних отчетов
+  const recentReportIds = reportId ? [reportId] : await getRecentReportIds(10);
   let successfulUndo = false;
   
   for (const id of recentReportIds) {
@@ -1880,13 +1927,13 @@ async function undo(reportId?: string): Promise<boolean> {
 }
 
 async function getRecentReportIds(limit: number): Promise<string[]> {
-  // Получаем последние отчеты из LRU кэша
+  // Get recent reports from LRU cache
   const lruReports = Array.from(lruCache.values())
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, limit)
     .map(decision => decision.reportId);
 
-  // Если в LRU кэше недостаточно отчетов, добираем из Redis
+  // If not enough reports in LRU cache, get more from Redis
   if (lruReports.length < limit) {
     const redisKeys = await redis.keys('report:*');
     const redisReports = await Promise.all(
@@ -1896,14 +1943,26 @@ async function getRecentReportIds(limit: number): Promise<string[]> {
       })
     );
     
-    // Сортируем и фильтруем отчеты из Redis, исключая те, которые уже есть в LRU кэше
+    // Sort and filter Redis reports, excluding those already in LRU cache
     const additionalReports = redisReports
       .sort((a, b) => b.timestamp - a.timestamp)
       .filter(report => !lruReports.includes(report.id))
       .map(report => report.id)
       .slice(0, limit - lruReports.length);
 
-    return [...lruReports, ...additionalReports];
+    const combinedReports = [...lruReports, ...additionalReports];
+
+    // Add recent report IDs to the tracking list
+    for (const reportId of combinedReports) {
+      await addToRecentReportIds(reportId);
+    }
+
+    return combinedReports;
+  }
+
+  // Add LRU cache reports to the tracking list
+  for (const reportId of lruReports) {
+    await addToRecentReportIds(reportId);
   }
 
   return lruReports;
@@ -1941,7 +2000,8 @@ async function generateRedisCsvReport(redisContent: Report[]): Promise<string> {
       {id: 'sender', title: 'Sender'},
       {id: 'complaintCount', title: 'Complaint Count'},
       {id: 'messageContent', title: 'Message Content'},
-      {id: 'mediaHashes', title: 'Media Hashes'}
+      {id: 'mediaHashes', title: 'Media Hashes'},
+      {id: 'duplicateCount', title: 'Duplicate Count'}
     ]
   });
 
@@ -1957,7 +2017,7 @@ async function generateRedisCsvReport(redisContent: Report[]): Promise<string> {
 }
 
 async function getReportFromCaches(reportId: string): Promise<Report | null> {
-  // Сначала проверяем LRU кэш
+  // First check LRU cache
   const lruDecision = Array.from(lruCache.values()).find(decision => decision.reportId === reportId);
   if (lruDecision) {
     return {
@@ -1965,7 +2025,7 @@ async function getReportFromCaches(reportId: string): Promise<Report | null> {
       isSpam: lruDecision.isSpam,
       reason: lruDecision.reason,
       timestamp: lruDecision.timestamp,
-      messageContent: [], // Эти поля нужно будет заполнить из Redis
+      messageContent: [], // These fields need to be filled from Redis
       mediaHashes: [],
       complaintCount: 0,
       source: '',
@@ -1973,7 +2033,7 @@ async function getReportFromCaches(reportId: string): Promise<Report | null> {
     };
   }
 
-  // Если не найдено в LRU, проверяем Redis
+  // If not found in LRU, check Redis
   const redisKey = `report:${reportId}`;
   const redisReport = await redis.get(redisKey);
   if (redisReport) {
@@ -2055,13 +2115,13 @@ async function handleAdmin(event: NewMessageEvent) {
           await handleDbCommand();
           break;
 
-          case '/redis':
-            await handleRedisCommand();
-            break;
+        case '/redis':
+          await handleRedisCommand();
+          break;
       
-          case '/lru':
-            await handleLruCommand();
-            break;
+        case '/lru':
+          await handleLruCommand();
+          break;
 
         case '/fine':
           try {
@@ -2082,6 +2142,14 @@ async function handleAdmin(event: NewMessageEvent) {
           }
           break;
 
+        case '/fix':
+          if (commandParts.length === 2) {
+            await handleFixCommand(commandParts[1]);
+          } else {
+            await notify('Invalid fix command. Usage: /fix [reportId]');
+          }
+          break;
+
         default:
           log(`Unrecognized admin command: ${command}`, 'debug');
           await notify(`Unrecognized command: ${command}. Available commands are:
@@ -2093,14 +2161,66 @@ async function handleAdmin(event: NewMessageEvent) {
           /reset - Clear Redis and LRU caches
           /db - Perform database operations and generate report
           /redis - Get cache info and generate report
-          /lru - Get cache info and generate report)
-          /fine - Generate fine-tuning data`);
+          /lru - Get cache info and generate report
+          /fine - Generate fine-tuning data
+          /fix [reportId] - Fix and reassess a specific report`);
       }
     } catch (error) {
       logErr(`Error processing admin command: ${command}`, error);
       await notify(`Error processing command ${command}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+}
+
+async function handleFixCommand(reportId: string): Promise<void> {
+  log(`Handling fix command for report ${reportId}`, 'debug');
+  try {
+    const report = await getReportFromCaches(reportId);
+    if (!report) {
+      await notify(`Report ${reportId} not found in caches.`);
+      return;
+    }
+
+    // Invert the spam status
+    report.isSpam = report.isSpam === 1 ? 0 : 1;
+    report.reason = `Manual fix: ${report.isSpam === 1 ? 'marked as spam' : 'marked as not spam'}`;
+
+    // Update caches
+    await saveReportToRedis(report);
+    await saveCache(report, {
+      isSpam: report.isSpam,
+      reason: report.reason,
+      checkType: 'manual'
+    });
+
+    // Update PostgreSQL
+    const client = await pool.connect();
+    try {
+      await client.query(
+        'UPDATE reports SET is_spam = $1, reason = $2 WHERE report_id = $3',
+        [report.isSpam, report.reason, report.reportId]
+      );
+    } finally {
+      client.release();
+    }
+
+    await notify(`Report ${reportId} has been fixed. New status: ${report.isSpam === 1 ? 'spam' : 'not spam'}`);
+  } catch (error) {
+    logErr(`Error fixing report ${reportId}`, error);
+    await notify(`Error fixing report ${reportId}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function stopBotTemporarily() {
+  autoMode = false;
+  await notify('Bot stopped due to reaching maximum undo attempts. Will restart in 30 minutes.');
+
+  // Schedule restart after 30 minutes
+  const restartTime = new Date(Date.now() + 30 * 60 * 1000);
+  schedule.scheduleJob(restartTime, async () => {
+    log('Restarting application after 30 minutes pause', 'info');
+    await gracefulShutdown(true);
+  });
 }
 
 function updateApiUsage(tokensUsed: number) {
@@ -2130,59 +2250,60 @@ Total Memory: ${(totalMemory / 1024 / 1024 / 1024).toFixed(2)} GB
 
 `;
 
-    const start = Date.now();
-    try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: "Test" }],
-        max_tokens: 1
-      });
-      const end = Date.now();
-      updateApiUsage(response.usage?.total_tokens || 0);
-      statusMessage += `OpenAI API latency: ${end - start}ms
+const start = Date.now();
+try {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Test" }],
+    max_tokens: 1
+  });
+  const end = Date.now();
+  updateApiUsage(response.usage?.total_tokens || 0);
+  statusMessage += `OpenAI API latency: ${end - start}ms
 
 `;
-    } catch (error) {
-      statusMessage += `Error checking OpenAI latency: ${error instanceof Error ? error.message : String(error)}
+} catch (error) {
+  statusMessage += `Error checking OpenAI latency: ${error instanceof Error ? error.message : String(error)}
 
 `;
-    }
+}
 
-    statusMessage += `OpenAI API Usage:
+statusMessage += `OpenAI API Usage:
 Requests made: ${apiRequestsCount}
 Tokens used: ${apiTokensUsed}
 `;
 
-    log('Enhanced status report generated', 'debug');
-    await notify(statusMessage);
-    log('Enhanced status report sent', 'debug');
-  } catch (error) {
-    logErr('Error generating enhanced status report', error);
-    await notify('Error generating enhanced status report. Please check the logs.');
-  }
+log('Enhanced status report generated', 'debug');
+await notify(statusMessage);
+log('Enhanced status report sent', 'debug');
+} catch (error) {
+logErr('Error generating enhanced status report', error);
+await notify('Error generating enhanced status report. Please check the logs.');
+}
 }
 
 async function resetRedisCache(): Promise<void> {
-  try {
-    log('Attempting to transfer Redis data to PostgreSQL before clearing...', 'debug');
-    await saveRedisToPostgres();
+try {
+log('Attempting to transfer Redis data to PostgreSQL before clearing...', 'debug');
+await saveRedisToPostgres();
 
-    log('Attempting to clear Redis cache...', 'debug');
-    await redis.flushdb();
-    lruCache.clear();
-    log('Redis and LRU caches cleared successfully', 'debug');
-    await notify('Redis data transferred to PostgreSQL and caches have been cleared successfully');
-  } catch (error) {
-    logErr('resetRedisCache', error);
-    await notify(`Error in resetRedisCache: ${error instanceof Error ? error.message : String(error)}`);
-  }
+log('Attempting to clear Redis cache...', 'debug');
+await redis.flushdb();
+lruCache.clear();
+log('Redis and LRU caches cleared successfully', 'debug');
+await notify('Redis data transferred to PostgreSQL and caches have been cleared successfully');
+} catch (error) {
+logErr('resetRedisCache', error);
+await notify(`Error in resetRedisCache: ${error instanceof Error ? error.message : String(error)}`);
+}
 }
 
 async function handleDbCommand() {
   try {
     log('Handling /db command', 'debug');
     await saveRedisToPostgres();
-    const csvFilePath = await generateCsvReport();
+    const cacheContent = await getCacheContent();
+    const csvFilePath = await generateCacheCsvReport(cacheContent);
     await sendCsvToAdmin(csvFilePath);
     log('DB command executed successfully', 'debug');
     await notify('Database operations completed. CSV report sent.');
@@ -2193,58 +2314,59 @@ async function handleDbCommand() {
 }
 
 async function getCacheContent(): Promise<Report[]> {
-  const reports: Report[] = [];
+const reports: Report[] = [];
 
-  for (const [key, value] of lruCache) {
-    reports.push({
-      reportId: key,
-      messageContent: [],
-      mediaHashes: [],
-      complaintCount: 0,
-      source: '',
-      sender: '',
-      isSpam: value.isSpam,
-      reason: value.reason,
-      timestamp: Date.now(),
-      checkType: value.checkType
-    });
-  }
+for (const [key, value] of lruCache) {
+reports.push({
+  reportId: key,
+  messageContent: [],
+  mediaHashes: [],
+  complaintCount: 0,
+  source: '',
+  sender: '',
+  isSpam: value.isSpam,
+  reason: value.reason,
+  timestamp: Date.now(),
+  checkType: value.checkType
+});
+}
 
-  const keys = await redis.keys('report:*');
-  for (const key of keys) {
-    const reportData = await redis.get(key);
-    if (reportData) {
-      reports.push(JSON.parse(reportData) as Report);
-    }
-  }
+const keys = await redis.keys('report:*');
+for (const key of keys) {
+const reportData = await redis.get(key);
+if (reportData) {
+  reports.push(JSON.parse(reportData) as Report);
+}
+}
 
-  return reports;
+return reports;
 }
 
 async function generateCacheCsvReport(reports: Report[]): Promise<string> {
-  const csvFilePath = join(tmpdir(), 'cache_report.csv');
-  const csvWriter = createObjectCsvWriter({
-    path: csvFilePath,
-    header: [
-      {id: 'reportId', title: 'Report ID'},
-      {id: 'isSpam', title: 'Is Spam'},
-      {id: 'reason', title: 'Reason'},
-      {id: 'timestamp', title: 'Timestamp'},
-      {id: 'source', title: 'Source'},
-      {id: 'sender', title: 'Sender'},
-      {id: 'complaintCount', title: 'Complaint Count'},
-      {id: 'messageContent', title: 'Message Content'},
-    ]
-  });
+const csvFilePath = join(tmpdir(), 'cache_report.csv');
+const csvWriter = createObjectCsvWriter({
+path: csvFilePath,
+header: [
+  {id: 'reportId', title: 'Report ID'},
+  {id: 'isSpam', title: 'Is Spam'},
+  {id: 'reason', title: 'Reason'},
+  {id: 'timestamp', title: 'Timestamp'},
+  {id: 'source', title: 'Source'},
+  {id: 'sender', title: 'Sender'},
+  {id: 'complaintCount', title: 'Complaint Count'},
+  {id: 'messageContent', title: 'Message Content'},
+  {id: 'duplicateCount', title: 'Duplicate Count'}
+]
+});
 
-  const reportData = reports.map(report => ({
-    ...report,
-    messageContent: report.messageContent.join('\n'),
-  }));
+const reportData = reports.map(report => ({
+...report,
+messageContent: report.messageContent.join('\n'),
+}));
 
-  await csvWriter.writeRecords(reportData);
-  log(`Cache CSV report generated: ${csvFilePath}`, 'debug');
-  return csvFilePath;
+await csvWriter.writeRecords(reportData);
+log(`Cache CSV report generated: ${csvFilePath}`, 'debug');
+return csvFilePath;
 }
 
 // Database functions
@@ -2264,8 +2386,22 @@ async function initDB() {
         sender TEXT NOT NULL,
         is_spam INTEGER,
         reason TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        duplicate_count INTEGER DEFAULT 1
       ) PARTITION BY RANGE (created_at);
+    `);
+
+    // Add duplicate_count column if it doesn't exist
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'reports' AND column_name = 'duplicate_count'
+        ) THEN
+          ALTER TABLE reports ADD COLUMN duplicate_count INTEGER DEFAULT 1;
+        END IF;
+      END $$;
     `);
 
     await client.query(`
@@ -2321,6 +2457,27 @@ async function initDB() {
       }
     }
 
+    // Add duplicate_count column to existing partitions
+    const existingPartitions = await client.query(`
+      SELECT tablename 
+      FROM pg_tables 
+      WHERE schemaname = 'public' AND tablename LIKE 'reports_y%_m%'
+    `);
+
+    for (const row of existingPartitions.rows) {
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = '${row.tablename}' AND column_name = 'duplicate_count'
+          ) THEN
+            ALTER TABLE ${row.tablename} ADD COLUMN duplicate_count INTEGER DEFAULT 1;
+          END IF;
+        END $$;
+      `);
+    }
+
     await client.query('COMMIT');
     log('Database structure updated', 'info');
   } catch (error) {
@@ -2333,212 +2490,216 @@ async function initDB() {
 }
 
 async function saveRedisToPostgres() {
-  try {
-    log('Starting Redis to PostgreSQL data transfer', 'info');
-    const keys = await redis.keys('report:*');
-    const client = await pool.connect();
+try {
+log('Starting Redis to PostgreSQL data transfer', 'info');
+const keys = await redis.keys('report:*');
+const client = await pool.connect();
 
-    try {
-      await client.query('BEGIN');
+try {
+  await client.query('BEGIN');
 
-      const batchSize = 100;
-      for (let i = 0; i < keys.length; i += batchSize) {
-        const batch = keys.slice(i, i + batchSize);
-        const reports = await Promise.all(batch.map(key => redis.get(key)));
-        
-        const values = reports.filter(Boolean).map(reportData => {
-          const report = JSON.parse(reportData!) as Report;
-          return [
-            report.reportId,
-            report.messageContent,
-            report.mediaHashes,
-            report.complaintCount,
-            report.source,
-            report.sender,
-            report.isSpam,
-            report.reason,
-            new Date(report.timestamp)
-          ];
-        });
+  const batchSize = 100;
+  for (let i = 0; i < keys.length; i += batchSize) {
+    const batch = keys.slice(i, i + batchSize);
+    const reports = await Promise.all(batch.map(key => redis.get(key)));
+    
+    const values = reports.filter(Boolean).map(reportData => {
+      const report = JSON.parse(reportData!) as Report;
+      return [
+        report.reportId,
+        report.messageContent,
+        report.mediaHashes,
+        report.complaintCount,
+        report.source,
+        report.sender,
+        report.isSpam,
+        report.reason,
+        new Date(report.timestamp),
+        report.duplicateCount || 1
+      ];
+    });
 
-        if (values.length > 0) {
-          const query = `
-            INSERT INTO reports 
-            (report_id, message_content, media_hashes, complaint_count, source, sender, is_spam, reason, created_at)
-            VALUES ${values.map((_, index) => `($${index * 9 + 1}, $${index * 9 + 2}, $${index * 9 + 3}, $${index * 9 + 4}, $${index * 9 + 5}, $${index * 9 + 6}, $${index * 9 + 7}, $${index * 9 + 8}, $${index * 9 + 9})`).join(', ')}
-            ON CONFLICT (report_id, created_at) DO UPDATE SET
-            message_content = EXCLUDED.message_content,
-            media_hashes = EXCLUDED.media_hashes,
-            complaint_count = EXCLUDED.complaint_count,
-            source = EXCLUDED.source,
-            sender = EXCLUDED.sender,
-            is_spam = EXCLUDED.is_spam,
-            reason = EXCLUDED.reason
-          `;
+    if (values.length > 0) {
+      const query = `
+        INSERT INTO reports 
+        (report_id, message_content, media_hashes, complaint_count, source, sender, is_spam, reason, created_at, duplicate_count)
+        VALUES ${values.map((_, index) => `($${index * 10 + 1}, $${index * 10 + 2}, $${index * 10 + 3}, $${index * 10 + 4}, $${index * 10 + 5}, $${index * 10 + 6}, $${index * 10 + 7}, $${index * 10 + 8}, $${index * 10 + 9}, $${index * 10 + 10})`).join(', ')}
+        ON CONFLICT (report_id, created_at) DO UPDATE SET
+        message_content = EXCLUDED.message_content,
+        media_hashes = EXCLUDED.media_hashes,
+        complaint_count = EXCLUDED.complaint_count,
+        source = EXCLUDED.source,
+        sender = EXCLUDED.sender,
+        is_spam = EXCLUDED.is_spam,
+        reason = EXCLUDED.reason,
+        duplicate_count = EXCLUDED.duplicate_count
+      `;
 
-          await client.query(query, values.flat());
-        }
-      }
-
-      await client.query('COMMIT');
-      log(`Successfully transferred ${keys.length} reports from Redis to PostgreSQL`, 'info');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
+      await client.query(query, values.flat());
     }
-  } catch (error) {
-    if (error instanceof Error) {
-      logErr('saveRedisToPostgres', `${error.message}\n${error.stack}`);
-    } else {
-      logErr('saveRedisToPostgres', String(error));
-    }
-    await notify(`Error in saveRedisToPostgres: ${error instanceof Error ? error.message : String(error)}`);
   }
+
+  await client.query('COMMIT');
+  log(`Successfully transferred ${keys.length} reports from Redis to PostgreSQL`, 'info');
+} catch (error) {
+  await client.query('ROLLBACK');
+  throw error;
+} finally {
+  client.release();
+}
+} catch (error) {
+if (error instanceof Error) {
+  logErr('saveRedisToPostgres', `${error.message}\n${error.stack}`);
+} else {
+  logErr('saveRedisToPostgres', String(error));
+}
+await notify(`Error in saveRedisToPostgres: ${error instanceof Error ? error.message : String(error)}`);
+}
 }
 
 async function generateCsvReport(): Promise<string> {
-  const client = await pool.connect();
-  try {
-    const result = await client.query(`
-      SELECT 
-        report_id,
-        message_content[1] as message,
-        complaint_count,
-        source,
-        sender,
-        is_spam,
-        reason,
-        created_at
-      FROM reports
-      WHERE created_at >= NOW() - INTERVAL '7 days'
-      ORDER BY created_at DESC
-    `);
+const client = await pool.connect();
+try {
+const result = await client.query(`
+  SELECT 
+    report_id,
+    message_content[1] as message,
+    complaint_count,
+    source,
+    sender,
+    is_spam,
+    reason,
+    created_at,
+    duplicate_count
+  FROM reports
+  WHERE created_at >= NOW() - INTERVAL '7 days'
+  ORDER BY created_at DESC
+`);
 
-    const csvFilePath = join(tmpdir(), 'spam_report.csv');
-    const csvWriter = createObjectCsvWriter({
-      path: csvFilePath,
-      header: [
-        {id: 'report_id', title: 'Report ID'},
-        {id: 'message', title: 'Message'},
-        {id: 'complaint_count', title: 'Complaint Count'},
-        {id: 'source', title: 'Source'},
-        {id: 'sender', title: 'Sender'},
-        {id: 'is_spam', title: 'Is Spam'},
-        {id: 'reason', title: 'Reason'},
-        {id: 'created_at', title: 'Created At'}
-      ]
-    });
+const csvFilePath = join(tmpdir(), 'spam_report.csv');
+const csvWriter = createObjectCsvWriter({
+  path: csvFilePath,
+  header: [
+    {id: 'report_id', title: 'Report ID'},
+    {id: 'message', title: 'Message'},
+    {id: 'complaint_count', title: 'Complaint Count'},
+    {id: 'source', title: 'Source'},
+    {id: 'sender', title: 'Sender'},
+    {id: 'is_spam', title: 'Is Spam'},
+    {id: 'reason', title: 'Reason'},
+    {id: 'created_at', title: 'Created At'},
+    {id: 'duplicate_count', title: 'Duplicate Count'}
+  ]
+});
 
-    await csvWriter.writeRecords(result.rows);
-    log(`CSV report generated: ${csvFilePath}`, 'debug');
-    return csvFilePath;
-  } catch (error) {
-    logErr('generateCsvReport', error);
-    throw error;
-  } finally {
-    client.release();
-  }
+await csvWriter.writeRecords(result.rows);
+log(`CSV report generated: ${csvFilePath}`, 'debug');
+return csvFilePath;
+} catch (error) {
+logErr('generateCsvReport', error);
+throw error;
+} finally {
+client.release();
+}
 }
 
 async function sendCsvToAdmin(csvFilePath: string) {
-  await client.sendFile(ADMIN_ID, {
-    file: csvFilePath,
-    caption: 'Here is the latest report.',
-    attributes: [
-      new Api.DocumentAttributeFilename({ fileName: 'report.csv' })
-    ]
-  });
-  log(`CSV file sent to admin: ${csvFilePath}`, 'debug');
+await client.sendFile(ADMIN_ID, {
+file: csvFilePath,
+caption: 'Here is the latest report.',
+attributes: [
+  new Api.DocumentAttributeFilename({ fileName: 'report.csv' })
+]
+});
+log(`CSV file sent to admin: ${csvFilePath}`, 'debug');
 }
 
 async function checkDB(): Promise<boolean> {
-  const client = await pool.connect();
-  try {
-    const result = await client.query('SELECT NOW()');
-    log(`Database connection successful. Current time: ${result.rows[0].now}`, 'debug');
-    return true;
-  } catch (error) {
-    logErr('checkDB', error);
-    return false;
-  } finally {
-    client.release();
-  }
+const client = await pool.connect();
+try {
+const result = await client.query('SELECT NOW()');
+log(`Database connection successful. Current time: ${result.rows[0].now}`, 'debug');
+return true;
+} catch (error) {
+logErr('checkDB', error);
+return false;
+} finally {
+client.release();
+}
 }
 
 // Setup handlers
 async function setupHandlers() {
-  if (!botEntity) throw new Error('Bot entity not initialized');
-  const botUserId = botEntity.userId.toString();
+if (!botEntity) throw new Error('Bot entity not initialized');
+const botUserId = botEntity.userId.toString();
 
-  const handlers = [
-    { 
-      handler: handleCheck, 
-      options: { fromUsers: [botUserId], incoming: true, forwards: true, outgoing: false } 
-    },
-    { 
-      handler: handleSys, 
-      options: { fromUsers: [botUserId], incoming: true, forwards: false, outgoing: false, pattern: sysRegex.source } 
-    },
-    { 
-      handler: handleAdmin, 
-      options: { fromUsers: [ADMIN_ID], incoming: true, forwards: false, outgoing: false }
-    }
-  ];
+const handlers = [
+{ 
+  handler: handleCheck, 
+  options: { fromUsers: [botUserId], incoming: true, forwards: true, outgoing: false } 
+},
+{ 
+  handler: handleSys, 
+  options: { fromUsers: [botUserId], incoming: true, forwards: false, outgoing: false, pattern: sysRegex.source } 
+},
+{ 
+  handler: handleAdmin, 
+  options: { fromUsers: [ADMIN_ID], incoming: true, forwards: false, outgoing: false }
+}
+];
 
-  handlers.forEach(({ handler, options }) => {
-    try {
-      client.addEventHandler(handler, new NewMessage(options));
-      log(`Handler ${handler.name} set up successfully`, 'debug');
-    } catch (error) {
-      logErr(`setupHandlers - ${handler.name}`, error);
-    }
-  });
+handlers.forEach(({ handler, options }) => {
+try {
+  client.addEventHandler(handler, new NewMessage(options));
+  log(`Handler ${handler.name} set up successfully`, 'debug');
+} catch (error) {
+  logErr(`setupHandlers - ${handler.name}`, error);
+}
+});
 
-  client.addEventHandler(async (event) => {
-    if (event.message instanceof Api.Message &&
-        event.message.senderId?.toString() === botUserId &&
-        event.message.message &&
-        !event.message.message.match(sysRegex.source)) {
-      await handleAdd(event);
-    }
-  }, new NewMessage({ fromUsers: [botUserId], incoming: true, forwards: false, outgoing: false }));
+client.addEventHandler(async (event) => {
+if (event.message instanceof Api.Message &&
+    event.message.senderId?.toString() === botUserId &&
+    event.message.message &&
+    !event.message.message.match(sysRegex.source)) {
+  await handleAdd(event);
+}
+}, new NewMessage({ fromUsers: [botUserId], incoming: true, forwards: false, outgoing: false }));
 }
 
 // System health check
 async function checkSystemHealth() {
-  try {
-    await redis.ping();
-    const dbClient = await pool.connect();
-    try {
-      await dbClient.query('SELECT 1');
-    } finally {
-      dbClient.release();
-    }
-    
-    if (!client) {
-      throw new Error('Telegram client not initialized');
-    }
-    
-    try {
-      await client.getMe();
-    } catch (error) {
-      throw new Error('Telegram client is not connected');
-    }
+try {
+await redis.ping();
+const dbClient = await pool.connect();
+try {
+  await dbClient.query('SELECT 1');
+} finally {
+  dbClient.release();
+}
 
-    // Check report processing
-    const currentTime = Date.now();
-    const timeSinceLastReport = currentTime - lastReportProcessTime;
-    
-    if (timeSinceLastReport > 5 * 60 * 1000 && timeSinceLastReport <= 10 * 60 * 1000) { // 5-10 minutes
-      log('No reports processed in the last 5 minutes. Sending "/next 7" command.', 'warn');
-      await sendToBot("/next 7");
-    } else if (timeSinceLastReport > 10 * 60 * 1000) { // more than 10 minutes
-      throw new Error('No reports processed in the last 10 minutes');
-    }
+if (!client) {
+  throw new Error('Telegram client not initialized');
+}
 
-    log('System health check passed', 'info');
+try {
+  await client.getMe();
+} catch (error) {
+  throw new Error('Telegram client is not connected');
+}
+
+// Check report processing
+const currentTime = Date.now();
+const timeSinceLastReport = currentTime - lastReportProcessTime;
+
+if (timeSinceLastReport > 5 * 60 * 1000 && timeSinceLastReport <= 10 * 60 * 1000) { // 5-10 minutes
+  log('No reports processed in the last 5 minutes. Sending "/next 7" command.', 'warn');
+  await sendToBot("/next 7");
+} else if (timeSinceLastReport > 10 * 60 * 1000) { // more than 10 minutes
+  throw new Error('No reports processed in the last 10 minutes');
+}
+
+log('System health check passed', 'info');
   } catch (error) {
     logErr('System health check failed', error);
     await notify(`System health check failed: ${error instanceof Error ? error.message : String(error)}. Attempting restart...`);
@@ -2622,8 +2783,8 @@ async function cleanupOldData() {
       const batchSize = 10000;
       while (true) {
         const result = await client.query(
-          'WITH deleted AS (DELETE FROM reports WHERE created_at < $1 LIMIT $2 RETURNING *) SELECT COUNT(*) FROM deleted',
-          [oneMonthAgo, batchSize]
+          'WITH deleted AS (DELETE FROM reports WHERE created_at < $1 AND duplicate_count <= $2 LIMIT $3 RETURNING *) SELECT COUNT(*) FROM deleted',
+          [oneMonthAgo, 10, batchSize] // Keep reports with duplicate_count > 10
         );
         const deletedCount = parseInt(result.rows[0].count);
         totalDeleted += deletedCount;
