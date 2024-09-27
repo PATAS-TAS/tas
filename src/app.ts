@@ -814,7 +814,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Affiliate marketing messages for any products or platforms.
      - **Sexual Content:**
        - Explicit sexual content or coded invitations for sexual services. (e.g., "Open vcs", "Meet up", "Meet now", "встречусь", "available", "Content available", "avaible", "свободна", "Скучно? Пиши")
-       - Offers of adult or escort services, even if indirect. (e.g. "проведем эту ночь вместе", "ищу мужчину")
+       - Offers of adult or escort services, even if indirect. (e.g. "проведем эту ночь вместе", "ищу мужчину", "Работаю❤️", "Men should message me")
        - Encrypted or coded messages resembling adult content sales. (e.g. "Ready vcs", "CP", "TN", "GV", "TF", "SL", "ID", "SVC" - in any register)
      - **Excessive Links and URLs:**
        - Presence of multiple links (more than 1) in a single message.
