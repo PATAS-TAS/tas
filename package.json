@@ -24,6 +24,7 @@
     "pg": "^8.12.0",
     "telegram": "^2.23.10",
     "tsc": "^2.0.4",
+    "typescript-collections": "^1.3.3",
     "winston": "^3.14.2"
   },
   "devDependencies": {
