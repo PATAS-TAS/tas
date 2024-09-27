@@ -452,7 +452,7 @@ async function handleAdd(event: NewMessageEvent) {
         }
       }, 180000);
       
-      setTimeout(() => sendToBot("/next"), 100);
+      setTimeout(() => sendToBot("/next"), 50);
     } else if (messageContent.includes("Please select 😡 BAN or 😌 NO.")) {
       noReportsFoundCount = 0;
       lastReportProcessTime = Date.now();
@@ -1356,6 +1356,12 @@ async function saveCache(report: Report, decision: SpamDecision): Promise<void> 
 async function saveReportToRedis(report: Report): Promise<void> {
   if (isShuttingDown) return;
 
+  // Don't save reports with isSpam === -1
+  if (report.isSpam === -1) {
+    log(`Skipping save for report ${report.reportId} with isSpam === -1`, 'debug');
+    return;
+  }
+
   const key = `report:${report.reportId}`;
   redisBatch.push(report);
   
@@ -1434,7 +1440,7 @@ async function checkCache(report: Report): Promise<SpamDecision | null> {
       }
     }
 
-    if (cachedDecision) {
+    if (cachedDecision && (cachedDecision.isSpam === 0 || cachedDecision.isSpam === 1)) {
       log(`Cache hit for report ${report.reportId}`, 'debug');
       return {
         isSpam: cachedDecision.isSpam,
