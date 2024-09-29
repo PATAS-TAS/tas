@@ -859,7 +859,13 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Messages asking for votes or engagement for commercial or promotional purposes, e.g., "🚀 Vote for the Best Social Enterprise Project! 🚀"
      - **Links to External Profiles:**
        - Messages containing links to external profiles or channels, especially if they seem promotional, e.g., "下面好痒 @Xiaojiujiubaoyang_7 (https://t.me/Xiaojiujiubaoyang_7)"
-  
+     - **Unsolicited Feedback Requests:**
+       - Messages asking for feedback or reviews on external content, especially if accompanied by links.
+       - Requests for comments or input on documents, articles, or other materials hosted on external platforms.
+     - **News or Information Sharing with Links:**
+       - Messages sharing news or information that include links to external websites, especially if the content seems unrelated to the group's theme.
+       - Announcements of events, competitions, or opportunities that direct users to external websites for more information or registration.
+    
   2. **Context-Based Indicators:**
      - **Sender Analysis:**
        - Sender names or nicknames containing spam-specific patterns or keywords related to sales or marketing.
