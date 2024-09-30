@@ -770,21 +770,19 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   
   1. **Content-Based Indicators:**
      - **Commercial and Financial Offers:**
-       - ANY sale or promotion of goods or services, regardless of the context or group theme.
-       - ANY job offers, vacancies, or employment postings.
+       - ANY sale, promotion, vacancies, employment postings, part-time work, household tasks, job offer, or service provision, regardless of context or type.
        - Unsolicited marketing or promotional content for any product or service.
        - Investment opportunities, especially those promising high returns.
        - Phishing attempts, fake giveaways, or unrealistic financial promises.
-       - Mentions of cryptocurrencies, airdrops, or similar financial schemes. (e.g., "0.1trx转账一次", "$100usdt兑换")
+       - Mentions of cryptocurrencies, airdrops, or similar financial schemes. (e.g., "0.1trx转账一次", "$100usdt兑换", etc.)
        - Offers of work-from-home or remote job opportunities with high earnings potential.
-       - Specific earnings claims (e.g., "earn $1000 daily", "100$ в день").
+       - Specific earnings claims (e.g., "earn $1000 daily", "100$ в день", etc.).
        - Mentions of financial incentives tied to minimal effort.
        - Suspicious percentage returns (e.g., "23.450% за сутки").
        - Claims of "free" services combined with financial or investment themes.
        - Contests or giveaways promoting products or services.
        - Asks to write in private messages for product inquiries or purchases.
        - Offers to borrow money or financial assistance.
-       - Any offers of services or part-time work, even for everyday tasks or household chores.
        - Invitations to join some activities.
        - ANY requests to top up a phone balance.
        - ANY requests for donations for medical treatment.
@@ -806,19 +804,19 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Encouragement to use referral codes or links for purchases.
        - Affiliate marketing messages for any products or platforms.
      - **Sexual Content:**
-       - Explicit sexual content or coded invitations for sexual services. (e.g., "Open vcs", "Meet up", "Meet now", "встречусь", "available", "Content available", "avaible", "свободна", "Скучно? Пиши")
-       - Offers of adult or escort services, even if indirect. (e.g. "проведем эту ночь вместе", "ищу мужчину", "Работаю❤️", "Men should message me")
-       - Encrypted or coded messages resembling adult content sales. (e.g. "Ready vcs", "CP", "TN", "GV", "TF", "SL", "ID", "SVC" - in any register)
+       - Explicit sexual content or coded invitations for sexual services. (e.g., "Open vcs", "Meet up", "Meet now", "встречусь", "available", "Content available", "avaible", "свободна", "Скучно? Пиши", etc.)
+       - Offers of adult or escort services, even if indirect. (e.g. "проведем эту ночь вместе", "ищу мужчину", "Работаю❤️", "Men should message me", etc.)
+       - Encrypted or coded messages resembling adult content sales. (e.g. "Ready vcs", "CP", "TN", "GV", "TF", "SL", "ID", "SVC", etc. - in any register)
      - **Excessive Links and URLs:**
        - Presence of multiple links (more than 1) in a single message.
        - Use of URL shorteners or suspicious domains.
        - Referral links containing parameters like "ref_" or "startapp=".
      - **Obfuscated Text and Symbols:**
-       - Use of numbers or symbols to replace letters (e.g., "h3ll0" instead of "hello").
+       - Use of numbers or symbols to replace letters (e.g., "h3ll0" instead of "hello", or "kaнᴀⲗ" instead of "канал", etc.).
        - Excessive use of emojis or repetitive symbols (>10).
        - Obfuscated or intentionally misspelled keywords related to spam or sales.
      - **Urgency and Incentives:**
-       - Phrases that create a sense of urgency (e.g., "hurry", "limited time offer").
+       - Phrases that create a sense of urgency (e.g., "hurry", "limited time offer", etc.).
        - Promises of bonuses, gifts, or free items as incentives for purchases.
      - **Legitimacy Claims:**
        - Unverified claims of official partnerships or endorsements.
@@ -875,21 +873,21 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Consider the overall context and content of the message, regardless of complaint count.
      - **Message Length:**
        - Very short messages (less than 5 words) without spam indicators are typically not spam.
-       - Messages that combine excessive emojis with commercial offers are more likely to be spam.
+       - Combine excessive emojis with commercial offers are more likely to be spam.
      - **Relevance to Group:**
-       - Messages that are out of context with the group's theme or ongoing discussions, especially if they introduce commercial content.
-       - Messages that abruptly change the topic to product offers or job postings.
+       - Are out of context with the group's theme or ongoing discussions, especially if they introduce commercial content.
+       - Abruptly change the topic to product offers or job postings.
      - **Source Group Analysis:**
        - Consider the nature of the group where the message was posted. Groups with names suggesting spam, hacking, or illicit activities should increase suspicion of commercial spam.
      - **Multiple Indicators:**
-       - Messages that combine commercial offers, promises of quick gains, and calls for urgent action are highly likely to be spam.
+       - Combine commercial offers, promises of quick gains, and calls for urgent action are highly likely to be spam.
      - **Inline Titles:**
        - Pay special attention to inline titles, especially if they align with common spam tactics like promising easy money, quick earnings, or seem overly sensational.
   
   3. **Not Spam Indicators:**
      - **Normal Communication:**
        - Casual conversations, jokes, memes, and personal interactions without commercial intent.
-       - Short expressions of gratitude (e.g., "Thanks!", "Great job").
+       - Short expressions of gratitude (e.g., "Thanks!", "Great job", etc.).
        - Legitimate information sharing, news, or educational content without promotional elements.
      - **Expressive Language:**
        - Use of profanity, insults, or offensive language, even if aggressive or vulgar, unless combined with commercial content.
@@ -899,26 +897,24 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Local slang, cultural references, or region-specific discussions without commercial elements.
        - Political discussions or criticisms, even if controversial or using strong language.
      - **Functional Messages:**
-       - Bot commands (starting with "/", e.g., "/start", "/help" or "/start@AdmiinLyLy_bot") - if they have less than 3 complaints.
+       - Bot commands (starting with "/", e.g., "/start", "/help" or "/start@AdmiinLyLy_bot", etc.) - if they have less than 3 complaints.
        - Warnings about scams or spam.
        - Satirical, ironic, or controversial opinions without commercial intent.
      - **Greetings and Updates:**
-       - Simple greetings or short phrases in any language (e.g., "Hello", "Привет", "Yoo", "ЫЭЫЭЫХЫХЫ").
+       - Simple greetings or short phrases in any language (e.g., "Hello", "Привет", "Yoo", "ЫЭЫЭЫХЫХЫ", etc.).
        - Short informational updates about group activities or moderation.
        - Messages referring to previous conversations or ongoing discussions without sales elements.
      - **Cryptocurrency and Financial Discussions:**
        - Legitimate discussions about cryptocurrency prices, market trends, or trading strategies without promotional content.
-       - Sharing of cryptocurrency wallet addresses without spam indicators. (e.g., "0x123456789...", "UQA-aBE6_uNKRUCXdsh...")
+       - Sharing of cryptocurrency wallet addresses without spam indicators. (e.g., "0x123456789...", "UQA-aBE6_uNKRUCXdsh...", etc.)
      - **Numerical Formats:**
        - Standard numerical formats like "$500,000.00" are not inherently spam unless accompanied by suspicious claims or offers.
   
   **Instructions:**
-  - Analyze the message based on the above spam and not spam indicators.
-  - Consider the sender's name for any spam-related patterns (spam @usernames in sender's name are not considered spam).
-  - Ensure multi-language support by recognizing spam indicators across different languages and scripts.
-  - For very short messages (1-2 words), consider the full context, especially the source group name and sender information.
-  - Be particularly vigilant of messages that combine multiple spam indicators, especially those related to product sales and promotions.
-  - ANY message primarily focused on selling goods or services should be classified as spam, regardless of the product's nature or the group's theme.
+  - Analyze based on above indicators
+  - Consider sender's name for spam patterns (ignore @usernames)
+  - Ensure multi-language support
+  - For very short messages, consider full context (sender's name)
   - Messages offering temporary work or quick earning opportunities should always be classified as spam, regardless of the group's theme.
   - Cryptocurrency wallet addresses alone are not spam, but be cautious if they're accompanied by promotional content.
   - Bot commands and slash (/) messages are generally not spam unless they contain explicit promotional content.
@@ -945,62 +941,34 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
 
   const userPrompt = generateUserPrompt(report);
 
-  const textMessages: Array<ChatCompletionMessageParam> = [
+  const messages: Array<ChatCompletionMessageParam> = [
     { role: "system", content: gptPrompt },
     { role: "user", content: userPrompt }
   ];
 
-  log(`GPT userPrompt for report ${report.reportId}:
-  ${userPrompt}`, 'debug');
-
   try {
-    let textDecision: SpamDecision | null = null;
-
-    const textResponse = await retryGptRequest(async () => {
-      const response = await openai.chat.completions.create({
+    const response = await retryGptRequest(async () => {
+      return openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: textMessages,
-        max_tokens: 10,
+        messages: messages,
+        max_tokens: 1,
         temperature: 0.1,
       });
-      updateApiUsage(response.usage?.total_tokens || 0);
-      return response;
     });
     
-    const textContent = textResponse.choices[0]?.message?.content?.trim();
-    if (textContent === '0' || textContent === '1') {
-      textDecision = {
-        isSpam: Number(textContent),
-        reason: Number(textContent) === 1 ? "GPT: spam" : "GPT: not spam",
+    updateApiUsage(response.usage?.total_tokens || 0);
+    
+    const decision = response.choices[0]?.message?.content?.trim();
+    
+    if (decision === '0' || decision === '1') {
+      return {
+        isSpam: Number(decision),
+        reason: Number(decision) === 1 ? "GPT: spam" : "GPT: not spam",
         checkType: 'gpt'
       };
-    } else {
-      log(`Unexpected GPT response format for report ${report.reportId}: ${textContent}`, 'warn');
-      const gpt4Response = await retryGptRequest(async () => {
-        return openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: textMessages,
-          max_tokens: 10,
-          temperature: 0.1,
-        });
-      });
-
-      const gpt4Content = gpt4Response.choices[0]?.message?.content?.trim();
-      if (gpt4Content === '0' || gpt4Content === '1') {
-        textDecision = {
-          isSpam: Number(gpt4Content),
-          reason: Number(gpt4Content) === 1 ? "GPT-4o: spam" : "GPT-4o: not spam",
-          checkType: 'gpt4'
-        };
-      }
     }
 
-    if (textDecision) {
-      log(`GPT check decision for report ${report.reportId}: ${JSON.stringify(textDecision)}`, 'debug');
-      return textDecision;
-    }
-
-    log(`GPT check did not make a decision for report ${report.reportId}`, 'warn');
+    log(`Unexpected GPT response for report ${report.reportId}: ${decision}`, 'warn');
     return null;
 
   } catch (error) {
