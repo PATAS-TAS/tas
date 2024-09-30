@@ -763,6 +763,9 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - **Sender:** The name or nickname of the sender. Emoji flags indicate the sender's country.
   - **Complaints:** The number of complaints the message has received.
   
+  **Special Note on "Inline Title":**
+  If you see a line starting with "Inline Title:" in the message content, it indicates the title of an embedded webpage or media (like a YouTube video) shared in the message. This title is often clickbait or misleading in spam messages. Pay extra attention to these titles, especially if they promise easy money, quick earnings, or seem overly sensational.
+
   **Spam Classification Criteria:**
   
   1. **Content-Based Indicators:**
@@ -880,6 +883,8 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Consider the nature of the group where the message was posted. Groups with names suggesting spam, hacking, or illicit activities should increase suspicion of commercial spam.
      - **Multiple Indicators:**
        - Messages that combine commercial offers, promises of quick gains, and calls for urgent action are highly likely to be spam.
+     - **Inline Titles:**
+       - Pay special attention to inline titles, especially if they align with common spam tactics like promising easy money, quick earnings, or seem overly sensational.
   
   3. **Not Spam Indicators:**
      - **Normal Communication:**
@@ -921,6 +926,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Short, vague messages that could be interpreted as invitations for commercial or adult services should be carefully evaluated in context.
   - Mark hi/hello messages as NOT spam virtually always, regardless of the complaint count. However, if you encounter a short message with emojis like 💋❤️ and similar, and it's obvious that the sender is there to offer sexual services (judging from the sender name) in a non-adult chat (based on the source name), then mark it as SPAM.
   - If the message indicates that there are more than 1 channel link (e.g., "Channel links: >1"), it's likely spam.
+  - Pay close attention to "Inline Title" information, as it often reveals the true nature of shared links or media, especially in cases of clickbait or misleading content.
   
   **REMINDER:** 
   - Do not consider the 'Source' field as definitive; it is only for contextual information.
@@ -931,6 +937,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Legitimate discussions about cryptocurrencies or sharing of wallet addresses without promotional content are not spam.
   - Any offers of part-time work, temporary jobs, or requests for paid help should be classified as spam.
   - Be cautious with short, ambiguous messages that could be interpreted as solicitations, especially in groups with adult or dating themes.
+  - "Inline Title" information can be crucial in identifying spam, especially for shared links or media with misleading titles.
   
   **Respond ONLY with number 1 (for spam) or 0 (for not spam), without any explanations.**
   **Your analysis:**
