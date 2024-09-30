@@ -8,7 +8,6 @@ import { Api } from 'telegram/tl/index.js';
 import { LRUCache } from 'lru-cache';
 import schedule from 'node-schedule';
 import { createHash } from 'crypto';
-import { fileURLToPath } from 'url';
 import path, { join } from 'path';
 import bigInt from "big-integer";
 import winston from 'winston';
@@ -19,7 +18,6 @@ import Redis from 'ioredis';
 import { tmpdir } from 'os';
 import pkg from 'pg';
 import os from 'os';
-import fs from 'fs';
 
 dotenv.config();
 
@@ -44,8 +42,6 @@ const MAX_CONSECUTIVE_ERRORS = 5;
 const DB_SCHEMA_VERSION = '1.0';
 const MAX_CACHE_SIZE_MB = 100;
 const GPT_RETRY_DELAY = 10000;
-const MAX_BUFFER_DELAY = 500;
-const MIN_BUFFER_DELAY = 100;
 const IDLE_UNDO_DELAY = 45000; // 45 seconds
 const MIN_COMMAND_DELAY = 50; // Минимальная задержка между командами в миллисекундах
 
@@ -54,7 +50,6 @@ let autoMode = true;
 let apiTokensUsed = 0;
 let COMMAND_DELAY = 50;
 let apiRequestsCount = 0;
-let PROCESSING_DELAY = 0;
 let client: TelegramClient;
 let isShuttingDown = false;
 let lastDecisionSentTime = 0;
@@ -63,7 +58,6 @@ let consecutiveErrorCount = 0;
 let isProcessingReports = false;
 let noReportsFoundCount: number = 0;
 let suspendedUntil: number | null = null;
-let currentBufferDelay = MIN_BUFFER_DELAY;
 let idleTimeout: NodeJS.Timeout | null = null;
 let botEntity: Api.InputPeerUser | null = null;
 let processingReports: Map<string, number> = new Map();
@@ -372,16 +366,18 @@ async function handleCheck(event: NewMessageEvent) {
       log(`Reply markup hash: ${markupHash}`, 'debug');
     }
 
+    const processedContent = preprocess(messageContent, message.media);
+
     const bufferItem: BufferItem = {
       type: 'check',
-      content: [preprocess(messageContent)],
+      content: [processedContent],
       timestamp: Date.now(),
       mediaHashes,
       mediaKey: mediaKey || undefined
     };
 
     messageBuffer.push(bufferItem);
-    log(`Check message added to buffer. Content: ${messageContent}`, 'debug');
+    log(`Check message added to buffer. Content: ${processedContent}`, 'debug');
     scheduleProcessing();
   }
 }
@@ -1021,9 +1017,16 @@ async function retryGptRequest<T>(request: () => Promise<T>, maxRetries: number 
 }
 
 // Helper functions
-function preprocess(message: string): string {
+function preprocess(message: string, media?: Api.TypeMessageMedia): string {
   const lines = message.split('\n');
   let processedMessage = lines.slice(1).join('\n').trim();
+  
+  if (media instanceof Api.MessageMediaWebPage && media.webpage instanceof Api.WebPage) {
+    const webpage = media.webpage;
+    if (webpage.title) {
+      processedMessage = `Inline Title: ${webpage.title}\n\n${processedMessage}`;
+    }
+  }
   
   if (processedMessage.length > 1000) {
     processedMessage = processedMessage.substring(0, 997) + '...';
@@ -2331,18 +2334,22 @@ async function saveRedisToPostgres() {
         
         const values = reports.filter(Boolean).map(reportData => {
           const report = JSON.parse(reportData!) as Report;
-          return [
-            report.reportId,
-            report.messageContent,
-            report.mediaHashes,
-            report.complaintCount,
-            report.source,
-            report.sender,
-            report.isSpam,
-            report.reason,
-            new Date(report.timestamp)
-          ];
-        });
+          // Only include reports with non-empty message content
+          if (report.messageContent.length > 0 && report.messageContent.some(msg => msg.trim() !== '')) {
+            return [
+              report.reportId,
+              report.messageContent,
+              report.mediaHashes,
+              report.complaintCount,
+              report.source,
+              report.sender,
+              report.isSpam,
+              report.reason,
+              new Date(report.timestamp)
+            ];
+          }
+          return null;
+        }).filter(value => value !== null);
 
         if (values.length > 0) {
           const query = `
@@ -2364,7 +2371,7 @@ async function saveRedisToPostgres() {
       }
 
       await client.query('COMMIT');
-      log(`Successfully transferred ${keys.length} reports from Redis to PostgreSQL`, 'info');
+      log(`Successfully transferred reports from Redis to PostgreSQL`, 'info');
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -2537,6 +2544,7 @@ async function cleanupOldData() {
     const oneMonthAgo = new Date();
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
+    // LRU Cache cleanup
     let lruDeletedCount = 0;
     for (const [key, value] of lruCache.entries()) {
       if (value.timestamp < oneMonthAgo.getTime()) {
@@ -2546,20 +2554,49 @@ async function cleanupOldData() {
     }
     log(`LRU Cache cleanup completed. Deleted ${lruDeletedCount} items.`, 'info');
 
+    // Redis cleanup with prioritization of unique content
     if (redis.status === 'ready') {
       const keys = await redis.keys('report:*');
       const batchSize = 1000;
       let redisDeletedCount = 0;
+      let contentMap = new Map<string, string[]>();
 
       for (let i = 0; i < keys.length; i += batchSize) {
         const batch = keys.slice(i, i + batchSize);
         const pipeline = redis.pipeline();
 
         for (const key of batch) {
-          const report = JSON.parse(await redis.get(key) || '{}') as Report;
-          if (new Date(report.timestamp) < oneMonthAgo) {
-            pipeline.del(key);
-            redisDeletedCount++;
+          const reportData = await redis.get(key);
+          if (reportData) {
+            const report = JSON.parse(reportData) as Report;
+            const content = report.messageContent.join('\n');
+            if (!contentMap.has(content)) {
+              contentMap.set(content, []);
+            }
+            contentMap.get(content)!.push(key);
+          }
+        }
+
+        // Delete duplicates and old data
+        for (const [content, reportKeys] of contentMap.entries()) {
+          if (reportKeys.length > 1) {
+            // Keep the most recent report for duplicate content
+            reportKeys.sort((a, b) => parseInt(b.split(':')[1]) - parseInt(a.split(':')[1]));
+            const keepKey = reportKeys.shift()!;
+            for (const key of reportKeys) {
+              pipeline.del(key);
+              redisDeletedCount++;
+            }
+            
+            // Increase importance of the kept report
+            pipeline.expire(keepKey, 60 * 60 * 24 * 60); // Extend TTL to 60 days
+          } else {
+            const key = reportKeys[0];
+            const report = JSON.parse(await redis.get(key) || '{}') as Report;
+            if (new Date(report.timestamp) < oneMonthAgo) {
+              pipeline.del(key);
+              redisDeletedCount++;
+            }
           }
         }
 
@@ -2576,28 +2613,9 @@ async function cleanupOldData() {
       log('Redis is not ready, skipping Redis cleanup', 'warn');
     }
 
+    // PostgreSQL partition cleanup
     const client = await pool.connect();
     try {
-      let totalDeleted = 0;
-      const batchSize = 10000;
-      while (true) {
-        const result = await client.query(
-          'WITH deleted AS (DELETE FROM reports WHERE created_at < $1 RETURNING *) SELECT COUNT(*) FROM deleted',
-          [oneMonthAgo, batchSize]
-        );
-        const deletedCount = parseInt(result.rows[0].count);
-        totalDeleted += deletedCount;
-        log(`Postgres cleanup progress: deleted ${totalDeleted} records`, 'debug');
-
-        if (deletedCount < batchSize) break;
-
-        if (Date.now() - startTime > 10 * 60 * 1000) {
-          log('Postgres cleanup taking too long, will continue in next run', 'warn');
-          break;
-        }
-      }
-      log(`Postgres cleanup completed. Deleted ${totalDeleted} records.`, 'info');
-
       const oldPartitions = await client.query(`
         SELECT tablename 
         FROM pg_tables 
