@@ -343,25 +343,9 @@ async function handleCheck(event: NewMessageEvent) {
   if (message instanceof Api.Message && event.isPrivate && botEntity && message.senderId?.toString() === botEntity.userId.toString()) {
     log(`Received check message: ${message.message}`, 'info');
     
-    let messageContent = message.message || '';
+    const messageContent = message.message || '';
     const mediaHashes: string[] = [];
     let mediaKey: string | null = null;
-
-    // Handle reply
-    if (message.replyTo instanceof Api.MessageReplyHeader) {
-      try {
-        const replyToMsgId = message.replyTo.replyToMsgId;
-        const chat = await message.getInputChat();
-        const replyMessage = await client.getMessages(chat, {ids: replyToMsgId});
-        
-        if (replyMessage && replyMessage[0]) {
-          const replyContent = replyMessage[0].message || '';
-          messageContent = `Quoted message: "${replyContent}"\n\nOriginal message: ${messageContent}`;
-        }
-      } catch (error) {
-        log(`Error fetching reply message: ${error}`, 'error');
-      }
-    }
 
     if (message.media) {
       const hash = await getHash(message.media);
@@ -779,10 +763,8 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - **Sender:** The name or nickname of the sender. Emoji flags indicate the sender's country.
   - **Complaints:** The number of complaints the message has received.
   
-  **Special Notes:**
-  1. "Inline Title:": If you see a line starting with "Inline Title:" in the message content, it indicates the title of an embedded webpage or media (like a YouTube video) shared in the message. This title is often clickbait or misleading in spam messages. Pay extra attention to these titles, especially if they promise easy money, quick earnings, or seem overly sensational.
-
-  2. "Quoted message:": If you see a section starting with "Quoted message:", it means the analyzed message is replying to or quoting another message. The quoted message content is crucial for context and may contain spam elements even if the main message seems innocent. Analyze both the quoted message and the original message carefully, as spammers often use quotes to reference spam content or channels.
+  **Special Note on "Inline Title":**
+  If you see a line starting with "Inline Title:" in the message content, it indicates the title of an embedded webpage or media (like a YouTube video) shared in the message. This title is often clickbait or misleading in spam messages. Pay extra attention to these titles, especially if they promise easy money, quick earnings, or seem overly sensational.
 
   **Spam Classification Criteria:**
   
@@ -882,10 +864,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
      - **News or Information Sharing with Links:**
        - Messages sharing news or information that include links to external websites, especially if the content seems unrelated to the group's theme.
        - Announcements of events, competitions, or opportunities that direct users to external websites for more information or registration.
-     - **Quoted Content Analysis:**
-       - Pay close attention to quoted messages, especially if they contain links, promotions, or invitations to join channels/groups.
-       - If the quoted message contains spam indicators, but the main message is innocent, still consider the overall message as potential spam.
-       - Be wary of short replies to spam-like quotes, as they might be attempts to bump or promote the quoted spam content.
     
   2. **Context-Based Indicators:**
      - **Sender Analysis:**
@@ -907,11 +885,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Messages that combine commercial offers, promises of quick gains, and calls for urgent action are highly likely to be spam.
      - **Inline Titles:**
        - Pay special attention to inline titles, especially if they align with common spam tactics like promising easy money, quick earnings, or seem overly sensational.
-     - **Quote and Reply Analysis:**
-       - Consider the relationship between the quoted message and the main message. Spam often uses innocent-looking replies to promote content in the quote.
-       - If the main message encourages interaction with suspicious content in the quote (e.g., "Check this out!", "This works!"), it's likely spam.
-     - **Inline Titles and Quotes Combination:**
-       - Messages that combine suspicious inline titles with quotes from other messages are more likely to be coordinated spam efforts.
   
   3. **Not Spam Indicators:**
      - **Normal Communication:**
@@ -938,10 +911,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Sharing of cryptocurrency wallet addresses without spam indicators. (e.g., "0x123456789...", "UQA-aBE6_uNKRUCXdsh...")
      - **Numerical Formats:**
        - Standard numerical formats like "$500,000.00" are not inherently spam unless accompanied by suspicious claims or offers.
-     - **Legitimate Replies:**
-       - Normal conversations replying to previous messages, even if the quote contains commercial content, are not necessarily spam if the reply itself is not promotional.
-     - **Spam Warnings:**
-       - Messages quoting suspicious content to warn others about potential spam should not be classified as spam themselves.
   
   **Instructions:**
   - Analyze the message based on the above spam and not spam indicators.
@@ -958,9 +927,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Mark hi/hello messages as NOT spam virtually always, regardless of the complaint count. However, if you encounter a short message with emojis like 💋❤️ and similar, and it's obvious that the sender is there to offer sexual services (judging from the sender name) in a non-adult chat (based on the source name), then mark it as SPAM.
   - If the message indicates that there are more than 1 channel link (e.g., "Channel links: >1"), it's likely spam.
   - Pay close attention to "Inline Title" information, as it often reveals the true nature of shared links or media, especially in cases of clickbait or misleading content.
-  - When analyzing messages with quotes, consider both the quoted content and the new message. The combination of both parts should influence your decision.
-  - Be especially vigilant of short, seemingly innocent replies to quotes that contain spam indicators.
-  - Remember that legitimate conversations can include quotes of promotional content without being spam themselves, context is key.
   
   **REMINDER:** 
   - Do not consider the 'Source' field as definitive; it is only for contextual information.
@@ -972,9 +938,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   - Any offers of part-time work, temporary jobs, or requests for paid help should be classified as spam.
   - Be cautious with short, ambiguous messages that could be interpreted as solicitations, especially in groups with adult or dating themes.
   - "Inline Title" information can be crucial in identifying spam, especially for shared links or media with misleading titles.
-  - "Quoted message:" content is as important as the main message in determining if the overall communication is spam.
-  - A non-spam message quoting spam content should still be classified as spam if it appears to be promoting or supporting the quoted spam.
-
   
   **Respond ONLY with number 1 (for spam) or 0 (for not spam), without any explanations.**
   **Your analysis:**
@@ -1063,21 +1026,7 @@ async function retryGptRequest<T>(request: () => Promise<T>, maxRetries: number 
 // Helper functions
 function preprocess(message: string, media?: Api.TypeMessageMedia): string {
   const lines = message.split('\n');
-  let processedMessage = '';
-  
-  if (lines[0].startsWith('Quoted message:')) {
-    // Extract quoted message
-    const quoteEndIndex = lines.findIndex(line => line.startsWith('Original message:'));
-    if (quoteEndIndex !== -1) {
-      const quotedPart = lines.slice(0, quoteEndIndex).join('\n');
-      const originalPart = lines.slice(quoteEndIndex + 1).join('\n');
-      processedMessage = `${quotedPart}\n\n${originalPart}`;
-    } else {
-      processedMessage = lines.join('\n');
-    }
-  } else {
-    processedMessage = lines.slice(1).join('\n').trim();
-  }
+  let processedMessage = lines.slice(1).join('\n').trim();
   
   if (media instanceof Api.MessageMediaWebPage && media.webpage instanceof Api.WebPage) {
     const webpage = media.webpage;
