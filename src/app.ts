@@ -771,6 +771,8 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
   1. **Content-Based Indicators:**
      - **Commercial and Financial Offers:**
        - ANY sale, promotion, vacancies, employment postings, part-time work, household tasks, job offer, or service provision, regardless of context or type.
+       - ANY requests for services, including pet-sitting, house-sitting, or other personal assistance, especially if mentioning payment.
+       - ANY requests for help with tasks like loading/unloading, delivery, or any other work promising payment.
        - Unsolicited marketing or promotional content for any product or service.
        - Investment opportunities, especially those promising high returns.
        - Phishing attempts, fake giveaways, or unrealistic financial promises.
@@ -786,6 +788,10 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Invitations to join some activities.
        - ANY requests to top up a phone balance.
        - ANY requests for donations for medical treatment.
+     - **Job Offers and Temporary Work:**
+       - Any messages offering temporary work, part-time jobs, or quick earning opportunities, regardless of the group's theme.
+       - Requests for help with tasks like loading/unloading, delivery, pet-sitting, house-sitting, or any other work promising payment.
+       - Messages seeking someone to perform a service, even if it seems legitimate (e.g., pet-sitting, apartment checking).
      - **E-commerce and Social Media Promotion:**
        - Offers for SEO services, advertising setup, or product analytics.
        - Promises to increase sales or visibility on platforms like WB, Ozon, Amazon, etc.
