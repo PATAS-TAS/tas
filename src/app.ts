@@ -865,6 +865,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Unverified claims of official partnerships or endorsements.
        - References to support or admins to legitimize offers.
        - Phrases like "no bugs", "legit", or "trusted" to appear legitimate.
+       - Recommendation of courses or books
      - **Group or Channel Promotion:**
        - Repeated mentions of Telegram channels or groups, especially if combined with commercial themes.
        - Invitations to join other groups or channels for shopping or financial opportunities.
