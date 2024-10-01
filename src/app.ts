@@ -215,8 +215,15 @@ async function notify(msg: string) {
   }
 }
 
-async function retry<T>(op: () => Promise<T>, maxRetries: number = 3, delay: number = 1000): Promise<T> {
+async function retry<T>(
+  op: () => Promise<T>, 
+  maxRetries: number = 3, 
+  initialDelay: number = 1000, 
+  maxDelay: number = 30000
+): Promise<T> {
   let lastError: Error | null = null;
+  let delay = initialDelay;
+
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await op();
@@ -224,7 +231,7 @@ async function retry<T>(op: () => Promise<T>, maxRetries: number = 3, delay: num
       lastError = error instanceof Error ? error : new Error(String(error));
       log(`Operation failed, retrying in ${delay}ms (${i + 1}/${maxRetries})`, 'debug');
       await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2;
+      delay = Math.min(delay * 2, maxDelay);
     }
   }
   throw lastError;
@@ -295,13 +302,14 @@ async function sendToBot(message: string) {
   const startTime = Date.now();
   try {
     await retry(async () => {
+      await ensureConnection();
       await new Promise<void>((resolve) => {
         setTimeout(() => {
           client.sendMessage(botEntity!, { message });
           resolve();
         }, adaptiveDelay);
       });
-    });
+    }, 3, 5000); // 3 попытки, 5 секунд между попытками
     const endTime = Date.now();
     const actualDelay = endTime - startTime;
 
@@ -320,18 +328,31 @@ async function sendToBot(message: string) {
 }
 
 async function reconnect() {
-  try {
-    log('Attempting to reconnect Telegram client...', 'info');
-    if (client) {
-      await client.disconnect();
+  const MAX_RETRIES = 5;
+  const INITIAL_DELAY = 1000;
+  const MAX_DELAY = 30000;
+
+  let delay = INITIAL_DELAY;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      log(`Attempting to reconnect Telegram client... (Attempt ${attempt}/${MAX_RETRIES})`, 'info');
+      if (client) {
+        await client.disconnect();
+      }
+      client = await initClient();
+      await initBot();
+      await setupHandlers();
+      log('Telegram client reconnected successfully', 'info');
+      return;
+    } catch (error) {
+      logErr(`Reconnection attempt ${attempt} failed`, error);
+      if (attempt === MAX_RETRIES) {
+        throw new Error('Failed to reconnect Telegram client after maximum retries');
+      }
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay = Math.min(delay * 2, MAX_DELAY);
     }
-    client = await initClient();
-    await initBot();
-    await setupHandlers();
-    log('Telegram client reconnected successfully', 'info');
-  } catch (error) {
-    logErr('reconnect', error);
-    throw new Error('Failed to reconnect Telegram client');
   }
 }
 
@@ -2661,6 +2682,34 @@ async function setupHandlers() {
   }, new NewMessage({ fromUsers: [botUserId], incoming: true, forwards: false, outgoing: false }));
 }
 
+async function ensureConnection(): Promise<void> {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 5000; // 5 seconds
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (!client || !client.connected) {
+        log(`Attempting to reconnect (attempt ${attempt}/${MAX_RETRIES})`, 'info');
+        await reconnect();
+      }
+
+      // Вместо вызова getMe(), просто проверяем состояние подключения
+      if (client.connected) {
+        log('Connection ensured', 'debug');
+        return;
+      } else {
+        throw new Error('Client is not connected after reconnection attempt');
+      }
+    } catch (error) {
+      logErr(`Connection check failed (attempt ${attempt}/${MAX_RETRIES})`, error);
+      if (attempt === MAX_RETRIES) {
+        throw new Error('Failed to ensure connection after maximum retries');
+      }
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+    }
+  }
+}
+
 // System health check
 async function checkSystemHealth() {
   try {
@@ -2676,9 +2725,8 @@ async function checkSystemHealth() {
       throw new Error('Telegram client not initialized');
     }
 
-    try {
-      await client.getMe();
-    } catch (error) {
+    // Вместо вызова getMe(), просто проверяем состояние подключения
+    if (!client.connected) {
       throw new Error('Telegram client is not connected');
     }
 
@@ -2946,7 +2994,6 @@ async function main() {
       try {
         await sendToBot("/next 1");
         log('Initial "/next 1" command sent successfully', 'debug');
-        // Заменим прямой вызов startProcessing() на scheduleProcessing()
         scheduleProcessing();
       } catch (error) {
         logErr('Failed to send initial "/next 1" command', error);
