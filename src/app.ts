@@ -778,10 +778,39 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
     };
   }
   
-  if (hasMedia && hasLinksOrUsernames) {
+  // Проверка на наличие фото или видео с 2 и более жалобами
+  const hasPhotoOrVideoWithComplaints = report.mediaHashes.some(hash => {
+    const mediaType = hash.split(':')[0];
+    return (mediaType === 'photo' || mediaType === 'video' || mediaType === 'gif' || mediaType === 'image') && report.complaintCount >= 2;
+  });
+
+  if (hasPhotoOrVideoWithComplaints) {
     return {
       isSpam: 1,
-      reason: "Fast check: Media and link/username combination detected",
+      reason: "Fast check: Photo/video with 2 or more complaints",
+      checkType: 'fast'
+    };
+  }
+  
+  // Проверка на другие типы медиа с 3 и более жалобами
+  const hasOtherMediaWithComplaints = report.mediaHashes.some(hash => {
+    const mediaType = hash.split(':')[0];
+    return (mediaType !== 'photo' && mediaType !== 'video' && mediaType !== 'gif' && mediaType !== 'image') && report.complaintCount >= 3;
+  });
+
+  if (hasOtherMediaWithComplaints) {
+    return {
+      isSpam: 1,
+      reason: "Fast check: Other media with 3 or more complaints",
+      checkType: 'fast'
+    };
+  }
+  
+  // Проверка на наличие ссылок или юзернеймов с 3 и более жалобами
+  if (hasLinksOrUsernames && report.complaintCount >= 3) {
+    return {
+      isSpam: 1,
+      reason: "Fast check: Links/usernames with 3 or more complaints",
       checkType: 'fast'
     };
   }
@@ -820,18 +849,6 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
   
   const hasStory = report.mediaHashes.some(hash => hash.startsWith('story:'));
   
-  const hasPhotoOrVideoWithComplaints = report.mediaHashes.some(hash => {
-    const mediaType = hash.split(':')[0];
-    return (mediaType === 'photo' || mediaType === 'video') && report.complaintCount > 1;
-  });
-
-  const hasOtherMediaWithComplaints = report.mediaHashes.some(hash => {
-    const mediaType = hash.split(':')[0];
-    return (mediaType !== 'photo' && mediaType !== 'video') && report.complaintCount > 2;
-  });
-
-  const hasLinksOrUsernamesWithComplaints = hasLinksOrUsernames && report.complaintCount > 2;
-
   const repeatedContent = report.messageContent.some(msg => {
     const words = msg.split(/\s+/);
     return words.some((word, index, array) => 
@@ -851,22 +868,15 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
     return count + (matches ? matches.length : 0);
   }, 0);
 
-  if (hasPhotoOrVideoWithComplaints || 
-      hasOtherMediaWithComplaints || 
-      hasLinksOrUsernamesWithComplaints || 
-      hasDangerousFile || 
+  if (hasDangerousFile || 
       hasInlineKeyboard || 
       hasStory || 
       excessiveEmoji ||
       repeatedContent ||
       hasSuspiciousKeywords ||
       hasRepeatedMessages ||
-      linkCount > 1 ||
-      report.hasReplyToChannel) {
+      linkCount > 1) {
     let reason = "Fast check:";
-    if (hasPhotoOrVideoWithComplaints) reason += " Photo/video with >1 complaint";
-    if (hasOtherMediaWithComplaints) reason += " Other media with >2 complaints";
-    if (hasLinksOrUsernamesWithComplaints) reason += " Links/usernames with >2 complaints";
     if (hasDangerousFile) reason += " Dangerous file detected";
     if (hasInlineKeyboard) reason += " Inline keyboard detected";
     if (hasStory) reason += " Story detected";
@@ -875,7 +885,6 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
     if (hasSuspiciousKeywords) reason += " Suspicious keywords detected";
     if (hasRepeatedMessages) reason += " Repeated messages detected";
     if (linkCount > 1) reason += ` Multiple links detected (${linkCount})`;
-    if (report.hasReplyToChannel) reason += " Reply to a channel";
 
     log(`Fast check detected spam for report ${report.reportId}: ${reason}`, 'debug');
     return { 
@@ -950,7 +959,7 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Affiliate marketing messages for any products or platforms.
      - **Sexual Content:**
        - Explicit sexual content or coded invitations for sexual services. (e.g., "Open vcs", "Meet up", "Meet now", "встречусь", "available", "Content available", "avaible", "свободна", "Скучно? Пиши", etc.)
-       - Offers of adult or escort services, even if indirect. (e.g. "проведем эту ночь вместе", "ищу мужчину", "Работаю❤️", "Men should message me", etc.)
+       - Offers of adult or escort services, even if indirect. (e.g. "проведем эту ночь вместе", "ищу мужчину", "Работаю❤️", "Men should message me", "впишусь", "впишу", etc.)
        - Encrypted or coded messages resembling adult content sales. (e.g. "Ready vcs", "CP", "TN", "GV", "TF", "SL", "ID", "SVC", etc. - in any register)
      - **Excessive Links and URLs:**
        - Presence of multiple links (more than 1) in a single message.
@@ -1008,6 +1017,9 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
      - **News or Information Sharing with Links:**
        - Messages sharing news or information that include links to external websites, especially if the content seems unrelated to the group's theme.
        - Announcements of events, competitions, or opportunities that direct users to external websites for more information or registration.
+     - **Unsolicited Book or Course Recommendations:**
+       - Messages promoting or recommending specific books, courses, or educational materials, especially if they're related to making money, improving financial situations, or trading.
+       - Offers to share or provide access to books or courses, particularly if they claim to have had a significant impact on the sender's financial success or skills.
     
   2. **Context-Based Indicators:**
      - **Sender Analysis:**
@@ -1058,7 +1070,6 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
      - **Explicit or Offensive Content:**
        - Messages containing explicit, offensive, or vulgar content without commercial intent should not be classified as spam.
        - This includes messages with strong language, sexual references, or crude jokes, as long as they are not attempting to sell services or products.
-  
   
   **Instructions:**
   - Analyze based on above indicators
