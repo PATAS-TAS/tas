@@ -138,6 +138,7 @@ interface BufferItem {
   timestamp: number;
   mediaHashes?: string[];
   mediaKey?: string | null;
+  hasReplyToChannel?: boolean; // Новое поле
 }
 
 interface Report {
@@ -153,6 +154,7 @@ interface Report {
   decisionSent?: boolean;
   isOpen?: boolean;
   checkType?: 'default' | 'fast' | 'gpt' | 'gpt4' | 'manual';
+  hasReplyToChannel?: boolean; // Добавляем новое свойство
 }
 
 type SpamDecision = {
@@ -348,6 +350,7 @@ async function handleCheck(event: NewMessageEvent) {
     const mediaHashes: string[] = [];
     let mediaKey: string | null = null;
     let inlineTitle: string | null = null;
+    let hasReplyToChannel = false;
 
     if (message.media) {
       const hash = await getHash(message.media);
@@ -367,6 +370,11 @@ async function handleCheck(event: NewMessageEvent) {
           log(`Inline title detected: ${inlineTitle}`, 'debug');
         }
       }
+    }
+
+    if (message.replyTo instanceof Api.MessageReplyHeader && message.replyTo.replyToMsgId !== undefined) {
+      hasReplyToChannel = true;
+      log(`Message is a reply to another message`, 'debug');
     }
 
     if (message.replyMarkup) {
@@ -389,7 +397,8 @@ async function handleCheck(event: NewMessageEvent) {
       content: [messageContent],
       timestamp: Date.now(),
       mediaHashes,
-      mediaKey: mediaKey || undefined
+      mediaKey: mediaKey || undefined,
+      hasReplyToChannel
     };
 
     messageBuffer.push(bufferItem);
@@ -577,7 +586,6 @@ async function processBuffer() {
   const processingTimeout = 10000;
 
   try {
-    // Группируем сообщения только по близости по времени
     const groupedMessages = messageBuffer.reduce((acc, item) => {
       const group = acc.find(g => Math.abs(g[0].timestamp - item.timestamp) <= timeThreshold);
       if (group) {
@@ -595,11 +603,10 @@ async function processBuffer() {
       if (sysMsg && sysMsg.reportId) {
         try {
           if (checkMsgs.length > 0) {
-            // Объединяем содержимое всех check сообщений
             const combinedContent = checkMsgs.flatMap(msg => msg.content);
             const combinedMediaHashes = checkMsgs.flatMap(msg => msg.mediaHashes || []);
+            const hasReplyToChannel = checkMsgs.some(msg => msg.hasReplyToChannel);
 
-            // Удаляем дубликаты из контента и медиа-хешей
             const uniqueContent = Array.from(new Set(combinedContent));
             const uniqueMediaHashes = Array.from(new Set(combinedMediaHashes));
 
@@ -613,6 +620,7 @@ async function processBuffer() {
                 sender: '',
                 isSpam: -1,
                 timestamp: checkMsgs[0].timestamp,
+                hasReplyToChannel, // Добавляем новое поле
                 ...parseSysMessage(sysMsg.content[0])
               }),
               new Promise((_, reject) => setTimeout(() => reject(new Error('Processing timeout')), processingTimeout))
@@ -713,6 +721,41 @@ async function processReport(report: Report): Promise<void> {
   }
 }
 
+function getFileInfoFromHash(hash: string): { mimeType: string; fileName: string } {
+  const [mediaType, fileId] = hash.split(':');
+  let mimeType = 'application/octet-stream';
+  let fileName = fileId || 'unknown';
+
+  switch (mediaType) {
+    case 'photo':
+      mimeType = 'image/jpeg';
+      fileName = `${fileId}.jpg`;
+      break;
+    case 'video':
+    case 'videonote':
+      mimeType = 'video/mp4';
+      fileName = `${fileId}.mp4`;
+      break;
+    case 'gif':
+      mimeType = 'image/gif';
+      fileName = `${fileId}.gif`;
+      break;
+    case 'sticker':
+      mimeType = 'image/webp';
+      fileName = `${fileId}.webp`;
+      break;
+    case 'document':
+      // Для документов мы не можем точно определить MIME-тип и расширение,
+      // поэтому оставляем значения по умолчанию
+      break;
+    default:
+      // Для неизвестных типов оставляем значения по умолчанию
+      break;
+  }
+
+  return { mimeType, fileName };
+}
+
 async function fastCheck(report: Report): Promise<SpamDecision | null> {
   log(`Starting fast check for report ${report.reportId}`, 'debug');
   
@@ -726,7 +769,15 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
   
   const hasMedia = report.mediaHashes.length > 0;
   
-  // Новая проверка: если есть и медиа, и ссылка/юзернейм одновременно
+  // Проверка на наличие replyTo на канал
+  if (report.hasReplyToChannel) {
+    return {
+      isSpam: 1,
+      reason: "Fast check: Message is a reply to a channel",
+      checkType: 'fast'
+    };
+  }
+  
   if (hasMedia && hasLinksOrUsernames) {
     return {
       isSpam: 1,
@@ -740,10 +791,27 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
     return emojiCount > 50;
   });
   
-  const dangerousFileTypes = ['application/x-msdownload', 'application/x-executable', 'application/javascript', 'application/x-bat', 'application/x-msdos-program', 'application/x-vbs', 'application/x-powershell', 'application/java-archive', 'application/x-ms-installer', 'application/x-ms-shortcut', 'application/x-ms-dos-executable'];
+  const dangerousFileTypes = [
+    'application/x-msdownload', 'application/x-executable', 'application/x-dosexec',
+    'application/x-ms-dos-executable', 'application/x-msdos-program', 'application/x-microsoft-application',
+    'application/vnd.microsoft.portable-executable', 'application/x-msexe', 'application/x-msi',
+    'application/x-ms-installer', 'application/x-bat', 'application/x-vbs', 'application/x-powershell',
+    'application/javascript', 'application/x-javascript', 'text/javascript', 'application/java-archive',
+    'application/x-java-archive', 'application/vnd.android.package-archive', 'application/x-ms-shortcut',
+    'application/x-shockwave-flash', 'application/octet-stream'
+  ];
+
+  const dangerousExtensions = [
+    '.exe', '.dll', '.bat', '.cmd', '.msi', '.scr', '.jar', '.jnlp', '.apk', '.vbs', '.vbe',
+    '.js', '.jse', '.ws', '.wsf', '.wsc', '.wsh', '.ps1', '.psm1', '.psd1', '.msh', '.msh1',
+    '.msh2', '.mshxml', '.msh1xml', '.msh2xml', '.scf', '.lnk', '.inf', '.reg', '.com',
+    '.application', '.gadget', '.msp', '.hta', '.cpl', '.msc', '.jar', '.py', '.rb', '.sh'
+  ];
+
   const hasDangerousFile = report.mediaHashes.some(hash => {
-    const fileType = getFileTypeFromHash(hash);
-    return dangerousFileTypes.includes(fileType.toLowerCase());
+    const fileInfo = getFileInfoFromHash(hash);
+    return dangerousFileTypes.includes(fileInfo.mimeType.toLowerCase()) ||
+           dangerousExtensions.some(ext => fileInfo.fileName.toLowerCase().endsWith(ext));
   });
   
   const hasInlineKeyboard = report.mediaHashes.some(hash => 
@@ -793,7 +861,8 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
       repeatedContent ||
       hasSuspiciousKeywords ||
       hasRepeatedMessages ||
-      linkCount > 1) {
+      linkCount > 1 ||
+      report.hasReplyToChannel) {
     let reason = "Fast check:";
     if (hasPhotoOrVideoWithComplaints) reason += " Photo/video with >1 complaint";
     if (hasOtherMediaWithComplaints) reason += " Other media with >2 complaints";
@@ -806,6 +875,7 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
     if (hasSuspiciousKeywords) reason += " Suspicious keywords detected";
     if (hasRepeatedMessages) reason += " Repeated messages detected";
     if (linkCount > 1) reason += ` Multiple links detected (${linkCount})`;
+    if (report.hasReplyToChannel) reason += " Reply to a channel";
 
     log(`Fast check detected spam for report ${report.reportId}: ${reason}`, 'debug');
     return { 
