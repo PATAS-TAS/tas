@@ -343,9 +343,10 @@ async function handleCheck(event: NewMessageEvent) {
   if (message instanceof Api.Message && event.isPrivate && botEntity && message.senderId?.toString() === botEntity.userId.toString()) {
     log(`Received check message: ${message.message}`, 'info');
     
-    const messageContent = message.message || '';
+    let messageContent = message.message || '';
     const mediaHashes: string[] = [];
     let mediaKey: string | null = null;
+    let inlineTitle: string | null = null;
 
     if (message.media) {
       const hash = await getHash(message.media);
@@ -358,6 +359,13 @@ async function handleCheck(event: NewMessageEvent) {
         mediaKey = `media:${message.media instanceof Api.MessageMediaPhoto ? message.media.photo?.id : message.media.document?.id}`;
         log(`Media key generated: ${mediaKey}`, 'debug');
       }
+
+      if (message.media instanceof Api.MessageMediaWebPage && message.media.webpage instanceof Api.WebPage) {
+        inlineTitle = message.media.webpage.title || null;
+        if (inlineTitle) {
+          log(`Inline title detected: ${inlineTitle}`, 'debug');
+        }
+      }
     }
 
     if (message.replyMarkup) {
@@ -368,16 +376,23 @@ async function handleCheck(event: NewMessageEvent) {
 
     const processedContent = preprocess(messageContent, message.media);
 
+    // Добавляем inline title к содержимому сообщения
+    if (inlineTitle) {
+      messageContent = `Inline Title: ${inlineTitle}\n\n${processedContent}`;
+    } else {
+      messageContent = processedContent;
+    }
+
     const bufferItem: BufferItem = {
       type: 'check',
-      content: [processedContent],
+      content: [messageContent],
       timestamp: Date.now(),
       mediaHashes,
       mediaKey: mediaKey || undefined
     };
 
     messageBuffer.push(bufferItem);
-    log(`Check message added to buffer. Content: ${processedContent}`, 'debug');
+    log(`Check message added to buffer. Content: ${messageContent}`, 'debug');
     scheduleProcessing();
   }
 }
@@ -536,9 +551,10 @@ async function processBuffer() {
   log('Processing buffer', 'debug');
   
   const currentTime = Date.now();
-  const timeThreshold = 30;
+  const timeThreshold = 100; // 100 мс для группировки связанных сообщений
   const processingTimeout = 10000;
 
+  // Группируем сообщения только по близости по времени
   const groupedMessages = messageBuffer.reduce((acc, item) => {
     const group = acc.find(g => Math.abs(g[0].timestamp - item.timestamp) <= timeThreshold);
     if (group) {
@@ -550,27 +566,35 @@ async function processBuffer() {
   }, [] as BufferItem[][]);
 
   for (const group of groupedMessages) {
-    const checkMsg = group.find(item => item.type === 'check');
+    const checkMsgs = group.filter(item => item.type === 'check');
     const sysMsg = group.find(item => item.type === 'sys');
 
     if (sysMsg && sysMsg.reportId) {
       try {
-        if (checkMsg) {
+        if (checkMsgs.length > 0) {
+          // Объединяем содержимое всех check сообщений
+          const combinedContent = checkMsgs.flatMap(msg => msg.content);
+          const combinedMediaHashes = checkMsgs.flatMap(msg => msg.mediaHashes || []);
+
+          // Удаляем дубликаты из контента и медиа-хешей
+          const uniqueContent = Array.from(new Set(combinedContent));
+          const uniqueMediaHashes = Array.from(new Set(combinedMediaHashes));
+
           await Promise.race([
             processReport({
               reportId: sysMsg.reportId,
-              messageContent: checkMsg.content,
-              mediaHashes: checkMsg.mediaHashes || [],
+              messageContent: uniqueContent,
+              mediaHashes: uniqueMediaHashes,
               complaintCount: 0,
               source: '',
               sender: '',
               isSpam: -1,
-              timestamp: checkMsg.timestamp,
+              timestamp: checkMsgs[0].timestamp,
               ...parseSysMessage(sysMsg.content[0])
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Processing timeout')), processingTimeout))
           ]);
-          log(`Processed full report ${sysMsg.reportId} from buffer`, 'debug');
+          log(`Processed combined report ${sysMsg.reportId} from buffer`, 'debug');
         }
       } catch (error) {
         if (error instanceof Error && error.message === 'Processing timeout') {
@@ -580,8 +604,8 @@ async function processBuffer() {
           logErr(`Error processing report ${sysMsg.reportId} from buffer`, error);
         }
       }
-    } else if (checkMsg) {
-      log(`Orphaned check message in buffer, timestamp: ${checkMsg.timestamp}`, 'warn');
+    } else if (checkMsgs.length > 0) {
+      log(`Orphaned check messages in buffer, timestamps: ${checkMsgs.map(msg => msg.timestamp).join(', ')}`, 'warn');
     }
   }
 
@@ -710,6 +734,15 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
     suspiciousKeywords.some(keyword => msg.toLowerCase().includes(keyword))
   );
 
+  // Новая проверка на повторяющиеся сообщения
+  const hasRepeatedMessages = new Set(report.messageContent).size < report.messageContent.length;
+
+  // Новая проверка на количество ссылок
+  const linkCount = report.messageContent.reduce((count, msg) => {
+    const matches = msg.match(urlRegex);
+    return count + (matches ? matches.length : 0);
+  }, 0);
+
   if (hasPhotoOrVideoWithComplaints || 
       hasOtherMediaWithComplaints || 
       hasLinksOrUsernamesWithComplaints || 
@@ -718,7 +751,9 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
       hasStory || 
       excessiveEmoji ||
       repeatedContent ||
-      hasSuspiciousKeywords) {
+      hasSuspiciousKeywords ||
+      hasRepeatedMessages ||
+      linkCount > 1) {
     let reason = "Fast check:";
     if (hasPhotoOrVideoWithComplaints) reason += " Photo/video with >1 complaint";
     if (hasOtherMediaWithComplaints) reason += " Other media with >2 complaints";
@@ -729,6 +764,8 @@ async function fastCheck(report: Report): Promise<SpamDecision | null> {
     if (excessiveEmoji) reason += " Excessive use of emoji";
     if (repeatedContent) reason += " Repeated content detected";
     if (hasSuspiciousKeywords) reason += " Suspicious keywords detected";
+    if (hasRepeatedMessages) reason += " Repeated messages detected";
+    if (linkCount > 1) reason += ` Multiple links detected (${linkCount})`;
 
     log(`Fast check detected spam for report ${report.reportId}: ${reason}`, 'debug');
     return { 
@@ -915,6 +952,10 @@ async function gptCheck(report: Report): Promise<SpamDecision | null> {
        - Sharing of cryptocurrency wallet addresses without spam indicators. (e.g., "0x123456789...", "UQA-aBE6_uNKRUCXdsh...", etc.)
      - **Numerical Formats:**
        - Standard numerical formats like "$500,000.00" are not inherently spam unless accompanied by suspicious claims or offers.
+     - **Explicit or Offensive Content:**
+       - Messages containing explicit, offensive, or vulgar content without commercial intent should not be classified as spam.
+       - This includes messages with strong language, sexual references, or crude jokes, as long as they are not attempting to sell services or products.
+  
   
   **Instructions:**
   - Analyze based on above indicators
