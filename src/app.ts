@@ -2266,7 +2266,7 @@ async function initDB() {
     `, [DB_SCHEMA_VERSION]);
 
     const now = new Date();
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 24; i++) {  // Create partitions for 2 years ahead
       const startDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
       const endDate = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
       const partitionName = `reports_y${startDate.getFullYear()}_m${String(startDate.getMonth() + 1).padStart(2, '0')}`;
@@ -2285,6 +2285,7 @@ async function initDB() {
           FOR VALUES FROM ('${startDate.toISOString()}') TO ('${endDate.toISOString()}');
         `;
         await client.query(createPartitionQuery);
+        log(`Created partition ${partitionName}`, 'info');
       }
     }
 
@@ -2347,7 +2348,18 @@ async function saveRedisToPostgres() {
             reason = EXCLUDED.reason
           `;
 
-          await client.query(query, values.flat());
+          try {
+            await client.query(query, values.flat());
+          } catch (error) {
+            if (error instanceof Error && error.message.includes('no partition of relation "reports" found for row')) {
+              log(`No partition found for some reports. Creating new partition.`, 'warn');
+              await initDB();  // This will create new partitions if needed
+              // Retry the insert
+              await client.query(query, values.flat());
+            } else {
+              throw error;
+            }
+          }
         }
       }
 
@@ -2745,6 +2757,7 @@ async function main() {
     schedule.scheduleJob('*/30 * * * *', cleanupCache);
     schedule.scheduleJob('*/5 * * * *', cleanupLRUCache);
     schedule.scheduleJob('*/5 * * * *', checkStuckReports);
+    schedule.scheduleJob('0 0 1 * *', initDB);  // Выполнять initDB в полночь первого дня каждого месяца
 
     log('Periodic tasks scheduled', 'info');
 
