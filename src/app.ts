@@ -2453,92 +2453,89 @@ async function saveRedisToPostgres() {
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 5000; // 5 seconds
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      log(`Starting Redis to PostgreSQL data transfer (Attempt ${attempt}/${MAX_RETRIES})`, 'info');
-      const keys = await redis.keys('report:*');
+  log('Starting Redis to PostgreSQL data transfer', 'info');
+  const keys = await redis.keys('report:*');
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const key of keys) {
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       const client = await pool.connect();
-
       try {
-        await client.query('BEGIN');
-
-        const batchSize = 100;
-        for (let i = 0; i < keys.length; i += batchSize) {
-          const batch = keys.slice(i, i + batchSize);
-          const reports = await Promise.all(batch.map(key => redis.get(key)));
-          
-          const values = reports.filter(Boolean).map(reportData => {
-            const report = JSON.parse(reportData!) as Report;
-            if (report.messageContent.length > 0 && report.messageContent.some(msg => msg.trim() !== '')) {
-              return [
-                report.reportId,
-                report.messageContent,
-                report.mediaHashes,
-                report.complaintCount,
-                report.source,
-                report.sender,
-                report.isSpam,
-                report.reason,
-                new Date(report.timestamp)
-              ];
-            }
-            return null;
-          }).filter(value => value !== null);
-
-          if (values.length > 0) {
-            const query = `
-              INSERT INTO reports 
-              (report_id, message_content, media_hashes, complaint_count, source, sender, is_spam, reason, created_at)
-              VALUES ${values.map((_, index) => `($${index * 9 + 1}, $${index * 9 + 2}, $${index * 9 + 3}, $${index * 9 + 4}, $${index * 9 + 5}, $${index * 9 + 6}, $${index * 9 + 7}, $${index * 9 + 8}, $${index * 9 + 9})`).join(', ')}
-              ON CONFLICT (report_id, created_at) DO UPDATE SET
-              message_content = EXCLUDED.message_content,
-              media_hashes = EXCLUDED.media_hashes,
-              complaint_count = EXCLUDED.complaint_count,
-              source = EXCLUDED.source,
-              sender = EXCLUDED.sender,
-              is_spam = EXCLUDED.is_spam,
-              reason = EXCLUDED.reason
-            `;
-
-            try {
-              await client.query(query, values.flat());
-            } catch (error) {
-              if (error instanceof Error && error.message.includes('no partition of relation "reports" found for row')) {
-                log(`No partition found for some reports. Creating new partition.`, 'warn');
-                await initDB();  // This will create new partitions if needed
-                // Retry the insert
-                await client.query(query, values.flat());
-              } else {
-                throw error;
-              }
-            }
-          }
+        const reportData = await redis.get(key);
+        if (!reportData) {
+          log(`No data found for key ${key}`, 'warn');
+          break; // Move to next key
         }
 
-        await client.query('COMMIT');
-        log(`Successfully transferred reports from Redis to PostgreSQL`, 'info');
-        return; // Exit the function if successful
+        const report = JSON.parse(reportData) as Report;
+        if (report.messageContent.length === 0 || !report.messageContent.some(msg => msg.trim() !== '')) {
+          log(`Skipping empty report for key ${key}`, 'debug');
+          break; // Move to next key
+        }
+
+        const query = `
+          INSERT INTO reports 
+          (report_id, message_content, media_hashes, complaint_count, source, sender, is_spam, reason, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ON CONFLICT (report_id, created_at) DO UPDATE SET
+          message_content = EXCLUDED.message_content,
+          media_hashes = EXCLUDED.media_hashes,
+          complaint_count = EXCLUDED.complaint_count,
+          source = EXCLUDED.source,
+          sender = EXCLUDED.sender,
+          is_spam = EXCLUDED.is_spam,
+          reason = EXCLUDED.reason
+        `;
+
+        const values = [
+          report.reportId,
+          report.messageContent,
+          report.mediaHashes,
+          report.complaintCount,
+          report.source,
+          report.sender,
+          report.isSpam,
+          report.reason,
+          new Date(report.timestamp)
+        ];
+
+        await client.query(query, values);
+        successCount++;
+        log(`Successfully transferred report ${report.reportId} to PostgreSQL`, 'debug');
+        break; // Successful, move to next key
+
       } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
+        if (error instanceof Error && error.message.includes('no partition of relation "reports" found for row')) {
+          log(`No partition found for report. Creating new partition.`, 'warn');
+          await initDB();  // This will create new partitions if needed
+          // Retry immediately with the same attempt count
+          continue;
+        }
+
+        logErr('saveRedisToPostgres', `Attempt ${attempt}/${MAX_RETRIES} for key ${key}: ${error instanceof Error ? error.message : String(error)}`);
+        
+        if (attempt === MAX_RETRIES) {
+          failCount++;
+          log(`Failed to transfer report for key ${key} after ${MAX_RETRIES} attempts`, 'error');
+        } else {
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        }
+
       } finally {
         client.release();
       }
-    } catch (error) {
-      if (error instanceof Error) {
-        logErr('saveRedisToPostgres', `Attempt ${attempt}/${MAX_RETRIES}: ${error.message}\n${error.stack}`);
-      } else {
-        logErr('saveRedisToPostgres', `Attempt ${attempt}/${MAX_RETRIES}: ${String(error)}`);
-      }
-      
-      if (attempt < MAX_RETRIES) {
-        log(`Retrying in ${RETRY_DELAY / 1000} seconds...`, 'info');
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      } else {
-        await notify(`Error in saveRedisToPostgres after ${MAX_RETRIES} attempts: ${error instanceof Error ? error.message : String(error)}`);
-        throw error; // Rethrow the error after all retries have been exhausted
-      }
     }
+  }
+
+  const totalCount = keys.length;
+  const successRate = (successCount / totalCount) * 100;
+  const message = `Redis to PostgreSQL transfer completed. Success: ${successCount}/${totalCount} (${successRate.toFixed(2)}%). Failed: ${failCount}.`;
+  log(message, 'info');
+  await notify(message);
+
+  if (failCount > 0) {
+    throw new Error(`Failed to transfer ${failCount} reports from Redis to PostgreSQL`);
   }
 }
 
