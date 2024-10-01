@@ -2296,7 +2296,7 @@ async function resetRedisCache(): Promise<void> {
 async function handleDbCommand() {
   try {
     log('Handling /db command', 'debug');
-    await saveRedisToPostgres();
+    await saveRedisToPostgres(true);  // Pass true for manual call
     const cacheContent = await getCacheContent();
     const csvFilePath = await generateCacheCsvReport(cacheContent);
     await sendCsvToAdmin(csvFilePath);
@@ -2449,7 +2449,7 @@ async function initDB() {
   }
 }
 
-async function saveRedisToPostgres() {
+async function saveRedisToPostgres(isManualCall: boolean = false) {
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 5000; // 5 seconds
 
@@ -2532,7 +2532,10 @@ async function saveRedisToPostgres() {
   const successRate = (successCount / totalCount) * 100;
   const message = `Redis to PostgreSQL transfer completed. Success: ${successCount}/${totalCount} (${successRate.toFixed(2)}%). Failed: ${failCount}.`;
   log(message, 'info');
-  await notify(message);
+
+  if (isManualCall) {
+    await notify(message);
+  }
 
   if (failCount > 0) {
     throw new Error(`Failed to transfer ${failCount} reports from Redis to PostgreSQL`);
@@ -2908,14 +2911,14 @@ async function main() {
 
     app.listen(PORT, () => log(`Server running on port ${PORT}`, 'info'));
 
-    schedule.scheduleJob('0 */2 * * *', saveRedisToPostgres);
+    schedule.scheduleJob('0 */2 * * *', () => saveRedisToPostgres(false));
     schedule.scheduleJob('*/15 * * * *', checkSystemHealth);
     schedule.scheduleJob('*/5 * * * *', limitCacheSize);
     schedule.scheduleJob('0 5 * * *', cleanupOldData);
     schedule.scheduleJob('*/30 * * * *', cleanupCache);
     schedule.scheduleJob('*/5 * * * *', cleanupLRUCache);
     schedule.scheduleJob('*/5 * * * *', checkStuckReports);
-    schedule.scheduleJob('0 0 1 * *', initDB);  // Выполнять initDB в полночь первого дня каждого месяца
+    schedule.scheduleJob('0 0 1 * *', initDB);
 
     log('Periodic tasks scheduled', 'info');
 
