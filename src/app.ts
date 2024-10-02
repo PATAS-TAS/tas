@@ -16,6 +16,7 @@ import dotenv from 'dotenv';
 import OpenAI from 'openai';
 import Redis from 'ioredis';
 import { tmpdir } from 'os';
+import axios from 'axios';
 import pkg from 'pg';
 import os from 'os';
 
@@ -2199,28 +2200,39 @@ async function handleAdmin(event: NewMessageEvent) {
             await notify('Invalid fix command. Usage: /fix [reportId]');
           }
           break;
-
-        default:
-          log(`Unrecognized admin command: ${command}`, 'debug');
-          await notify(`Unrecognized command: ${command}. Available commands are:
-          /start - Start automatic mode
-          /stop - Stop automatic mode
-          /status - Get current status
-          /undos [startReportId] [endReportId] - Undo and recheck reports in range
-          /delay [value] - Set command delay in milliseconds
-          /reset - Clear Redis and LRU caches
-          /db - Perform database operations and generate report
-          /redis - Get cache info and generate report
-          /lru - Get cache info and generate report
-          /fine - Generate fine-tuning data
-          /fix [reportId] - Fix and reassess a specific report`);
+          
+          case '/restart':
+            await notify('Initiating application restart...');
+            const success = await restartApp();
+            if (success) {
+              await notify('Restart command sent successfully. The application will restart shortly.');
+            } else {
+              await notify('Failed to send restart command. Please check the logs and try again.');
+            }
+            break;
+  
+          default:
+            log(`Unrecognized admin command: ${command}`, 'debug');
+            await notify(`Unrecognized command: ${command}. Available commands are:
+            /start - Start automatic mode
+            /stop - Stop automatic mode
+            /status - Get current status
+            /undos [startReportId] [endReportId] - Undo and recheck reports in range
+            /delay [value] - Set command delay in milliseconds
+            /reset - Clear Redis and LRU caches
+            /db - Perform database operations and generate report
+            /redis - Get cache info and generate report
+            /lru - Get cache info and generate report
+            /fine - Generate fine-tuning data
+            /fix [reportId] - Fix and reassess a specific report
+            /restart - Restart the application`);
+        }
+      } catch (error) {
+        logErr(`Error processing admin command: ${command}`, error);
+        await notify(`Error processing command ${command}: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch (error) {
-      logErr(`Error processing admin command: ${command}`, error);
-      await notify(`Error processing command ${command}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-}
 
 async function handleFixCommand(reportId: string): Promise<void> {
   log(`Handling fix command for report ${reportId}`, 'debug');
@@ -2723,6 +2735,30 @@ async function ensureConnection(): Promise<void> {
   }
 }
 
+async function restartApp() {
+  const HEROKU_API_KEY = process.env.HEROKU_API_KEY;
+  const HEROKU_APP_NAME = process.env.HEROKU_APP_NAME;
+
+  if (!HEROKU_API_KEY || !HEROKU_APP_NAME) {
+    throw new Error('HEROKU_API_KEY or HEROKU_APP_NAME not set');
+  }
+
+  try {
+    await axios.delete(`https://api.heroku.com/apps/${HEROKU_APP_NAME}/dynos`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.heroku+json; version=3',
+        'Authorization': `Bearer ${HEROKU_API_KEY}`
+      }
+    });
+    log('Restart command sent to Heroku', 'info');
+    return true;
+  } catch (error) {
+    logErr('Failed to restart app via Heroku API', error);
+    return false;
+  }
+}
+
 // System health check
 async function checkSystemHealth() {
   try {
@@ -2873,70 +2909,64 @@ async function cleanupOldData() {
 
 // Graceful shutdown
 async function gracefulShutdown(restart: boolean = false) {
-  log(`Starting graceful shutdown... ${restart ? '(Restarting)' : ''}`, 'info');
+  const shutdownTimeout = 25000; // 25 seconds, giving a 5-second buffer before Heroku's 30-second limit
+  let shutdownComplete = false;
 
-  autoMode = false;
-  await notify(`Automatic mode stopped due to application ${restart ? 'restart' : 'shutdown'}.`);
+  const performShutdown = async () => {
+    if (shutdownComplete) return;
+    log(`Starting graceful shutdown... ${restart ? '(Restarting)' : ''}`, 'info');
 
-  clearExistingTimers();
+    autoMode = false;
+    isShuttingDown = true;
+    processingReports.clear();
+    clearExistingTimers();
 
-  isShuttingDown = true;
-
-  processingReports.clear();
-
-  const safeRedisOperation = async (operation: () => Promise<void>) => {
-    if (redis.status === 'ready') {
-      try {
-        await operation();
-      } catch (error) {
-        logErr('Redis operation during shutdown', error);
+    const safeRedisOperation = async (operation: () => Promise<void>) => {
+      if (redis.status === 'ready') {
+        try {
+          await operation();
+        } catch (error) {
+          logErr('Redis operation during shutdown', error);
+        }
       }
-    }
+    };
+
+    await safeRedisOperation(async () => {
+      if (redisBatch.length > 0) {
+        await saveRedisBatch();
+      }
+    });
+
+    await Promise.all([
+      pool.end().catch(error => logErr('gracefulShutdown - closing database connection', error)),
+      client?.disconnect().catch(error => logErr('gracefulShutdown - disconnecting Telegram client', error)),
+      redis.quit().catch(error => logErr('gracefulShutdown - closing Redis connection', error))
+    ]);
+
+    log(`Graceful shutdown completed${restart ? ' (Restarting)' : ''}`, 'info');
+    shutdownComplete = true;
   };
 
-  await safeRedisOperation(async () => {
-    if (redisBatch.length > 0) {
-      await saveRedisBatch();
+  // Start the shutdown process
+  performShutdown();
+
+  // Set a timeout to force exit if shutdown takes too long
+  setTimeout(() => {
+    if (!shutdownComplete) {
+      log('Shutdown timeout reached. Forcing exit.', 'warn');
+      process.exit(restart ? 1 : 0);
     }
+  }, shutdownTimeout);
+
+  // Return a promise that resolves when shutdown is complete
+  return new Promise<void>(resolve => {
+    const checkShutdown = setInterval(() => {
+      if (shutdownComplete) {
+        clearInterval(checkShutdown);
+        resolve();
+      }
+    }, 100);
   });
-
-  try {
-    await pool.end();
-    log('Database connection closed', 'info');
-  } catch (error) {
-    logErr('gracefulShutdown - closing database connection', error);
-  }
-
-  try {
-    if (client && client.connected) {
-      await client.disconnect();
-      log('Telegram client disconnected', 'info');
-    }
-  } catch (error) {
-    logErr('gracefulShutdown - disconnecting Telegram client', error);
-  }
-
-  try {
-    if (redis.status === 'ready') {
-      await redis.quit();
-      log('Redis connection closed', 'info');
-    }
-  } catch (error) {
-    logErr('gracefulShutdown - closing Redis connection', error);
-  }
-
-  log(`Graceful shutdown completed${restart ? ' (Restarting)' : ''}`, 'info');
-  await notify(`Application has been ${restart ? 'restarted' : 'shut down'} gracefully.`);
-
-  if (restart) {
-    const { spawn } = await import('child_process');
-    spawn(process.argv[0], process.argv.slice(1), {
-      detached: true,
-      stdio: ['ignore', 'ignore', 'ignore']
-    }).unref();
-  }
-
-  process.exit(restart ? 1 : 0);
 }
 
 function clearExistingTimers() {
@@ -3030,28 +3060,28 @@ main().catch(error => {
 // Handle uncaught exceptions and unhandled rejections
 process.on('uncaughtException', async (error) => {
   logErr('Uncaught Exception', error);
-  await notify('Uncaught Exception occurred. Application will restart.');
   await gracefulShutdown(true);
+  process.exit(1);
 });
 
 process.on('unhandledRejection', async (reason, promise) => {
   logErr('Unhandled Rejection', reason);
-  await notify('Unhandled Rejection occurred. Application will restart.');
   await gracefulShutdown(true);
+  process.exit(1);
 });
 
-// Handle SIGTERM signal for graceful shutdown
+// Handle SIGTERM signal
 process.on('SIGTERM', async () => {
   log('SIGTERM signal received', 'info');
-  await notify('SIGTERM signal received. Application will shut down gracefully.');
   await gracefulShutdown();
+  process.exit(0);
 });
 
-// Handle SIGINT signal for graceful shutdown (e.g., when pressing Ctrl+C)
+// Handle SIGINT signal (e.g., when pressing Ctrl+C)
 process.on('SIGINT', async () => {
   log('SIGINT signal received', 'info');
-  await notify('SIGINT signal received. Application will shut down gracefully.');
   await gracefulShutdown();
+  process.exit(0);
 });
 
 // Express routes
