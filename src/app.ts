@@ -674,14 +674,6 @@ async function processBuffer() {
   }
 }
 
-function shouldSkipClassification(report: Report): boolean {
-  return (
-    report.complaintCount === 1 &&
-    report.messageContent.length === 0 &&
-    report.mediaHashes.length > 0
-  );
-}
-
 async function processReport(report: Report): Promise<void> {
   log(`Processing report ${report.reportId}`, 'debug');
   resetIdleUndoTimer();
@@ -723,24 +715,11 @@ async function processReport(report: Report): Promise<void> {
       }
     }
 
-    // Проверка условий для пропуска классификации
-    if (shouldSkipClassification(report)) {
-      log(`Skipping classification for report ${report.reportId} due to single complaint and only media content`, 'debug');
-      await undoRecentReports();
-      return;
-    }
-
-    decision = await fastCheck(report);
-    
-    // Если fastCheck не принял решение и отчет не подлежит пропуску, выполняем gptCheck
-    if (!decision && !shouldSkipClassification(report)) {
-      decision = await gptCheck(report);
-    }
+    decision = await fastCheck(report) || await gptCheck(report);
 
     if (!decision) {
-      log(`All checks returned null for report ${report.reportId}. Skipping classification.`, 'warn');
-      await undoRecentReports();
-      return;
+      log(`All checks returned null for report ${report.reportId}. Marking as spam.`, 'warn');
+      decision = { isSpam: 1, reason: "All checks inconclusive, defaulting to spam", checkType: 'default' };
     }
 
     await applyDecision(report, decision);
