@@ -34,6 +34,8 @@ const DEEP_LOG = process.env.DEEP_LOG === 'true';
 const SESSION_STRING = process.env.SESSION_STRING!;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
 const BOT_ACCESS_HASH = process.env.BOT_ACCESS_HASH!;
+const HEROKU_API_KEY = process.env.HEROKU_API_KEY!;
+const HEROKU_APP_NAME = process.env.HEROKU_APP_NAME!;
 
 // Constants
 const REDIS_BATCH_INTERVAL = 10 * 60 * 1000;
@@ -2200,7 +2202,7 @@ async function handleAdmin(event: NewMessageEvent) {
             await notify('Invalid fix command. Usage: /fix [reportId]');
           }
           break;
-          
+
           case '/restart':
             await notify('Initiating application restart...');
             const success = await restartApp();
@@ -2735,15 +2737,14 @@ async function ensureConnection(): Promise<void> {
   }
 }
 
-async function restartApp() {
-  const HEROKU_API_KEY = process.env.HEROKU_API_KEY;
-  const HEROKU_APP_NAME = process.env.HEROKU_APP_NAME;
-
+async function restartApp(): Promise<boolean> {
   if (!HEROKU_API_KEY || !HEROKU_APP_NAME) {
-    throw new Error('HEROKU_API_KEY or HEROKU_APP_NAME not set');
+    log('HEROKU_API_KEY or HEROKU_APP_NAME not set', 'error');
+    return false;
   }
 
   try {
+    log('Sending restart command to Heroku', 'info');
     await axios.delete(`https://api.heroku.com/apps/${HEROKU_APP_NAME}/dynos`, {
       headers: {
         'Content-Type': 'application/json',
@@ -2751,7 +2752,7 @@ async function restartApp() {
         'Authorization': `Bearer ${HEROKU_API_KEY}`
       }
     });
-    log('Restart command sent to Heroku', 'info');
+    log('Restart command sent successfully', 'info');
     return true;
   } catch (error) {
     logErr('Failed to restart app via Heroku API', error);
