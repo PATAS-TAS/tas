@@ -358,52 +358,51 @@
             }
         }
         
-        function displayResult(data) {
-            if (!data || typeof data.is_spam === 'undefined') {
+            function displayResult(data) {
+                if (!data || typeof data.is_spam === 'undefined') {
+                    const result = document.getElementById('result');
+                    result.innerHTML = `
+                        <div style="color: #e74c3c; padding: 20px; text-align: center;">
+                            <h3>⚠️ Invalid Response</h3>
+                            <p>API returned unexpected data format</p>
+                            <pre style="font-size: 0.8em; margin-top: 10px; text-align: left; background: #f5f5f5; padding: 10px; border-radius: 4px;">${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                    result.classList.add('show');
+                    return;
+                }
+            
                 const result = document.getElementById('result');
-                result.innerHTML = `
-                    <div style="color: #e74c3c; padding: 20px; text-align: center;">
-                        <h3>⚠️ Invalid Response</h3>
-                        <p>API returned unexpected data format</p>
-                    </div>
-                `;
-                result.classList.add('show');
-                return;
+                const score = document.getElementById('score');
+                const labels = document.getElementById('labels');
+                const layers = document.getElementById('layers');
+                const reasons = document.getElementById('reasons');
+                
+                const isSpam = data.is_spam || false;
+                const confidence = data.confidence || 0;
+                const reason = data.reason || "No specific reason";
+                
+                if (isSpam) {
+                    score.innerHTML = `⚠️ SPAM DETECTED<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Confidence: <strong>${(confidence * 100).toFixed(1)}%</strong></small>`;
+                    score.style.color = '#c00';
+                    result.classList.add('spam');
+                } else {
+                    score.innerHTML = `✅ SAFE<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Confidence: <strong>${(confidence * 100).toFixed(1)}%</strong></small>`;
+                    score.style.color = '#0a0';
+                    result.classList.add('safe');
+                }
+                
+                result.className = 'result show';
+                
+                labels.innerHTML = '';
+                layers.innerHTML = '';
+                
+                if (reason) {
+                    reasons.innerHTML = `<strong>Reason:</strong> ${reason}`;
+                } else {
+                    reasons.innerHTML = '';
+                }
             }
-            
-            const result = document.getElementById('result');
-            const score = document.getElementById('score');
-            const labels = document.getElementById('labels');
-            const layers = document.getElementById('layers');
-            const reasons = document.getElementById('reasons');
-            
-            const isSpam = data.is_spam || false;
-            const confidence = data.confidence || 0;
-            const reason = data.reason || "No specific reason";
-            
-            } else {
-                score.innerHTML = `✅ SAFE<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Confidence: <strong>${(confidence * 100).toFixed(1)}%</strong></small>`;
-                score.style.color = '#0a0';
-                result.classList.add('safe');
-            }
-            
-            result.className = 'result show';
-            
-            labels.innerHTML = '';
-            layers.innerHTML = '';
-            
-            if (reason) {
-                reasons.innerHTML = `<strong>Reason:</strong> ${reason}`;
-            } else {
-                reasons.innerHTML = '';
-                data.reasons.forEach(reason => {
-                    const li = document.createElement('li');
-                    li.textContent = '• ' + reason;
-                    ul.appendChild(li);
-                });
-                reasons.appendChild(ul);
-            }
-        }
         
             // Wait for DOM to be ready and setup event listeners
             function setupEventListeners() {
