@@ -41,8 +41,14 @@ class MultiLayerPipeline:
         all_reasons: List[str] = []
 
         rule_results = regex_patterns.check(text)
-        rule_score = sum(score for _, score in rule_results) / max(len(rule_results), 1) if rule_results else 0.0
-        rule_score = min(rule_score, 0.95)
+        # Use maximum score instead of average for better detection
+        if rule_results:
+            rule_score = max(score for _, score in rule_results)
+            # Boost if multiple patterns match
+            if len(rule_results) > 1:
+                rule_score = min(rule_score + 0.1 * (len(rule_results) - 1), 0.95)
+        else:
+            rule_score = 0.0
         rule_reasons = [reason for reason, _ in rule_results[:3]]
 
         if rule_score >= settings.rules_threshold:

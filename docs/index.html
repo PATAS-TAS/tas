@@ -290,9 +290,11 @@
             
             // Function to try next API endpoint
             async function tryApiEndpoints(text, lang) {
+                let lastError = null;
                 for (let i = 0; i < API_URLS.length; i++) {
                     try {
                         const url = API_URLS[i];
+                        console.log(`Trying API endpoint: ${url}`);
                         const response = await fetch(`${url}/classify`, {
                             method: 'POST',
                             headers: {
@@ -306,16 +308,23 @@
                         });
                         
                         if (response.ok) {
-                            return await response.json();
+                            const data = await response.json();
+                            console.log(`Success with endpoint: ${url}`, data);
+                            return data;
+                        } else {
+                            const errorText = await response.text();
+                            console.log(`API endpoint ${url} returned error ${response.status}:`, errorText);
+                            lastError = new Error(`API returned ${response.status}: ${errorText.substring(0, 100)}`);
                         }
                     } catch (error) {
                         console.log(`API endpoint ${API_URLS[i]} failed:`, error.message);
+                        lastError = error;
                         if (i === API_URLS.length - 1) {
-                            throw error; // Re-throw if all endpoints failed
+                            throw lastError || new Error('All API endpoints failed');
                         }
                     }
                 }
-                throw new Error('All API endpoints failed');
+                throw lastError || new Error('All API endpoints failed');
             }
         
         async function checkSpam() {
