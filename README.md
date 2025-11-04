@@ -218,7 +218,7 @@ tas/
 
 ## Target Customers
 
-- **Messenger moderators** (Telegram, Discord, WhatsApp groups)
+- **Messenger moderators** (Discord, WhatsApp groups, chat platforms)
 - **Forum administrators** (city forums, specialized boards)
 - **Social media managers** (comments moderation)
 - **Bot developers** (automated moderation)
