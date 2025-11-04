@@ -404,9 +404,8 @@
             }
         }
         
-        // Wait for DOM to be ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', function() {
+            // Wait for DOM to be ready and setup event listeners
+            function setupEventListeners() {
                 const textElement = document.getElementById('text');
                 if (textElement) {
                     textElement.addEventListener('keydown', function(e) {
@@ -415,17 +414,13 @@
                         }
                     });
                 }
-            });
-        } else {
-            const textElement = document.getElementById('text');
-            if (textElement) {
-                textElement.addEventListener('keydown', function(e) {
-                    if (e.ctrlKey && e.key === 'Enter') {
-                        checkSpam();
-                    }
-                });
             }
-        }
+            
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', setupEventListeners);
+            } else {
+                setupEventListeners();
+            }
     </script>
 </body>
 </html>

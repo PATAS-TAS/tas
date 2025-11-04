@@ -8,6 +8,9 @@ All notable changes to TAS will be documented in this file.
 - **Spam category detection** - Automatically categorizes spam (job_offer, buy_sell, car_sale, real_estate, service, scam)
 - **LRU cache with TTL** - Cache classification results for faster responses
 - **Category field in response** - Returns detected spam category
+- **Rate limiting** - Per-IP rate limiting (100 requests per minute)
+- **Rate limit headers** - X-RateLimit-Remaining and Retry-After headers
+- **Expanded patterns** - Additional keywords for job offers and commercial offers
 - **Batch classification endpoint** (`POST /batch`) - Classify multiple texts at once
 - **Patterns listing endpoint** (`GET /patterns`) - List all detection patterns
 - **Service category patterns** - Added patterns for repair, tutoring, and cleaning services
@@ -23,6 +26,13 @@ All notable changes to TAS will be documented in this file.
 ### Fixed
 - **DOM element access** - Fixed "Element not found" error in demo
 - **ML model dependencies** - Added protobuf for proper model loading
+- **ML model tokenizer** - Improved tokenizer loading with fallback for SentencePiece models
+- **Demo event listeners** - Fixed event listener setup for better DOM handling
+
+### Improved
+- **Pattern coverage** - Expanded job offer and commercial trade patterns
+- **Error handling** - Better error messages and validation
+- **API documentation** - Added endpoints list to root endpoint
 
 ## [1.0.0] - 2025-01-XX
 
