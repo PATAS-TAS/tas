@@ -36,26 +36,6 @@
 - Political content
 - Personal conflicts
 
-## Architecture
-
-```
-Text Input
-  ↓
-Fast Rules Check (regex patterns)
-  ├─ Confidence ≥ 0.7 → Return immediately (free, instant)
-  ↓ Confidence < 0.7
-ML Model Check (HuggingFace transformer)
-  ├─ Confidence ≥ 0.8 → Return (cheap, fast)
-  ↓ Confidence < 0.8
-LLM Check (OpenAI GPT-4o-mini, fallback only)
-  └─ Final decision (expensive, but accurate)
-```
-
-**Cost Analysis:**
-- Rules: Free (regex patterns)
-- ML: ~$0.0001 per request
-- LLM: ~$0.001 per request (only 5-10% of requests)
-
 ## Quick Start
 
 ### Installation
@@ -64,7 +44,6 @@ LLM Check (OpenAI GPT-4o-mini, fallback only)
 cd tas
 poetry install
 cp env.example .env
-# Edit .env with your OpenAI API key (optional, LLM is fallback only)
 ```
 
 ### Run
@@ -87,13 +66,9 @@ curl -X POST http://localhost:8000/classify \
 
 ```json
 {
-  "spam_score": 0.87,
+  "is_spam": true,
   "confidence": 0.92,
-  "labels": ["spam", "scam"],
-  "category": "job_offer",
-  "reasons": ["Contains URL", "Job offer or work solicitation"],
-  "layers_used": ["rules", "ml"],
-  "version": "1.0.1"
+  "reason": "Contains URL and Job offer or work solicitation"
 }
 ```
 
