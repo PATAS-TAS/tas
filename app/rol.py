@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from app.rule_importer import RuleImporter, rule_importer
 import logging
 
@@ -23,7 +23,7 @@ class RuleOrchestrator:
         try:
             ruleset = await rule_importer.fetch_rules()
             self.active_rules = ruleset
-            self.rule_versions[ruleset.get("version", "0.0.0")] = datetime.utcnow().isoformat()
+            self.rule_versions[ruleset.get("version", "0.0.0")] = datetime.now(timezone.utc).isoformat()
             logger.info(f"Loaded ruleset version {ruleset.get('version')} from PATAS")
         except Exception as e:
             logger.error(f"Failed to load rules from PATAS: {e}")

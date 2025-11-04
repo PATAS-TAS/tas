@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from cachetools import TTLCache
 import logging
 
@@ -26,8 +26,8 @@ class Quarantine:
             "text": text,
             "score": score,
             "status": "quarantined",
-            "quarantined_at": datetime.utcnow().isoformat(),
-            "expires_at": (datetime.utcnow() + timedelta(seconds=ttl)).isoformat(),
+            "quarantined_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=ttl)).isoformat(),
             "ttl": ttl
         }
         
@@ -53,7 +53,7 @@ class Quarantine:
             return False
         
         entry["status"] = "released"
-        entry["released_at"] = datetime.utcnow().isoformat()
+        entry["released_at"] = datetime.now(timezone.utc).isoformat()
         logger.info(f"Message {message_id} released from quarantine")
         return True
     
@@ -64,7 +64,7 @@ class Quarantine:
             return False
         
         entry["status"] = "banned"
-        entry["banned_at"] = datetime.utcnow().isoformat()
+        entry["banned_at"] = datetime.now(timezone.utc).isoformat()
         entry["ttl"] = 86400 * 365
         logger.info(f"Message {message_id} banned")
         return True
@@ -72,7 +72,7 @@ class Quarantine:
     def check_expired(self) -> List[str]:
         """Check and return list of expired quarantine entries."""
         expired = []
-        current_time = datetime.utcnow()
+        current_time = datetime.now(timezone.utc)
         
         for message_id, entry in list(self.quarantine_cache.items()):
             expires_at = datetime.fromisoformat(entry.get("expires_at", ""))

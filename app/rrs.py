@@ -1,5 +1,5 @@
 from typing import Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from cachetools import TTLCache
 import logging
 
@@ -16,7 +16,7 @@ class ReputationRateSentinel:
     def record_message(self, sender_id: str, timestamp: Optional[float] = None) -> None:
         """Record message from sender."""
         if timestamp is None:
-            timestamp = datetime.utcnow().timestamp()
+            timestamp = datetime.now(timezone.utc).timestamp()
         
         messages = self.sender_cache.get(sender_id, [])
         messages.append(timestamp)
@@ -26,7 +26,7 @@ class ReputationRateSentinel:
     
     def _update_reputation(self, sender_id: str, messages: list[float]) -> None:
         """Update reputation score for sender."""
-        current_time = datetime.utcnow().timestamp()
+        current_time = datetime.now(timezone.utc).timestamp()
         
         recent_messages = [ts for ts in messages if ts > current_time - self.burst_window]
         message_count = len(recent_messages)
@@ -40,7 +40,7 @@ class ReputationRateSentinel:
     def check_burst(self, sender_id: str) -> tuple[bool, float]:
         """Check if sender is in burst mode."""
         messages = self.sender_cache.get(sender_id, [])
-        current_time = datetime.utcnow().timestamp()
+        current_time = datetime.now(timezone.utc).timestamp()
         
         recent_messages = [ts for ts in messages if ts > current_time - self.burst_window]
         message_count = len(recent_messages)

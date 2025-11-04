@@ -56,31 +56,32 @@ class MultiLayerPipeline:
         # RRS: Reputation & Rate Sentinel
         if settings.enable_rrs and sender_id:
             rrs_result = rrs.check(sender_id, text)
+            layers_used.append("rrs")
             if rrs_result["combined_score"] > 0.3:
                 module_scores["rrs"] = rrs_result["combined_score"]
                 if rrs_result["is_burst"]:
                     all_reasons.append("Burst pattern detected")
-                layers_used.append("rrs")
 
         # LUR: Link & URL Risk
         if settings.enable_lur:
             lur_result = await lur.check(text)
+            if lur_result["url_count"] > 0:
+                layers_used.append("lur")
             if lur_result["url_risk_score"] > 0.3:
                 module_scores["lur"] = lur_result["url_risk_score"]
                 if lur_result["has_risky_tld"]:
                     all_reasons.append("Risky TLD detected")
                 if lur_result["has_short_domain"]:
                     all_reasons.append("Short URL domain")
-                layers_used.append("lur")
 
-        # SIG: Signatures
+        # SIG: Signatures (fast check, no async needed)
         if settings.enable_sig:
             sig_result = sig.check(text)
-            if sig_result["signature_score"] > 0.3:
+            layers_used.append("sig")
+            if sig_result.get("signature_score", 0.0) > 0.3:
                 module_scores["sig"] = sig_result["signature_score"]
-                if sig_result["signature_match"]:
+                if sig_result.get("signature_match", False):
                     all_reasons.append("Matches known spam signature")
-                layers_used.append("sig")
 
         rule_results = regex_patterns.check(text)
         if rule_results:

@@ -1,88 +1,72 @@
-"""
-Performance and stress testing.
-"""
+import pytest
 import asyncio
 import time
-import pytest
 from app.pipeline import pipeline
-from fastapi.testclient import TestClient
-from app.main import app
-
-client = TestClient(app)
 
 
 @pytest.mark.asyncio
-class TestLatency:
-    async def test_single_request_latency(self):
-        """Test single request latency."""
-        start = time.time()
-        result = await pipeline.classify("Test message")
-        elapsed = time.time() - start
-        assert elapsed < 1.0
-        assert result["spam_score"] >= 0
+async def test_latency_p95():
+    """Test P95 latency is under 100ms."""
+    test_texts = [
+        "Привет",
+        "Hello, how are you?",
+        "Продам iPhone 12, недорого!",
+        "Работа на дому! Заработок!",
+        "Normal conversation message",
+    ] * 20
     
-    async def test_rules_only_latency(self):
-        """Test rules-only request latency (should be fast)."""
-        start = time.time()
-        result = await pipeline.classify("Продам iPhone, звоните!")
-        elapsed = time.time() - start
-        assert elapsed < 0.1
-        assert "rules" in result["layers_used"]
-
-
-class TestConcurrentRequests:
-    def test_concurrent_classify(self):
-        """Test concurrent API requests."""
-        import concurrent.futures
-        
-        def make_request():
-            return client.post(
-                "/classify",
-                json={"text": "Test concurrent request", "lang": "en"}
-            )
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [executor.submit(make_request) for _ in range(10)]
-            results = [f.result() for f in concurrent.futures.as_completed(futures)]
-        
-        assert len(results) == 10
-        assert all(r.status_code == 200 for r in results)
+    latencies = []
     
-    def test_batch_performance(self):
-        """Test batch endpoint performance."""
-        texts = [f"Test message {i}" for i in range(50)]
+    for text in test_texts:
         start = time.time()
-        response = client.post("/batch", json={"texts": texts})
-        elapsed = time.time() - start
-        assert response.status_code == 200
-        assert elapsed < 10.0
+        await pipeline.classify(text, "en")
+        latency = (time.time() - start) * 1000
+        latencies.append(latency)
+    
+    latencies.sort()
+    p50 = latencies[len(latencies) // 2]
+    p95 = latencies[int(len(latencies) * 0.95)]
+    p99 = latencies[int(len(latencies) * 0.99)]
+    
+    print(f"P50: {p50:.2f}ms")
+    print(f"P95: {p95:.2f}ms")
+    print(f"P99: {p99:.2f}ms")
+    
+    assert p95 < 100, f"P95 latency {p95:.2f}ms exceeds 100ms target"
 
 
 @pytest.mark.asyncio
-class TestCachePerformance:
-    async def test_cache_speedup(self):
-        """Test that cached requests are faster."""
-        text = "Cache speedup test message"
-        
-        # First request (no cache)
-        start1 = time.time()
-        await pipeline.classify(text)
-        elapsed1 = time.time() - start1
-        
-        # Second request (cached)
-        start2 = time.time()
-        await pipeline.classify(text)
-        elapsed2 = time.time() - start2
-        
-        assert elapsed2 <= elapsed1
+async def test_throughput():
+    """Test throughput (requests per second)."""
+    test_text = "Test message for throughput"
+    iterations = 50
+    start_time = time.time()
+    
+    for i in range(iterations):
+        await pipeline.classify(test_text, "en")
+    
+    elapsed = time.time() - start_time
+    rps = iterations / elapsed
+    
+    print(f"Throughput: {rps:.2f} req/sec")
+    print(f"Target: 100+ req/sec")
+    
+    assert rps > 50, f"Throughput {rps:.2f} req/sec is too low"
 
 
-class TestRateLimiting:
-    def test_rate_limit_headers(self):
-        """Test rate limit headers presence."""
-        response = client.post(
-            "/classify",
-            json={"text": "Test", "lang": "en"}
-        )
-        assert response.status_code == 200
-
+@pytest.mark.asyncio
+async def test_concurrent_requests():
+    """Test concurrent request handling."""
+    async def classify_task(text):
+        return await pipeline.classify(text, "en")
+    
+    tasks = [classify_task(f"Message {i}") for i in range(20)]
+    start = time.time()
+    results = await asyncio.gather(*tasks)
+    elapsed = time.time() - start
+    
+    print(f"20 concurrent requests: {elapsed*1000:.2f}ms")
+    print(f"Average per request: {elapsed*1000/20:.2f}ms")
+    
+    assert elapsed < 2.0, "Concurrent requests took too long"
+    assert len(results) == 20

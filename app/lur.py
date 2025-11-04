@@ -99,7 +99,8 @@ class LinkURLRisk:
             
             total_risk = max(total_risk, tld_risk + short_risk)
             
-            if url in self.short_domains:
+            domain = urlparse(url).netloc or urlparse(url).path.split("/")[0]
+            if any(short in domain for short in self.short_domains):
                 final_url = await self.unpack_redirect(url)
                 if final_url and final_url != url:
                     tld_risk = max(tld_risk, self.check_tld_risk(final_url))
