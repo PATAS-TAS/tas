@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="TAS - Transmodal Anti-Spam API",
-    description="Multi-layer transmodal spam detection: Rules → ML → LLM. Processes text, images, and other formats with unified scoring across layers.",
-    version="1.0.1",
+    description="Multi-layer transmodal spam detection: Rules → LLM. Processes text with unified scoring across layers.",
+    version="1.0.2",
 )
 
 app.add_middleware(
@@ -43,7 +43,7 @@ class ClassifyResponse(BaseModel):
 async def root():
     return {
         "name": "TAS - Transmodal Anti-Spam API",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Commercial spam detection API for messengers, forums, and marketplaces.",
         "endpoints": {
             "classify": "/classify",
@@ -98,8 +98,8 @@ async def health():
     from app.pipeline import cache
     return {
         "status": "ok",
-        "version": "1.0.1",
-        "ml_model": "loaded" if hasattr(pipeline, 'ml_model') and pipeline.ml_model and pipeline.ml_model.model else "not_loaded",
+        "version": "1.0.2",
+        "ml_model": "disabled",
         "llm_enabled": bool(settings.openai_api_key) and settings.llm_fallback,
         "cache_size": cache.size()
     }

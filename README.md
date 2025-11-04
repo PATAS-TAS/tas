@@ -10,13 +10,13 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> **Cost-effective alternative to pure LLM-based spam detection** - 95%+ of requests avoid expensive LLM calls.
+> **Cost-effective alternative to pure LLM-based spam detection** - 80%+ of requests avoid expensive LLM calls.
 
 ## Features
 
-- **Multi-layer detection**: Rules → ML → LLM pipeline for accurate spam detection
-- **Cost-effective**: LLM used only when rules + ML can't decide (95%+ requests avoid LLM)
-- **Fast**: Rules layer < 10ms, ML layer < 100ms
+- **Multi-layer detection**: Rules → LLM pipeline for accurate spam detection
+- **Cost-effective**: LLM used only when rules can't decide (80%+ requests avoid LLM)
+- **Fast**: Rules layer < 10ms, LLM fallback < 1000ms
 - **Simple API**: One endpoint, simple response
 - **Commercial Focus**: Specialized for buy/sell, job offers, services
 
