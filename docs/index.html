@@ -275,18 +275,48 @@
     </div>
     
     <script>
-        // Try multiple API endpoints
-        const API_URLS = [
-            'https://tas.fly.dev',
-            'https://tas-api.fly.dev',
-            'http://localhost:8000'
-        ];
-        
-        const API_URL = window.location.origin.includes('github.io') 
-            ? (API_URLS[0] || API_URLS[1])
-            : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-                ? 'http://localhost:8000'
-                : window.location.origin);
+            // Try multiple API endpoints with fallback
+            const API_URLS = [
+                'https://tas.fly.dev',
+                'https://tas-api.fly.dev',
+                'http://localhost:8000'
+            ];
+            
+            let API_URL = window.location.origin.includes('github.io') 
+                ? API_URLS[0]
+                : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                    ? 'http://localhost:8000'
+                    : window.location.origin);
+            
+            // Function to try next API endpoint
+            async function tryApiEndpoints(text, lang) {
+                for (let i = 0; i < API_URLS.length; i++) {
+                    try {
+                        const url = API_URLS[i];
+                        const response = await fetch(`${url}/classify`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                text: text,
+                                lang: lang || 'en'
+                            }),
+                            signal: AbortSignal.timeout(10000) // 10 second timeout
+                        });
+                        
+                        if (response.ok) {
+                            return await response.json();
+                        }
+                    } catch (error) {
+                        console.log(`API endpoint ${API_URLS[i]} failed:`, error.message);
+                        if (i === API_URLS.length - 1) {
+                            throw error; // Re-throw if all endpoints failed
+                        }
+                    }
+                }
+                throw new Error('All API endpoints failed');
+            }
         
         async function checkSpam() {
             const text = document.getElementById('text').value.trim();
@@ -301,27 +331,12 @@
             loading.classList.add('show');
             result.classList.remove('show');
             
-            try {
-                const response = await fetch(`${API_URL}/classify`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        text: text,
-                        lang: 'en'
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`API error: ${response.status} ${response.statusText}`);
-                }
-                
-                const data = await response.json();
-                
-                loading.classList.remove('show');
-                displayResult(data);
-            } catch (error) {
+                try {
+                    const data = await tryApiEndpoints(text, 'en');
+                    
+                    loading.classList.remove('show');
+                    displayResult(data);
+                } catch (error) {
                 loading.classList.remove('show');
                 const result = document.getElementById('result');
                 result.innerHTML = `
