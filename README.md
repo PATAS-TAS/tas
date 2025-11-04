@@ -3,6 +3,7 @@
 **Multi-layer spam detection service** for messengers, bots, forums, and any text input.
 
 [![Demo](https://img.shields.io/badge/demo-live-green)](https://kiku-jw.github.io/tas/)
+[![API](https://img.shields.io/badge/API-Fly.io-blue)](https://tas-api.fly.dev)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
 
