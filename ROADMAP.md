@@ -13,17 +13,17 @@
 
 ### 1.1 Improve Commercial Patterns
 - [ ] Add more specific buy/sell patterns
-  - Price mentions (от, руб, $)
-  - Condition indicators (новый, б/у, состояние)
-  - Contact methods (звоните, пишите, WhatsApp)
+  - Price mentions (from X rubles, $)
+  - Condition indicators (new, used, condition)
+  - Contact methods (call, write, WhatsApp)
 - [ ] Expand job offer patterns
-  - Specific job types (грузчик, курьер, менеджер)
-  - Salary mentions (оклад, зарплата, от X рублей)
-  - Work schedule (смены, график, ежедневная оплата)
+  - Specific job types (loader, courier, manager)
+  - Salary mentions (salary, wage, from X rubles)
+  - Work schedule (shifts, schedule, daily payment)
 - [ ] Add service category patterns
-  - Repair services (ремонт, починка)
-  - Tutoring (репетитор, обучение)
-  - Cleaning (уборка, клининг)
+  - Repair services
+  - Tutoring
+  - Cleaning
 
 ### 1.2 Pattern Testing
 - [ ] Test all patterns on report.csv
@@ -119,4 +119,3 @@
 - **Customer Satisfaction**: > 4.5/5
 - **Uptime**: > 99.9%
 - **Response Time**: < 100ms (p95)
-

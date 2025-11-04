@@ -1,82 +1,82 @@
 # TAS - Final Report
 
-## ✅ Выполнено
+## ✅ Completed
 
-### 1. Очистка репозитория
-- ✅ Удалены дублирующиеся файлы документации (8 файлов)
-- ✅ Удалены старые конфиги (.eslintrc.js, .prettierrc)
-- ✅ Удалена пустая директория src/
-- ✅ Добавлены LICENSE, CONTRIBUTING.md, ISSUE_TEMPLATE.md
+### 1. Repository Cleanup
+- ✅ Removed duplicate documentation files (8 files)
+- ✅ Removed old configs (.eslintrc.js, .prettierrc)
+- ✅ Removed empty src/ directory
+- ✅ Added LICENSE, CONTRIBUTING.md, ISSUE_TEMPLATE.md
 
-### 2. Позиционирование
-- ✅ Создан POSITIONING.md с четким определением ниши
-- ✅ Фокус на коммерческом спаме (куплю/продам, работа, услуги)
-- ✅ Определено что TAS НЕ является:
-  - Универсальным фильтром токсичности
-  - Системой модерации хейт-спича
-  - Фильтром политического контента
-- ✅ Определены целевые клиенты:
-  - Модераторы мессенджеров
-  - Администраторы форумов
-  - Разработчики ботов
-  - Операторы маркетплейсов
+### 2. Positioning
+- ✅ Created POSITIONING.md with clear niche definition
+- ✅ Focus on commercial spam (buy/sell, jobs, services)
+- ✅ Defined what TAS is NOT:
+  - Universal toxicity filter
+  - Hate speech moderation system
+  - Political content filter
+- ✅ Defined target customers:
+  - Messenger moderators
+  - Forum administrators
+  - Bot developers
+  - Marketplace operators
 
-### 3. Обновление паттернов
-- ✅ Добавлены паттерны для торговых предложений (куплю/продам/обмен)
-- ✅ Добавлены паттерны для авто (авто, машина, автомобиль)
-- ✅ Добавлены паттерны для недвижимости (квартира, дом, аренда)
-- ✅ Обновлен промпт LLM для фокуса на коммерческом спаме
+### 3. Pattern Updates
+- ✅ Added patterns for trading offers (buy/sell/exchange)
+- ✅ Added patterns for cars (auto, car, vehicle)
+- ✅ Added patterns for real estate (apartment, house, rent)
+- ✅ Updated LLM prompt to focus on commercial spam
 
-### 4. Улучшение README
-- ✅ Добавлен раздел "What TAS Detects" и "What TAS does NOT detect"
-- ✅ Обновлены примеры и use cases
-- ✅ Добавлен раздел "Target Customers"
-- ✅ Добавлены метрики производительности
+### 4. README Improvements
+- ✅ Added "What TAS Detects" and "What TAS does NOT detect" sections
+- ✅ Updated examples and use cases
+- ✅ Added "Target Customers" section
+- ✅ Added performance metrics
 
 ### 5. GitHub Pages
-- ✅ Настроен и работает: https://kiku-jw.github.io/tas/
-- ✅ Демо протестировано
-- ✅ URL API обновлен на tas.fly.dev
+- ✅ Configured and working: https://kiku-jw.github.io/tas/
+- ✅ Demo tested
+- ✅ API URL updated to tas.fly.dev
 
 ### 6. Dockerfile
-- ✅ Исправлен для Poetry 2.x (--only main вместо --no-dev)
-- ✅ Готов к деплою
+- ✅ Fixed for Poetry 2.x (--only main instead of --no-dev)
+- ✅ Ready for deployment
 
-## 🎯 Позиционирование
+## 🎯 Positioning
 
-### Узкая ниша: Коммерческий спам
+### Narrow Niche: Commercial Spam
 
-**TAS специализируется на:**
-- Куплю/продам/обмен
-- Работа и заработок
-- Услуги
-- Недвижимость и авто
-- Коммерческие акции
+**TAS specializes in:**
+- Buy/sell/exchange
+- Jobs and earnings
+- Services
+- Real estate and cars
+- Commercial promotions
 
-**TAS НЕ занимается:**
-- Токсичностью
-- Хейт-спичем
-- Политическим контентом
-- Личными конфликтами
+**TAS does NOT handle:**
+- Toxicity
+- Hate speech
+- Political content
+- Personal conflicts
 
-## 📊 Статус
+## 📊 Status
 
-- ✅ GitHub Repository: готово
-- ✅ GitHub Pages: работает
-- ✅ Позиционирование: определено
-- ✅ Паттерны: обновлены
-- ⏳ Fly.io API: требует деплоя с исправленным Dockerfile
+- ✅ GitHub Repository: ready
+- ✅ GitHub Pages: working
+- ✅ Positioning: defined
+- ✅ Patterns: updated
+- ⏳ Fly.io API: requires deployment with fixed Dockerfile
 
-## 🔗 Ссылки
+## 🔗 Links
 
-- **Репозиторий**: https://github.com/kiku-jw/tas
-- **Демо**: https://kiku-jw.github.io/tas/
-- **API**: https://tas.fly.dev (после деплоя)
-- **Позиционирование**: [POSITIONING.md](POSITIONING.md)
+- **Repository**: https://github.com/kiku-jw/tas
+- **Demo**: https://kiku-jw.github.io/tas/
+- **API**: https://tas.fly.dev (after deployment)
+- **Positioning**: [POSITIONING.md](POSITIONING.md)
 
-## 📝 Следующие шаги
+## 📝 Next Steps
 
-1. Задеплоить API на Fly.io с исправленным Dockerfile
-2. Протестировать API на коммерческом спаме
-3. Оптимизировать thresholds на основе тестов
-4. Подготовить RapidAPI listing с фокусом на коммерческий спам
+1. Deploy API to Fly.io with fixed Dockerfile
+2. Test API on commercial spam
+3. Optimize thresholds based on tests
+4. Prepare RapidAPI listing with focus on commercial spam

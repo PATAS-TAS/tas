@@ -2,84 +2,83 @@
 
 ## GitHub Pages (Demo)
 
-**Плюсы:**
-- Бесплатно
-- Автоматический деплой
-- HTTPS из коробки
-- Хорошо для статического демо
+**Pros:**
+- Free
+- Automatic deployment
+- HTTPS out of the box
+- Good for static demos
 
-**Минусы:**
-- Только статический контент (HTML/JS)
-- API должен быть на другом сервере
+**Cons:**
+- Only static content (HTML/JS)
+- API must be on another server
 
-### Настройка
+### Setup
 
-1. Репозиторий должен быть **публичным**
+1. Repository must be **public**
 2. Settings → Pages → Source: `main` branch → `/docs` folder
-3. Демо будет доступно на: `https://kiku-jw.github.io/tas/`
+3. Demo will be available at: `https://kiku-jw.github.io/tas/`
 
 ## Fly.io (API Backend)
 
-**Плюсы:**
-- Бесплатный tier (3 shared-cpu VMs)
-- Автоматический деплой
-- HTTPS из коробки
-- Быстрый старт
+**Pros:**
+- Free tier (3 shared-cpu VMs)
+- Automatic deployment
+- HTTPS out of the box
+- Fast start
 
-**Минусы:**
-- Нужна регистрация
-- Ограничения на бесплатном tier
+**Cons:**
+- Registration required
+- Limitations on free tier
 
-### Настройка
+### Setup
 
-1. Установите Fly CLI:
+1. Install Fly CLI:
 ```bash
 curl -L https://fly.io/install.sh | sh
 ```
 
-2. Логин:
+2. Login:
 ```bash
 fly auth login
 ```
 
-3. Деплой:
+3. Deploy:
 ```bash
 cd tas
 fly launch --name tas-api
 ```
 
-4. Установите переменные окружения:
+4. Set environment variables:
 ```bash
 fly secrets set OPENAI_API_KEY=your_key_here
 ```
 
-5. Обновите URL в `docs/index.html`:
+5. Update URL in `docs/index.html`:
 ```javascript
 const API_URL = 'https://tas-api.fly.dev';
 ```
 
-## Render.com (Альтернатива)
+## Render.com (Alternative)
 
-**Плюсы:**
-- Бесплатный tier
-- Простой деплой из GitHub
-- Автоматический HTTPS
+**Pros:**
+- Free tier
+- Simple deployment from GitHub
+- Automatic HTTPS
 
-### Настройка
+### Setup
 
-1. Создайте новый Web Service на Render
-2. Подключите GitHub репозиторий
+1. Create new Web Service on Render
+2. Connect GitHub repository
 3. Build Command: `poetry install && poetry run uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 4. Start Command: `poetry run uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-5. Добавьте переменные окружения в Dashboard
+5. Add environment variables in Dashboard
 
-## Рекомендация
+## Recommendation
 
-Для RapidAPI лучше всего:
-- **GitHub**: Публичный репозиторий + Pages (демо)
-- **Fly.io**: API backend (быстрый, бесплатный tier)
+For RapidAPI best:
+- **GitHub**: Public repository + Pages (demo)
+- **Fly.io**: API backend (fast, free tier)
 
-Или:
-- **GitHub**: Публичный репозиторий + Pages (демо)
-- **Render.com**: API backend (проще для начинающих)
-
+Or:
+- **GitHub**: Public repository + Pages (demo)
+- **Render.com**: API backend (easier for beginners)

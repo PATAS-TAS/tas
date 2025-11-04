@@ -1,139 +1,138 @@
 # TAS - Positioning & Market Strategy
 
-## Что такое TAS
+## What TAS Is
 
-**TAS (Universal Anti-Spam API)** - специализированный сервис для детекции **коммерческого спама** в мессенджерах, форумах и социальных сетях.
+**TAS (Universal Anti-Spam API)** - specialized service for detecting **commercial spam** in messengers, forums, and social networks.
 
-## Узкая ниша: Коммерческий спам
+## Narrow Niche: Commercial Spam
 
-### Фокус на коммерческом спаме
+### Focus on Commercial Spam
 
-TAS специализируется на обнаружении коммерческих предложений:
-- **Торговые предложения**: куплю, продам, обмен
-- **Работа и заработок**: вакансии, подработка, работа на дому
-- **Услуги**: продажа услуг, предложения услуг
-- **Реклама**: коммерческие предложения, акции, скидки
-- **Мошенничество**: финансовые схемы, быстрый заработок
+TAS specializes in detecting commercial offers:
+- **Trading offers**: buy, sell, exchange
+- **Jobs and earnings**: vacancies, part-time work, work from home
+- **Services**: service sales, service offers
+- **Advertising**: commercial offers, promotions, discounts
+- **Fraud**: financial schemes, quick earnings
 
-### Что TAS НЕ является
+### What TAS Is NOT
 
-❌ **TAS - это НЕ:**
-- Универсальный фильтр токсичности
-- Система модерации контента
-- Детектор оскорблений или хейт-спича
-- Фильтр политического контента
-- Анти-спам для email
-- Защита от DDoS или технического спама
+❌ **TAS is NOT:**
+- Universal toxicity filter
+- Content moderation system
+- Insult or hate speech detector
+- Political content filter
+- Email anti-spam
+- DDoS or technical spam protection
 
-❌ **TAS НЕ обнаруживает:**
-- Оскорбления и ненормативную лексику
-- Токсичные комментарии
-- Хейт-спич
-- Политические сообщения
-- Личные конфликты
-- Технический спам (боты, флуд)
+❌ **TAS does NOT detect:**
+- Insults and profanity
+- Toxic comments
+- Hate speech
+- Political messages
+- Personal conflicts
+- Technical spam (bots, flood)
 
-## Целевые клиенты
+## Target Customers
 
-### 1. Мессенджеры и чаты
-- **Discord серверы** (торговые, игровые с маркетплейсами)
-- **WhatsApp Business** группы
-- **VK группы** и сообщества
-- **Другие мессенджеры** и чат-платформы
+### 1. Messengers and Chats
+- **Discord servers** (trading, gaming with marketplaces)
+- **WhatsApp Business** groups
+- **VK groups** and communities
+- **Other messengers** and chat platforms
 
-**Проблема**: Модераторы не успевают удалять коммерческий спам вручную
+**Problem**: Moderators cannot keep up with manually removing commercial spam
 
-### 2. Форумы и доски объявлений
-- **Городские форумы** (куплю/продам)
-- **Специализированные доски объявлений**
-- **Тематические форумы** с коммерческим разделом
+### 2. Forums and Classifieds
+- **City forums** (buy/sell)
+- **Specialized classified boards**
+- **Thematic forums** with commercial sections
 
-**Проблема**: Много объявлений нужно проверить на спам
+**Problem**: Many ads need to be checked for spam
 
-### 3. Социальные сети
-- **Комментарии под постами** в соцсетях
-- **Группы в соцсетях** с коммерческой активностью
-- **Маркетплейсы** внутри соцсетей
+### 3. Social Networks
+- **Comments under posts** in social networks
+- **Social network groups** with commercial activity
+- **Marketplaces** within social networks
 
-**Проблема**: Коммерческий спам в комментариях портит опыт пользователей
+**Problem**: Commercial spam in comments ruins user experience
 
-### 4. Боты и автоматизация
-- **Discord боты** для автоматической модерации
-- **Чат-боты** для различных платформ
-- **Интеграции в CRM** для фильтрации входящих сообщений
-- **API интеграции** для автоматической модерации
+### 4. Bots and Automation
+- **Discord bots** for automated moderation
+- **Chat bots** for various platforms
+- **CRM integrations** for filtering incoming messages
+- **API integrations** for automated moderation
 
-**Проблема**: Нужна автоматизация модерации коммерческого спама
+**Problem**: Need for automation of commercial spam moderation
 
-## Конкурентные преимущества
+## Competitive Advantages
 
-### 1. Специализация на коммерческом спаме
-- ✅ Точное определение коммерческих предложений
-- ✅ Понимание контекста торговли (куплю/продам)
-- ✅ Знание паттернов коммерческого спама
+### 1. Specialization on Commercial Spam
+- ✅ Accurate identification of commercial offers
+- ✅ Understanding of trading context (buy/sell)
+- ✅ Knowledge of commercial spam patterns
 
-### 2. Многослойная архитектура
-- ✅ Быстрая обработка (rules layer)
-- ✅ Точность (ML + LLM)
-- ✅ Экономичность (90%+ запросов без LLM)
+### 2. Multi-Layer Architecture
+- ✅ Fast processing (rules layer)
+- ✅ Accuracy (ML + LLM)
+- ✅ Cost-effectiveness (90%+ requests without LLM)
 
-### 3. Универсальность
-- ✅ Работает с любым текстом
-- ✅ Поддержка русского и английского
-- ✅ API для интеграции
+### 3. Universality
+- ✅ Works with any text
+- ✅ Support for Russian and English
+- ✅ API for integration
 
-## Конкуренты и дифференциация
+## Competitors and Differentiation
 
-### Чем отличаемся от:
+### How We Differ From:
 
 **OpenAI GPT-4 / Claude:**
-- ✅ Дешевле (90%+ запросов без LLM)
-- ✅ Быстрее (многослойная архитектура)
-- ✅ Специализация на коммерческом спаме
+- ✅ Cheaper (90%+ requests without LLM)
+- ✅ Faster (multi-layer architecture)
+- ✅ Specialization on commercial spam
 
-**Универсальные антиспам сервисы:**
-- ✅ Фокус на коммерческом спаме (не токсичность)
-- ✅ Понимание контекста торговли
-- ✅ Специализированные паттерны
+**Universal anti-spam services:**
+- ✅ Focus on commercial spam (not toxicity)
+- ✅ Understanding of trading context
+- ✅ Specialized patterns
 
-**Простые regex фильтры:**
-- ✅ ML + LLM для сложных случаев
-- ✅ Адаптация к новым паттернам
-- ✅ Высокая точность
+**Simple regex filters:**
+- ✅ ML + LLM for complex cases
+- ✅ Adaptation to new patterns
+- ✅ High accuracy
 
-## Ценностное предложение
+## Value Proposition
 
-**Для модераторов:**
-> "Автоматизируйте удаление коммерческого спама, не тратя время на ручную модерацию"
+**For moderators:**
+> "Automate commercial spam removal without spending time on manual moderation"
 
-**Для разработчиков:**
-> "Интегрируйте детекцию коммерческого спама в ваше приложение за 5 минут"
+**For developers:**
+> "Integrate commercial spam detection into your application in 5 minutes"
 
-**Для бизнеса:**
-> "Защитите ваше сообщество от коммерческого спама дешевле чем чистый LLM"
+**For business:**
+> "Protect your community from commercial spam cheaper than pure LLM"
 
 ## Roadmap
 
-### Phase 1: Коммерческий спам (Current)
-- ✅ Детекция торговых предложений
-- ✅ Работа/заработок
-- ✅ Коммерческие услуги
+### Phase 1: Commercial Spam (Current)
+- ✅ Trading offer detection
+- ✅ Jobs/earnings
+- ✅ Commercial services
 
-### Phase 2: Расширение паттернов
-- [ ] Автомобили (куплю/продам)
-- [ ] Недвижимость
-- [ ] Услуги репетиторов
-- [ ] Товары (одежда, электроника)
+### Phase 2: Pattern Expansion
+- [ ] Cars (buy/sell)
+- [ ] Real estate
+- [ ] Tutoring services
+- [ ] Goods (clothing, electronics)
 
-### Phase 3: Контекстная аналитика
-- [ ] Определение типа коммерческого предложения
-- [ ] Категоризация (работа/товары/услуги)
-- [ ] Оценка достоверности
+### Phase 3: Contextual Analytics
+- [ ] Determine commercial offer type
+- [ ] Categorization (jobs/goods/services)
+- [ ] Reliability assessment
 
-## Метрики успеха
+## Success Metrics
 
-- **Точность**: > 90% для коммерческого спама
-- **Ложные срабатывания**: < 5% для обычных сообщений
-- **Скорость**: < 100ms для 90% запросов
-- **Стоимость**: < $0.0001 на запрос в среднем
-
+- **Accuracy**: > 90% for commercial spam
+- **False Positives**: < 5% for normal messages
+- **Speed**: < 100ms for 90% of requests
+- **Cost**: < $0.0001 per request on average

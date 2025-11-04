@@ -1,63 +1,62 @@
 # TAS - Project Summary
 
-## ✅ Что сделано
+## ✅ What's Done
 
-### 1. Репозиторий
-- ✅ Создан публичный GitHub репозиторий: https://github.com/kiku-jw/tas
-- ✅ Код запушен и синхронизирован
-- ✅ Удалены дублирующиеся файлы документации
-- ✅ Добавлены LICENSE, CONTRIBUTING.md, ISSUE_TEMPLATE.md
+### 1. Repository
+- ✅ Created public GitHub repository: https://github.com/kiku-jw/tas
+- ✅ Code pushed and synchronized
+- ✅ Removed duplicate documentation files
+- ✅ Added LICENSE, CONTRIBUTING.md, ISSUE_TEMPLATE.md
 
-### 2. Позиционирование
-- ✅ Создан POSITIONING.md с четким определением ниши
-- ✅ Фокус на коммерческом спаме (куплю/продам, работа, услуги)
-- ✅ Определено что TAS НЕ является (не токсичность, не хейт-спич)
-- ✅ Определены целевые клиенты
+### 2. Positioning
+- ✅ Created POSITIONING.md with clear niche definition
+- ✅ Focus on commercial spam (buy/sell, jobs, services)
+- ✅ Defined what TAS is NOT (not toxicity, not hate speech)
+- ✅ Defined target customers
 
-### 3. Паттерны
-- ✅ Добавлены паттерны для торговых предложений (куплю/продам)
-- ✅ Добавлены паттерны для авто (авто, машина)
-- ✅ Добавлены паттерны для недвижимости (квартира, дом)
-- ✅ Обновлен промпт LLM для фокуса на коммерческом спаме
+### 3. Patterns
+- ✅ Added patterns for trading offers (buy/sell)
+- ✅ Added patterns for cars (auto, car)
+- ✅ Added patterns for real estate (apartment, house)
+- ✅ Updated LLM prompt to focus on commercial spam
 
-### 4. Документация
-- ✅ Улучшен README с четким позиционированием
-- ✅ Добавлен раздел "What TAS Detects" и "What TAS does NOT detect"
-- ✅ Обновлены примеры и use cases
+### 4. Documentation
+- ✅ Improved README with clear positioning
+- ✅ Added "What TAS Detects" and "What TAS does NOT detect" sections
+- ✅ Updated examples and use cases
 
 ### 5. GitHub Pages
-- ✅ Настроен и работает: https://kiku-jw.github.io/tas/
-- ✅ Демо протестировано
+- ✅ Configured and working: https://kiku-jw.github.io/tas/
+- ✅ Demo tested
 
 ### 6. Fly.io
-- ✅ Авторизация выполнена
-- ⏳ Приложение создано (требуется деплой)
+- ✅ Authentication completed
+- ⏳ Application created (requires deployment)
 
-## 🎯 Позиционирование
+## 🎯 Positioning
 
-### TAS - это:
-- **Специализированный сервис** для детекции коммерческого спама
-- **Фокус**: куплю/продам, работа, услуги, недвижимость, авто
-- **Целевые клиенты**: модераторы мессенджеров, администраторы форумов, разработчики ботов
+### TAS Is:
+- **Specialized service** for commercial spam detection
+- **Focus**: buy/sell, jobs, services, real estate, cars
+- **Target customers**: messenger moderators, forum administrators, bot developers
 
-### TAS - это НЕ:
-- ❌ Универсальный фильтр токсичности
-- ❌ Система модерации хейт-спича
-- ❌ Фильтр политического контента
-- ❌ Анти-спам для email
+### TAS Is NOT:
+- ❌ Universal toxicity filter
+- ❌ Hate speech moderation system
+- ❌ Political content filter
+- ❌ Email anti-spam
 
-## 📊 Следующие шаги
+## 📊 Next Steps
 
-1. **Протестировать на report.csv** с новыми паттернами
-2. **Оптимизировать thresholds** на основе тестов
-3. **Задеплоить API на Fly.io** (fly deploy)
-4. **Подготовить RapidAPI listing** с фокусом на коммерческий спам
-5. **Создать case studies** для целевых клиентов
+1. **Test on report.csv** with new patterns
+2. **Optimize thresholds** based on tests
+3. **Deploy API to Fly.io** (fly deploy)
+4. **Prepare RapidAPI listing** with focus on commercial spam
+5. **Create case studies** for target customers
 
-## 🔗 Ссылки
+## 🔗 Links
 
-- **Репозиторий**: https://github.com/kiku-jw/tas
-- **Демо**: https://kiku-jw.github.io/tas/
-- **API**: https://tas.fly.dev (после деплоя)
-- **Позиционирование**: [POSITIONING.md](POSITIONING.md)
-
+- **Repository**: https://github.com/kiku-jw/tas
+- **Demo**: https://kiku-jw.github.io/tas/
+- **API**: https://tas.fly.dev (after deployment)
+- **Positioning**: [POSITIONING.md](POSITIONING.md)
