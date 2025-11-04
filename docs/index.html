@@ -400,11 +400,28 @@
             }
         }
         
-        document.getElementById('text').addEventListener('keydown', function(e) {
-            if (e.ctrlKey && e.key === 'Enter') {
-                checkSpam();
+        // Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                const textElement = document.getElementById('text');
+                if (textElement) {
+                    textElement.addEventListener('keydown', function(e) {
+                        if (e.ctrlKey && e.key === 'Enter') {
+                            checkSpam();
+                        }
+                    });
+                }
+            });
+        } else {
+            const textElement = document.getElementById('text');
+            if (textElement) {
+                textElement.addEventListener('keydown', function(e) {
+                    if (e.ctrlKey && e.key === 'Enter') {
+                        checkSpam();
+                    }
+                });
             }
-        });
+        }
     </script>
 </body>
 </html>
