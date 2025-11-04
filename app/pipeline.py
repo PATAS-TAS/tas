@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 class MultiLayerPipeline:
     def __init__(self):
         self.version = "1.0.0"
+        self.ml_model = ml_model
 
     async def classify(self, text: str, lang: str = "en") -> Dict:
         text = text.strip()

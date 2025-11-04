@@ -40,6 +40,14 @@ class RegexPatterns:
         if word_count < 5 and len(text) < 20:
             results.append(("Very few words", 0.5))
         
+        # Boost score if multiple commercial patterns detected
+        commercial_patterns = ["Commercial trade offer", "Car sale offer", "Real estate offer", 
+                             "Job offer or work solicitation", "Service offer", "Tutoring or education service",
+                             "Cleaning service"]
+        commercial_count = sum(1 for reason, _ in results if reason in commercial_patterns)
+        if commercial_count >= 2:
+            results.append(("Multiple commercial indicators", 0.3))
+        
         return results
 
 
