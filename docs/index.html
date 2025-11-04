@@ -272,8 +272,15 @@
     </div>
     
     <script>
+        // Try multiple API endpoints
+        const API_URLS = [
+            'https://tas.fly.dev',
+            'https://tas-api.fly.dev',
+            'http://localhost:8000'
+        ];
+        
         const API_URL = window.location.origin.includes('github.io') 
-            ? 'https://tas.fly.dev' 
+            ? (API_URLS[0] || API_URLS[1])
             : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
                 ? 'http://localhost:8000'
                 : window.location.origin);
@@ -303,17 +310,43 @@
                     })
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status} ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 
                 loading.classList.remove('show');
                 displayResult(data);
             } catch (error) {
                 loading.classList.remove('show');
-                alert('Error: ' + error.message);
+                const result = document.getElementById('result');
+                result.innerHTML = `
+                    <div style="color: #e74c3c; padding: 20px; text-align: center;">
+                        <h3>⚠️ Error</h3>
+                        <p>${error.message}</p>
+                        <p style="font-size: 0.9em; margin-top: 10px; opacity: 0.8;">
+                            API might be unavailable. Please check if the API is deployed and running.
+                        </p>
+                    </div>
+                `;
+                result.classList.add('show');
             }
         }
         
         function displayResult(data) {
+            if (!data || typeof data.spam_score === 'undefined') {
+                const result = document.getElementById('result');
+                result.innerHTML = `
+                    <div style="color: #e74c3c; padding: 20px; text-align: center;">
+                        <h3>⚠️ Invalid Response</h3>
+                        <p>API returned unexpected data format</p>
+                    </div>
+                `;
+                result.classList.add('show');
+                return;
+            }
+            
             const result = document.getElementById('result');
             const score = document.getElementById('score');
             const labels = document.getElementById('labels');
