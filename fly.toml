@@ -1,4 +1,4 @@
-app = "tas-api"
+app = "tas"
 primary_region = "iad"
 
 [build]
