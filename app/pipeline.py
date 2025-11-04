@@ -39,7 +39,18 @@ class MultiLayerPipeline:
         if rule_results:
             rule_score = max(score for _, score in rule_results)
             if len(rule_results) > 1:
-                rule_score = min(rule_score + 0.1 * (len(rule_results) - 1), 0.95)
+                boost = 0.1 * (len(rule_results) - 1)
+                rule_score = min(rule_score + boost, 0.95)
+            commercial_keywords = ["Commercial trade offer", "Car sale offer", "Real estate offer", 
+                                  "Job offer or work solicitation", "Service offer"]
+            commercial_count = sum(1 for reason, _ in rule_results if reason in commercial_keywords)
+            if commercial_count >= 1:
+                word_count = len(text.split())
+                if word_count <= 5:
+                    rule_score = min(rule_score + 0.15, 0.95)
+                if "работа" in text.lower() or "work" in text.lower() or "job" in text.lower():
+                    if word_count <= 8:
+                        rule_score = min(rule_score + 0.1, 0.95)
         else:
             rule_score = 0.0
         rule_reasons = [reason for reason, _ in rule_results[:3]]

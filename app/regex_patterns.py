@@ -39,6 +39,12 @@ class RegexPatterns:
         if word_count < 3 and len(text) < 15:
             results.append(("Very few words", 0.3))
         
+        commercial_boosts = ["Commercial trade offer", "Car sale offer", "Real estate offer", 
+                            "Job offer or work solicitation", "Service offer"]
+        has_commercial = any(reason in commercial_boosts for reason, _ in results)
+        if has_commercial and word_count <= 3:
+            results.append(("Short commercial message", 0.2))
+        
         # Boost score if multiple commercial patterns detected
         commercial_patterns = ["Commercial trade offer", "Car sale offer", "Real estate offer", 
                              "Job offer or work solicitation", "Service offer", "Tutoring or education service",
