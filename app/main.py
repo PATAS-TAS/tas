@@ -45,6 +45,11 @@ async def root():
         "name": "TAS - Universal Anti-Spam API",
         "version": "1.0.0",
         "description": "Multi-layer spam detection service",
+        "endpoints": {
+            "classify": "/classify",
+            "health": "/health",
+            "docs": "/docs"
+        }
     }
 
 
@@ -53,9 +58,12 @@ async def classify(request: ClassifyRequest):
     try:
         result = await pipeline.classify(request.text, request.lang or "en")
         return result
+    except ValueError as e:
+        logger.warning(f"Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Classification error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Classification error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error. Please try again later.")
 
 
 @app.get("/health")
