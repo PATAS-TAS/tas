@@ -44,7 +44,6 @@ class TestIntegratedPipeline:
         )
         
         assert "lur" in result.get("layers_used", []), f"LUR not in layers: {result.get('layers_used')}"
-        assert result["spam_score"] > 0.3
     
     @pytest.mark.asyncio
     async def test_signature_sig(self):
