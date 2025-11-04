@@ -358,8 +358,9 @@
             
             const spamScore = data.spam_score || 0;
             const confidence = data.confidence || 0;
+            const category = data.category || "unknown";
             
-            score.textContent = `Spam Score: ${(spamScore * 100).toFixed(1)}%`;
+            score.innerHTML = `Spam Score: ${(spamScore * 100).toFixed(1)}%<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Category: <strong>${category}</strong></small>`;
             score.style.color = spamScore >= 0.7 ? '#c00' : spamScore >= 0.5 ? '#f80' : '#0a0';
             
             result.className = 'result show';
