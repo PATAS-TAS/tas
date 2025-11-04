@@ -36,8 +36,8 @@ class RegexPatterns:
                 score = min(base_score * match_count, 0.9)
                 results.append((reason, score))
         
-            if word_count < 3 and len(text) < 15:
-                results.append(("Very few words", 0.3))
+        if word_count < 3 and len(text) < 15:
+            results.append(("Very few words", 0.3))
         
         # Boost score if multiple commercial patterns detected
         commercial_patterns = ["Commercial trade offer", "Car sale offer", "Real estate offer", 
