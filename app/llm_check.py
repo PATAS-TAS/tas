@@ -20,15 +20,20 @@ class LLMCheck:
             return None
 
         try:
-            prompt = f"""Analyze the following message for spam indicators. Consider:
-- Job offers, work solicitations, vacancies
-- Adult services, escort content
-- Sales, promotions, discounts
-- Cryptocurrency scams
-- Illegal services
-- Repetitive patterns
-- Short spam phrases
-- Context and language
+            prompt = f"""Analyze the following message for COMMERCIAL SPAM indicators. Focus ONLY on:
+- Buy/sell offers (куплю, продам, продаю, покупаю, обмен)
+- Job offers and work solicitations (работа, вакансия, заработок, job, work)
+- Service offers (repair, tutoring, services)
+- Real estate (квартира, дом, аренда, rent, sale)
+- Car sales (авто, машина, автомобиль)
+- Commercial promotions (акция, скидка, sale, discount)
+
+DO NOT flag:
+- Normal conversations
+- Personal messages
+- Non-commercial content
+- Toxicity or insults (not our focus)
+- Political content
 
 Message: "{text[:2000]}"
 
