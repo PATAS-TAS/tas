@@ -23,7 +23,6 @@ class RegexPatterns:
             (re.compile(r"[!?.]{3,}"), "Excessive punctuation", 0.35),
             (re.compile(r"(.)\1{4,}"), "Repeated characters", 0.35),
             (re.compile(r"^(?:пиши|готов|интересно|write|dm|pm)\s*[!?]*\s*$", re.IGNORECASE | re.MULTILINE), "Short spam phrase", 0.5),
-            (re.compile(r"^.{0,10}$", re.DOTALL), "Very short message (< 10 chars)", 0.5),
         ]
 
     def check(self, text: str) -> List[Tuple[str, float]]:
@@ -37,8 +36,8 @@ class RegexPatterns:
                 score = min(base_score * match_count, 0.9)
                 results.append((reason, score))
         
-        if word_count < 5 and len(text) < 20:
-            results.append(("Very few words", 0.5))
+            if word_count < 3 and len(text) < 15:
+                results.append(("Very few words", 0.3))
         
         # Boost score if multiple commercial patterns detected
         commercial_patterns = ["Commercial trade offer", "Car sale offer", "Real estate offer", 
