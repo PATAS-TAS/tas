@@ -277,9 +277,9 @@
     <script>
             // Try multiple API endpoints with fallback
             const API_URLS = [
-                'https://tas.fly.dev',
-                'https://tas-api.fly.dev',
-                'http://localhost:8000'
+                'https://tas-api.fly.dev',  // Primary: deployed app
+                'https://tas.fly.dev',       // Secondary
+                'http://localhost:8000'      // Local fallback
             ];
             
             let API_URL = window.location.origin.includes('github.io') 
