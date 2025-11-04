@@ -359,7 +359,7 @@
         }
         
         function displayResult(data) {
-            if (!data || typeof data.spam_score === 'undefined') {
+            if (!data || typeof data.is_spam === 'undefined') {
                 const result = document.getElementById('result');
                 result.innerHTML = `
                     <div style="color: #e74c3c; padding: 20px; text-align: center;">
@@ -377,15 +377,13 @@
             const layers = document.getElementById('layers');
             const reasons = document.getElementById('reasons');
             
-            const spamScore = data.spam_score || 0;
+            const isSpam = data.is_spam || false;
             const confidence = data.confidence || 0;
-            const category = data.category || "unknown";
+            const reason = data.reason || "No specific reason";
             
-            score.innerHTML = `Spam Score: ${(spamScore * 100).toFixed(1)}%<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Category: <strong>${category}</strong></small>`;
-            score.style.color = spamScore >= 0.7 ? '#c00' : spamScore >= 0.5 ? '#f80' : '#0a0';
-            
-            result.className = 'result show';
-            if (spamScore >= 0.7) {
+            if (isSpam) {
+                score.innerHTML = `⚠️ SPAM DETECTED<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Confidence: <strong>${(confidence * 100).toFixed(1)}%</strong></small>`;
+                score.style.color = '#c00';
                 result.classList.add('spam');
             } else if (spamScore >= 0.5) {
                 result.classList.add('uncertain');

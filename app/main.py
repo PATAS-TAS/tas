@@ -34,23 +34,11 @@ class ClassifyRequest(BaseModel):
 
 
 class ClassifyResponse(BaseModel):
-    spam_score: float
+    is_spam: bool
     confidence: float
-    labels: list[str]
-    category: Optional[str] = None
-    reasons: list[str]
-    layers_used: list[str]
-    version: str
+    reason: str
 
 
-class BatchRequest(BaseModel):
-    texts: List[str] = Field(..., min_length=1, max_length=100)
-
-
-class BatchResponse(BaseModel):
-    results: List[Dict]
-    total: int
-    processed: int
 
 
 @app.get("/")
@@ -58,12 +46,9 @@ async def root():
     return {
         "name": "TAS - Transmodal Anti-Spam API",
         "version": "1.0.1",
-        "description": "Multi-layer transmodal spam detection service. Processes text, images, and other formats with unified scoring across detection layers.",
+        "description": "Commercial spam detection API for messengers, forums, and marketplaces.",
         "endpoints": {
             "classify": "/classify",
-            "batch": "/batch",
-            "patterns": "/patterns",
-            "stats": "/stats",
             "health": "/health",
             "docs": "/docs"
         }
@@ -87,9 +72,21 @@ async def classify(request: ClassifyRequest, client_request: Request):
     
     try:
         result = await pipeline.classify(request.text, request.lang or "en")
-        # Add rate limit headers
-        result["rate_limit_remaining"] = remaining - 1 if remaining else 0
-        return result
+        # Simplify response
+        spam_score = result.get("spam_score", 0.0)
+        confidence = result.get("confidence", 0.0)
+        reasons = result.get("reasons", [])
+        
+        # Determine main reason
+        main_reason = reasons[0] if reasons else "No specific reason"
+        if len(reasons) > 1:
+            main_reason = f"{reasons[0]} and {len(reasons)-1} more"
+        
+        return {
+            "is_spam": spam_score >= 0.5,
+            "confidence": round(confidence, 3),
+            "reason": main_reason
+        }
     except ValueError as e:
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))

@@ -39,9 +39,6 @@ class TestRootEndpoint:
         data = response.json()
         endpoints = data["endpoints"]
         assert "classify" in endpoints
-        assert "batch" in endpoints
-        assert "patterns" in endpoints
-        assert "stats" in endpoints
         assert "health" in endpoints
 
 
@@ -53,13 +50,11 @@ class TestClassifyEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
-        assert "spam_score" in data
+        assert "is_spam" in data
         assert "confidence" in data
-        assert "labels" in data
-        assert "category" in data
-        assert "reasons" in data
-        assert "layers_used" in data
-        assert "version" in data
+        assert "reason" in data
+        assert isinstance(data["is_spam"], bool)
+        assert 0 <= data["confidence"] <= 1
     
     def test_classify_spam_detection(self):
         response = client.post(
@@ -68,8 +63,8 @@ class TestClassifyEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data["spam_score"], (int, float))
-        assert 0 <= data["spam_score"] <= 1
+        assert "is_spam" in data
+        assert isinstance(data["is_spam"], bool)
     
     def test_classify_missing_text(self):
         response = client.post("/classify", json={"lang": "en"})
@@ -103,81 +98,6 @@ class TestClassifyEndpoint:
         assert response.status_code == 200
 
 
-class TestBatchEndpoint:
-    def test_batch_success(self):
-        response = client.post(
-            "/batch",
-            json={"texts": ["Hello", "World", "Test"]}
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert "results" in data
-        assert len(data["results"]) == 3
-    
-    def test_batch_empty_list(self):
-        response = client.post("/batch", json={"texts": []})
-        assert response.status_code == 422
-    
-    def test_batch_too_many(self):
-        texts = [f"Text {i}" for i in range(101)]
-        response = client.post("/batch", json={"texts": texts})
-        assert response.status_code == 422
-    
-    def test_batch_mixed_content(self):
-        response = client.post(
-            "/batch",
-            json={
-                "texts": [
-                    "Hello, how are you?",
-                    "Продам iPhone, звоните!",
-                    "Normal conversation text"
-                ]
-            }
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data["results"]) == 3
-
-
-class TestPatternsEndpoint:
-    def test_patterns_list(self):
-        response = client.get("/patterns")
-        assert response.status_code == 200
-        data = response.json()
-        assert "total" in data
-        assert "patterns" in data
-        assert isinstance(data["patterns"], list)
-        assert len(data["patterns"]) > 0
-    
-    def test_patterns_structure(self):
-        response = client.get("/patterns")
-        data = response.json()
-        if data["patterns"]:
-            pattern = data["patterns"][0]
-            assert "reason" in pattern
-            assert "score" in pattern
-            assert "pattern" in pattern
-
-
-class TestStatsEndpoint:
-    def test_stats_response(self):
-        response = client.get("/stats")
-        assert response.status_code == 200
-        data = response.json()
-        assert "version" in data
-        assert "thresholds" in data
-        assert "ml_model" in data
-        assert "llm_enabled" in data
-        assert "cache" in data
-    
-    def test_stats_thresholds(self):
-        response = client.get("/stats")
-        data = response.json()
-        thresholds = data["thresholds"]
-        assert "rules" in thresholds
-        assert "ml" in thresholds
-        assert "ml_safe" in thresholds
-        assert "llm_fallback" in thresholds
 
 
 class TestErrorHandling:

@@ -136,21 +136,9 @@ class MultiLayerPipeline:
             return "commercial_spam"
     
     def _format_result(self, score: float, confidence: float, reasons: List[str], layers_used: List[str]) -> Dict:
-        labels = []
-        if score >= 0.5:
-            labels.append("spam")
-        if score >= 0.7:
-            labels.append("scam")
-        if score >= 0.9:
-            labels.append("high_risk")
-        
-        category = self._detect_category(reasons) if reasons else "unknown"
-
         return {
             "spam_score": round(score, 3),
             "confidence": round(confidence, 3),
-            "labels": labels,
-            "category": category,
             "reasons": reasons[:5],
             "layers_used": layers_used,
             "version": self.version,
