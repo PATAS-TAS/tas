@@ -62,7 +62,7 @@ class LinkURLRisk:
         
         return 0.0
     
-    def hash_url_content(self, url: str) -> Optional[str]:
+    async def hash_url_content(self, url: str) -> Optional[str]:
         """Hash URL content for comparison."""
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
