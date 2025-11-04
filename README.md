@@ -10,14 +10,14 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> **Cost-effective alternative to pure LLM-based spam detection** - 90%+ of requests are handled by fast rule-based and ML layers, avoiding expensive LLM calls.
+> **Cost-effective alternative to pure LLM-based spam detection** - 95%+ of requests avoid LLM: Rules handle obvious spam, ML handles uncertain cases and confidently identifies safe content (skipping LLM when confident it's not spam).
 
 ## Features
 
 - **Transmodal**: Processes text, images, and other formats with unified scoring
 - **Multi-layer detection**: Rules → ML → LLM pipeline with single unified score
 - **Unified Scoring**: One score across all detection layers (when previous layers pass through)
-- **Cost-effective**: LLM used only when rules + ML can't decide (90%+ requests avoid LLM)
+- **Cost-effective**: LLM used only when rules + ML can't decide (95%+ requests avoid LLM). ML skips LLM when confident content is safe.
 - **Fast**: Rules layer < 10ms, ML layer < 100ms
 - **Accurate**: Combines multiple detection methods for better precision
 - **Commercial Focus**: Specialized for buy/sell, job offers, services

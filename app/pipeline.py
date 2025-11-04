@@ -78,6 +78,14 @@ class MultiLayerPipeline:
                 all_reasons.append("ML model detected suspicious content")
                 return self._format_result(final_score, final_confidence, all_reasons, layers_used)
 
+            # Optimize LLM calls: if ML is very confident it's NOT spam, skip LLM
+            if ml_spam < settings.ml_safe_threshold and ml_confidence > 0.8:
+                final_score = combined_score
+                final_confidence = combined_confidence
+                all_reasons.extend(rule_reasons)
+                all_reasons.append("ML model confident it's safe")
+                return self._format_result(final_score, final_confidence, all_reasons, layers_used)
+
             final_score = combined_score
             final_confidence = combined_confidence
             all_reasons.extend(rule_reasons)
