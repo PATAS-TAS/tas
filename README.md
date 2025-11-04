@@ -91,9 +91,10 @@ curl -X POST http://localhost:8000/classify \
   "spam_score": 0.87,
   "confidence": 0.92,
   "labels": ["spam", "scam"],
+  "category": "job_offer",
   "reasons": ["Contains URL", "Job offer or work solicitation"],
   "layers_used": ["rules", "ml"],
-  "version": "1.0.0"
+  "version": "1.0.1"
 }
 ```
 
