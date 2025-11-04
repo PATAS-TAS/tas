@@ -69,9 +69,24 @@ async def root():
 
 
 @app.post("/classify", response_model=ClassifyResponse)
-async def classify(request: ClassifyRequest):
+async def classify(request: ClassifyRequest, client_request: Request):
+    # Rate limiting (100 requests per minute per IP)
+    client_ip = client_request.client.host if client_request.client else "unknown"
+    allowed, remaining = rate_limiter.is_allowed(client_ip, max_requests=100, window_seconds=60)
+    
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Maximum 100 requests per minute.",
+            headers={"X-RateLimit-Remaining": "0", "Retry-After": "60"}
+        )
+    
+    rate_limiter.record_request(client_ip, "classify")
+    
     try:
         result = await pipeline.classify(request.text, request.lang or "en")
+        # Add rate limit headers
+        result["rate_limit_remaining"] = remaining - 1 if remaining else 0
         return result
     except ValueError as e:
         logger.warning(f"Validation error: {e}")

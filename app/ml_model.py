@@ -18,7 +18,15 @@ class MLModel:
         try:
             model_name = settings.model_name
             logger.info(f"Loading ML model: {model_name}")
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            
+            # Try to load with use_fast=False for SentencePiece tokenizers
+            try:
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
+            except Exception as e:
+                logger.warning(f"Failed to load tokenizer with use_fast=False: {e}")
+                # Fallback to default loading
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            
             self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
             self.model.to(self.device)
             self.model.eval()
