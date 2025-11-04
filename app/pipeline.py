@@ -108,6 +108,25 @@ class MultiLayerPipeline:
         
         return result
 
+    def _detect_category(self, reasons: List[str]) -> str:
+        """Detect spam category from reasons."""
+        reason_text = " ".join(reasons).lower()
+        
+        if any(word in reason_text for word in ["job", "work", "vacancy", "работа", "вакансия", "заработок"]):
+            return "job_offer"
+        elif any(word in reason_text for word in ["trade", "buy", "sell", "куплю", "продам", "продаю"]):
+            return "buy_sell"
+        elif any(word in reason_text for word in ["car", "auto", "авто", "машина"]):
+            return "car_sale"
+        elif any(word in reason_text for word in ["real estate", "квартир", "дом", "недвижимость"]):
+            return "real_estate"
+        elif any(word in reason_text for word in ["service", "repair", "tutoring", "cleaning", "услуги", "ремонт"]):
+            return "service"
+        elif any(word in reason_text for word in ["scam", "click here", "urgent", "free money"]):
+            return "scam"
+        else:
+            return "commercial_spam"
+    
     def _format_result(self, score: float, confidence: float, reasons: List[str], layers_used: List[str]) -> Dict:
         labels = []
         if score >= 0.5:
@@ -116,11 +135,14 @@ class MultiLayerPipeline:
             labels.append("scam")
         if score >= 0.9:
             labels.append("high_risk")
+        
+        category = self._detect_category(reasons) if reasons else "unknown"
 
         return {
             "spam_score": round(score, 3),
             "confidence": round(confidence, 3),
             "labels": labels,
+            "category": category,
             "reasons": reasons[:5],
             "layers_used": layers_used,
             "version": self.version,

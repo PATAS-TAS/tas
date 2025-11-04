@@ -35,6 +35,7 @@ class ClassifyResponse(BaseModel):
     spam_score: float
     confidence: float
     labels: list[str]
+    category: Optional[str] = None
     reasons: list[str]
     layers_used: list[str]
     version: str
