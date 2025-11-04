@@ -5,7 +5,7 @@
 > **Focus**: Commercial spam (buy/sell, job offers, services) - not toxicity or hate speech.
 
 [![Demo](https://img.shields.io/badge/demo-live-green)](https://kiku-jw.github.io/tas/)
-[![API](https://img.shields.io/badge/API-Fly.io-blue)](https://tas-api.fly.dev)
+[![API](https://img.shields.io/badge/API-Fly.io-blue)](https://tas.fly.dev)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -86,7 +86,7 @@ Environment variables (`.env`):
 flyctl deploy
 ```
 
-API will be available at: `https://tas-api.fly.dev`
+API will be available at: `https://tas.fly.dev`
 
 ### Docker
 
