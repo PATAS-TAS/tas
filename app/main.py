@@ -128,10 +128,15 @@ async def classify(request: ClassifyRequest, client_request: Request):
 async def health():
     from app.pipeline import cache
     from app.llm_check import llm_check
+    from app.rol import rol
     
     llm_metrics = {}
     if llm_check.enabled:
         llm_metrics = llm_check.get_metrics()
+    
+    rol_stats = {}
+    if settings.enable_rol:
+        rol_stats = rol.get_rule_stats()
     
     return {
         "status": "ok",
@@ -139,8 +144,70 @@ async def health():
         "ml_model": "disabled",
         "llm_enabled": bool(getattr(settings, "patas_openai_api_key", "") or settings.openai_api_key) and settings.llm_fallback,
         "cache_size": cache.size(),
-        "llm_cache": llm_metrics
+        "llm_cache": llm_metrics,
+        "rule_orchestrator": rol_stats
     }
+
+
+@app.get("/shadow-rules/metrics")
+async def get_shadow_metrics():
+    """Get shadow rules metrics (precision/recall per rule)."""
+    from app.rol import rol
+    
+    if not settings.enable_rol:
+        raise HTTPException(status_code=400, detail="Rule orchestrator is disabled")
+    
+    return {
+        "summary": rol.get_shadow_summary(),
+        "per_rule": rol.get_shadow_metrics(),
+        "canary_percentage": rol.canary_percentage * 100
+    }
+
+
+@app.post("/shadow-rules/enable")
+async def enable_shadow_rules(ruleset: Dict):
+    """Enable shadow rules for testing."""
+    from app.rol import rol
+    
+    if not settings.enable_rol:
+        raise HTTPException(status_code=400, detail="Rule orchestrator is disabled")
+    
+    rol.enable_shadow_rules(ruleset)
+    return {"status": "enabled", "rules_count": len(rol.shadow_patterns)}
+
+
+@app.post("/shadow-rules/canary")
+async def set_canary_percentage(percentage: float = Query(..., ge=0.0, le=1.0)):
+    """Set canary rollout percentage (0.0-1.0)."""
+    from app.rol import rol
+    
+    if not settings.enable_rol:
+        raise HTTPException(status_code=400, detail="Rule orchestrator is disabled")
+    
+    rol.set_canary_percentage(percentage)
+    return {"canary_percentage": percentage * 100}
+
+
+class ShadowRuleFeedback(BaseModel):
+    rule_id: str
+    predicted_spam: bool
+    actual_spam: bool
+
+
+@app.post("/shadow-rules/feedback")
+async def record_shadow_feedback(feedback: ShadowRuleFeedback):
+    """Record feedback for shadow rule (for metrics calculation)."""
+    from app.rol import rol
+    
+    if not settings.enable_rol:
+        raise HTTPException(status_code=400, detail="Rule orchestrator is disabled")
+    
+    rol.record_shadow_result(
+        feedback.rule_id,
+        feedback.predicted_spam,
+        feedback.actual_spam
+    )
+    return {"status": "recorded", "rule_id": feedback.rule_id}
 
 
 if __name__ == "__main__":

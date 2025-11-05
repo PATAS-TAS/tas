@@ -8,6 +8,7 @@ from app.lur import lur
 from app.sig import sig
 from app.rol import rol
 from app.qzn import qzn
+import hashlib
 
 cache = ClassificationCache(max_size=settings.cache_size, ttl=settings.cache_ttl)
 import logging
@@ -109,6 +110,21 @@ class MultiLayerPipeline:
                 if sig_result.get("signature_match", False):
                     all_reasons.append("Matches known spam signature")
 
+        # Check shadow rules (for logging only, no blocking)
+        shadow_results = []
+        if settings.enable_rol:
+            request_id = message_id or sender_id or text[:20]
+            if rol.shadow_patterns and rol.should_use_shadow(request_id):
+                shadow_results = rol.check_shadow_rules(text)
+                if shadow_results:
+                    shadow_score = max(score for _, score in shadow_results)
+                    shadow_reasons = [reason for reason, _ in shadow_results]
+                    # Log shadow rule match with rule_id for tracking
+                    for reason, score in shadow_results:
+                        rule_id = hashlib.md5(reason.encode()).hexdigest()[:8]
+                        logger.info(f"Shadow rule match: rule_id={rule_id}, reason={reason}, score={score:.2f}, text_preview={text[:50]}")
+                    # Note: shadow rules don't affect final_score, only logged for metrics
+        
         rule_results = regex_patterns.check(text)
         if rule_results:
             rule_score = max(score for _, score in rule_results)
