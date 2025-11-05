@@ -1,0 +1,84 @@
+{
+  "dashboard": {
+    "title": "TAS API - SLO Dashboard",
+    "panels": [
+      {
+        "title": "Request Rate",
+        "targets": [
+          {
+            "expr": "rate(tas_total_requests[5m])",
+            "legendFormat": "Requests/sec"
+          }
+        ]
+      },
+      {
+        "title": "P95 Latency (ms)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, tas_classify_latency_seconds_bucket) * 1000",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, tas_classify_latency_seconds_bucket) * 1000",
+            "legendFormat": "P99"
+          }
+        ]
+      },
+      {
+        "title": "FPR & Recall",
+        "targets": [
+          {
+            "expr": "tas_fpr",
+            "legendFormat": "FPR"
+          },
+          {
+            "expr": "tas_recall",
+            "legendFormat": "Recall"
+          }
+        ]
+      },
+      {
+        "title": "LLM Hit Rate",
+        "targets": [
+          {
+            "expr": "tas_llm_hit_rate",
+            "legendFormat": "LLM Hit %"
+          }
+        ]
+      },
+      {
+        "title": "Cache Hit Rate",
+        "targets": [
+          {
+            "expr": "tas_cache_hit_rate",
+            "legendFormat": "Cache Hit %"
+          }
+        ]
+      },
+      {
+        "title": "Error Rate",
+        "targets": [
+          {
+            "expr": "rate(tas_errors_total[5m])",
+            "legendFormat": "Errors/sec"
+          }
+        ]
+      },
+      {
+        "title": "LLM Cost (USD/hour)",
+        "targets": [
+          {
+            "expr": "tas_llm_cost_usd",
+            "legendFormat": "Cost USD/hr"
+          }
+        ]
+      }
+    ],
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    }
+  }
+}
+

@@ -1,0 +1,16 @@
+# Prometheus configuration for TAS monitoring
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'tas-api'
+    static_configs:
+      - targets: ['localhost:8000']
+    metrics_path: '/v1/metrics'
+    
+  - job_name: 'tas-health'
+    static_configs:
+      - targets: ['localhost:8000']
+    metrics_path: '/v1/health'
+

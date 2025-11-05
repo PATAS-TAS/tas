@@ -1,0 +1,59 @@
+# Prometheus alert rules for TAS
+groups:
+  - name: tas_slo
+    interval: 30s
+    rules:
+      - alert: HighLLMHitRate
+        expr: tas_llm_hit_rate > 0.20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM hit rate exceeds 20%"
+          description: "LLM hit rate is {{ $value }}% (threshold: 20%). Consider reducing max_tokens or enabling stricter short-circuit."
+      
+      - alert: HighLatencyRules
+        expr: histogram_quantile(0.95, tas_classify_latency_seconds_bucket) > 0.250
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency (rules-only) exceeds 250ms"
+          description: "P95 latency is {{ $value | humanize }}ms. Consider scaling out or warming up connections."
+      
+      - alert: HighLatencyLLM
+        expr: histogram_quantile(0.95, tas_classify_latency_seconds_bucket) > 0.750
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency (with LLM) exceeds 750ms"
+          description: "P95 latency is {{ $value | humanize }}ms. Consider scaling out or optimizing LLM calls."
+      
+      - alert: HighErrorRate
+        expr: rate(tas_errors_total[5m]) / rate(tas_total_requests[5m]) > 0.005
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Error rate exceeds 0.5%"
+          description: "Error rate is {{ $value | humanizePercentage }}%. Immediate investigation required."
+      
+      - alert: LLMBudgetWarning
+        expr: tas_llm_cost_usd > (tas_llm_budget_daily / 24 * 0.8)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM budget at 80%"
+          description: "LLM cost is ${{ $value }} (80% of daily budget). Auto-degrade will trigger at 100%."
+      
+      - alert: LLMBudgetExceeded
+        expr: tas_llm_cost_usd > (tas_llm_budget_daily / 24)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LLM budget exceeded"
+          description: "LLM cost is ${{ $value }} (exceeds daily budget). Auto-degrading to rules-only."
+

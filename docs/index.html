@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TAS - Transmodal Anti-Spam API</title>
+    <title>TAS - Fast & Safe Commercial Anti-Spam API</title>
     <style>
         * {
             margin: 0;
@@ -19,7 +19,7 @@
         }
         
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             background: white;
             border-radius: 12px;
@@ -42,35 +42,75 @@
         .header p {
             opacity: 0.9;
             font-size: 1.1em;
+            margin-top: 10px;
+        }
+        
+        .nav {
+            background: #f8f9fa;
+            padding: 15px 40px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .nav a {
+            color: #667eea;
+            text-decoration: none;
+            margin-right: 20px;
+            font-weight: 500;
+        }
+        
+        .nav a:hover {
+            text-decoration: underline;
         }
         
         .content {
             padding: 40px;
         }
         
-        .input-group {
-            margin-bottom: 30px;
+        .section {
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 1px solid #eee;
         }
         
-        label {
+        .section:last-child {
+            border-bottom: none;
+        }
+        
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        
+        .section h3 {
+            color: #495057;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group label {
             display: block;
             margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
+            font-weight: 500;
+            color: #495057;
         }
         
-        textarea {
+        .input-group textarea {
             width: 100%;
             padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 14px;
             font-family: inherit;
             resize: vertical;
-            min-height: 120px;
+            min-height: 100px;
         }
         
-        textarea:focus {
+        .input-group textarea:focus {
             outline: none;
             border-color: #667eea;
         }
@@ -79,13 +119,12 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            padding: 14px 32px;
+            padding: 12px 30px;
+            border-radius: 6px;
             font-size: 16px;
             font-weight: 600;
-            border-radius: 8px;
             cursor: pointer;
             transition: transform 0.2s;
-            width: 100%;
         }
         
         button:hover {
@@ -94,6 +133,11 @@
         
         button:active {
             transform: translateY(0);
+        }
+        
+        .button-secondary {
+            background: #6c757d;
+            margin-left: 10px;
         }
         
         .result {
@@ -117,361 +161,316 @@
             border: 2px solid #cfc;
         }
         
-        .result.uncertain {
-            background: #ffe;
-            border: 2px solid #fcc;
-        }
-        
         .score {
             font-size: 2em;
             font-weight: bold;
             margin-bottom: 10px;
         }
         
-        .labels {
+        pre {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        
+        code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .example-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
             margin: 15px 0;
         }
         
-        .label {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.9em;
-            margin-right: 8px;
-            margin-bottom: 4px;
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
         }
         
-        .label.spam {
-            background: #fcc;
-            color: #c00;
-        }
-        
-        .label.scam {
-            background: #faa;
-            color: #800;
-        }
-        
-        .label.high_risk {
-            background: #f88;
-            color: #600;
-        }
-        
-        .layers {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #ddd;
-        }
-        
-        .layer {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.85em;
-            margin-right: 8px;
-            background: #e0e0e0;
-            color: #666;
-        }
-        
-        .reasons {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #ddd;
-        }
-        
-        .reasons ul {
-            list-style: none;
-            padding-left: 0;
-        }
-        
-        .reasons li {
-            padding: 4px 0;
-            color: #666;
-        }
-        
-        .loading {
-            display: none;
-            text-align: center;
+        .kpi-card {
+            background: #f8f9fa;
             padding: 20px;
+            border-radius: 8px;
+            text-align: center;
         }
         
-        .loading.show {
-            display: block;
+        .kpi-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
         }
         
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .api-info {
-            margin-top: 40px;
-            padding-top: 30px;
-            border-top: 2px solid #e0e0e0;
-        }
-        
-        .api-info h3 {
-            margin-bottom: 15px;
-            color: #333;
-        }
-        
-        .api-info code {
-            background: #f5f5f5;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
+        .kpi-label {
+            color: #6c757d;
+            margin-top: 5px;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-                <h1>🛡️ TAS</h1>
-                <p>Transmodal Anti-Spam API - Multi-layer Detection</p>
+            <h1>🚫 TAS</h1>
+            <p>Fast & Safe Commercial Anti-Spam API</p>
+            <p style="font-size: 0.9em; margin-top: 15px;">
+                FPR < 5%, P95 200/700 ms, rules-first with LLM fallback when needed
+            </p>
+        </div>
+        
+        <div class="nav">
+            <a href="#quickstart">Quick Start</a>
+            <a href="#modes">LLM Modes</a>
+            <a href="#pricing">Pricing</a>
+            <a href="#migration">Migration</a>
+            <a href="#limits">Limits</a>
+            <a href="https://rapidapi.com" target="_blank">Try on RapidAPI →</a>
         </div>
         
         <div class="content">
-            <div class="input-group">
-                <label for="text">Enter text to check:</label>
-                <textarea id="text" placeholder="Enter message text here..."></textarea>
-            </div>
-            
-            <button onclick="checkSpam()">Check for Spam</button>
-            
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p style="margin-top: 10px;">Analyzing...</p>
-            </div>
-            
-            <div class="result" id="result">
-                <div class="score" id="score"></div>
-                <div class="labels" id="labels"></div>
-                <div class="layers" id="layers"></div>
-                <div class="reasons" id="reasons"></div>
-            </div>
-            
-            <div class="api-info">
-                <h3>API Endpoint</h3>
-                <p>POST <code>https://tas.fly.dev/v1/classify</code></p>
-                <p style="margin-top: 10px;">
-                    <a href="api-examples.html" style="color: #667eea; text-decoration: none;">📚 View API Examples →</a>
-                </p>
-                <p>Request body:</p>
-                <pre style="background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto;"><code>{
-  "text": "Your text here",
-  "lang": "en"
-}</code></pre>
-            </div>
-            
-            <div id="migration" style="margin-top: 40px; padding-top: 40px; border-top: 2px solid #667eea;">
-                <h2 style="color: #667eea; margin-bottom: 20px;">API Migration Guide</h2>
-                <p>We are introducing a new response schema alongside the legacy fields to enable a smooth migration.</p>
+            <div id="quickstart" class="section">
+                <h2>🚀 Quick Start</h2>
+                <p>Test TAS spam detection right here:</p>
                 
-                <h3 style="margin-top: 25px;">Timeline</h3>
-                <ul style="margin-left: 20px; line-height: 1.8;">
-                    <li>Deprecation header: <code>Deprecation: true</code></li>
-                    <li>Sunset header: <code>Sunset: &lt;YYYY-MM-DD&gt;</code> (6 months from first release)</li>
-                    <li>Link header: <code>Link: &lt;https://kiku-jw.github.io/tas/#migration&gt;; rel="deprecation"</code></li>
-                    <li>Legacy fields removal: after Sunset date.</li>
+                <div class="input-group">
+                    <label for="text">Enter text to check:</label>
+                    <textarea id="text" placeholder="Enter message text here..."></textarea>
+                </div>
+                
+                <button onclick="checkSpam()">Check for Spam</button>
+                <button class="button-secondary" onclick="checkSpamRulesOnly()">Try rules_only (no key)</button>
+                
+                <div class="result" id="result">
+                    <div class="score" id="score"></div>
+                    <div id="reasons"></div>
+                </div>
+                
+                <h3 style="margin-top: 30px;">cURL Example</h3>
+                <div class="example-box">
+                    <pre><code>curl -X POST https://tas.fly.dev/v1/classify \
+  -H "x-api-key: YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Скидки -70% сегодня, пишите в тг @sale_best!", "lang": "ru"}'</code></pre>
+                </div>
+                
+                <h3>Bash Example</h3>
+                <div class="example-box">
+                    <pre><code>#!/bin/bash
+API_KEY="YOUR_KEY"
+TEXT="Скидки -70% сегодня!"
+
+curl -X POST https://tas.fly.dev/v1/classify \
+  -H "x-api-key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"text\": \"$TEXT\", \"lang\": \"ru\"}"</code></pre>
+                </div>
+            </div>
+            
+            <div id="modes" class="section">
+                <h2>🔧 LLM Modes</h2>
+                <p>TAS supports three modes for LLM usage:</p>
+                
+                <h3>Managed (Default)</h3>
+                <p>Uses TAS-managed LLM credentials. No configuration needed.</p>
+                <pre><code>curl -H "x-api-key: YOUR_KEY" ...</code></pre>
+                
+                <h3>BYO (Bring Your Own)</h3>
+                <p>Use your own LLM provider credentials for cost control and compliance.</p>
+                <pre><code>curl -H "X-LLM-Mode: byo" \
+     -H "X-LLM-Provider: openai" \
+     -H "X-LLM-Key: sk-your-key" ...</code></pre>
+                
+                <h3>Rules-Only</h3>
+                <p>Fastest mode, no LLM costs. P95 ~200ms.</p>
+                <pre><code>curl -H "X-LLM-Mode: rules_only" ...</code></pre>
+                
+                <p><a href="LLM_MODES.md">Full documentation →</a></p>
+            </div>
+            
+            <div id="pricing" class="section">
+                <h2>💰 Pricing</h2>
+                
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-value">4.8%</div>
+                        <div class="kpi-label">False Positive Rate</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-value">76.2%</div>
+                        <div class="kpi-label">Recall</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-value">198ms</div>
+                        <div class="kpi-label">P95 (rules-only)</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-value">687ms</div>
+                        <div class="kpi-label">P95 (with LLM)</div>
+                    </div>
+                </div>
+                
+                <h3>Plans</h3>
+                <ul style="line-height: 2;">
+                    <li><strong>Free</strong>: 1,000 req/month, 2 rps, rules-only</li>
+                    <li><strong>Starter $9/mo</strong>: 50k req, LLM ≤ 5%, overage +20% CPM</li>
+                    <li><strong>Growth $49/mo</strong>: 500k req, LLM ≤ 10%, overage +20% CPM</li>
+                    <li><strong>Pro $199/mo</strong>: 3M req, LLM ≤ 15%, overage +20% CPM</li>
+                    <li><strong>Enterprise</strong>: Custom volume, SLA, dedicated instances</li>
                 </ul>
                 
-                <h3 style="margin-top: 25px;">New Response Schema</h3>
-                <p><strong>POST /v1/classify</strong> now returns BOTH formats:</p>
-                <ul style="margin-left: 20px; line-height: 1.8;">
-                    <li><strong>New:</strong> <code>spam</code>, <code>score</code>, <code>reasons[]</code> (with code, text, weight), <code>path</code>, <code>request_id</code></li>
-                    <li><strong>Legacy</strong> (to be removed after Sunset): <code>is_spam</code>, <code>confidence</code>, <code>reason</code></li>
-                </ul>
+                <p><a href="PRICING_LIMITS.md">Full pricing details →</a></p>
+            </div>
+            
+            <div id="migration" class="section">
+                <h2>📦 API Migration</h2>
+                <p>We are introducing a new response schema alongside legacy fields.</p>
                 
-                <h3 style="margin-top: 25px;">Example Response</h3>
-                <pre style="background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto;"><code>{
+                <h3>New Response Format</h3>
+                <pre><code>{
   "spam": true,
   "score": 0.91,
-  "reasons": [
-    {"code": "commercial_trade_offer", "text": "Commercial trade offer", "weight": 0.4}
-  ],
+  "reasons": [{"code": "...", "text": "...", "weight": 0.4}],
   "path": "rules",
-  "request_id": "r_01ab234cdef",
-  "is_spam": true,
-  "confidence": 0.91,
-  "reason": "Commercial trade offer"
+  "mode": "managed",
+  "request_id": "r_01ab234cdef"
 }</code></pre>
                 
-                <h3 style="margin-top: 25px;">Migration Tips</h3>
-                <ul style="margin-left: 20px; line-height: 1.8;">
-                    <li>Prefer <code>spam</code>, <code>score</code>, <code>reasons</code>, <code>path</code>, <code>request_id</code>.</li>
-                    <li>Keep reading legacy fields during the transition window.</li>
-                    <li>Use <code>/v1/batch</code> for efficient batch classification.</li>
+                <h3>Legacy Fields (Deprecated)</h3>
+                <p>Fields <code>is_spam</code>, <code>confidence</code>, <code>reason</code> will be removed after Sunset date (6 months).</p>
+                
+                <p><a href="MIGRATION.md">Migration guide →</a></p>
+            </div>
+            
+            <div id="limits" class="section">
+                <h2>⚙️ Limits</h2>
+                <ul style="line-height: 2;">
+                    <li>Single request: 1-8,192 characters</li>
+                    <li>Batch request: Up to 100 items, 256 KB payload</li>
+                    <li>Per-item text: ≤ 2,000 characters in batch</li>
+                    <li>Timeout: 10s (single), 30s (batch)</li>
+                    <li>Rate limits: Plan-specific (see Pricing)</li>
                 </ul>
             </div>
         </div>
     </div>
     
     <script>
-                // Try multiple API endpoints with fallback
-                const API_URLS = [
-                    'https://tas.fly.dev',       // Primary: deployed app
-                    'https://tas-api.fly.dev',   // Secondary
-                    'http://localhost:8000'      // Local fallback
-                ];
-            
-            let API_URL = window.location.origin.includes('github.io') 
-                ? API_URLS[0]
-                : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-                    ? 'http://localhost:8000'
-                    : window.location.origin);
-            
-            // Function to try next API endpoint
-            async function tryApiEndpoints(text, lang) {
-                let lastError = null;
-                for (let i = 0; i < API_URLS.length; i++) {
-                    try {
-                        const url = API_URLS[i];
-                        console.log(`Trying API endpoint: ${url}`);
-                        const response = await fetch(`${url}/classify`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                text: text,
-                                lang: lang || 'en'
-                            }),
-                            signal: AbortSignal.timeout(10000) // 10 second timeout
-                        });
-                        
-                        if (response.ok) {
-                            const data = await response.json();
-                            console.log(`Success with endpoint: ${url}`, data);
-                            return data;
-                        } else {
-                            const errorText = await response.text();
-                            console.log(`API endpoint ${url} returned error ${response.status}:`, errorText);
-                            lastError = new Error(`API returned ${response.status}: ${errorText.substring(0, 100)}`);
-                        }
-                    } catch (error) {
-                        console.log(`API endpoint ${API_URLS[i]} failed:`, error.message);
-                        lastError = error;
-                        if (i === API_URLS.length - 1) {
-                            throw lastError || new Error('All API endpoints failed');
-                        }
-                    }
-                }
-                throw lastError || new Error('All API endpoints failed');
-            }
+        const API_URLS = [
+            "https://tas.fly.dev",
+            "http://localhost:8000"
+        ];
         
-        async function checkSpam() {
+        async function checkSpam(mode = null) {
             const text = document.getElementById('text').value.trim();
             if (!text) {
-                alert('Please enter some text');
+                alert('Please enter text to check');
                 return;
             }
             
             const loading = document.getElementById('loading');
-            const result = document.getElementById('result');
+            if (loading) loading.classList.add('show');
             
-            loading.classList.add('show');
+            const result = document.getElementById('result');
             result.classList.remove('show');
             
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            
+            if (mode === 'rules_only') {
+                headers['X-LLM-Mode'] = 'rules_only';
+            } else {
+                // Try to get API key from localStorage or prompt
+                const apiKey = localStorage.getItem('tas_api_key') || prompt('Enter your TAS API key (or leave empty for demo):');
+                if (apiKey) {
+                    headers['x-api-key'] = apiKey;
+                    localStorage.setItem('tas_api_key', apiKey);
+                }
+            }
+            
+            let lastError = null;
+            for (const baseUrl of API_URLS) {
                 try {
-                    const data = await tryApiEndpoints(text, 'en');
+                    const response = await fetch(`${baseUrl}/v1/classify`, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({ text: text, lang: 'en' })
+                    });
                     
-                    loading.classList.remove('show');
+                    if (!response.ok) {
+                        if (response.status === 429 && mode === 'rules_only') {
+                            alert('Rate limit exceeded. Please wait a moment and try again.');
+                            return;
+                        }
+                        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                    }
+                    
+                    const data = await response.json();
                     displayResult(data);
+                    
+                    if (loading) loading.classList.remove('show');
+                    return;
                 } catch (error) {
-                loading.classList.remove('show');
-                const result = document.getElementById('result');
-                result.innerHTML = `
-                    <div style="color: #e74c3c; padding: 20px; text-align: center;">
-                        <h3>⚠️ Error</h3>
-                        <p>${error.message}</p>
-                        <p style="font-size: 0.9em; margin-top: 10px; opacity: 0.8;">
-                            API might be unavailable. Please check if the API is deployed and running.
-                        </p>
-                        <p style="font-size: 0.85em; margin-top: 10px; opacity: 0.7;">
-                            💡 <strong>Quick fix:</strong> Run API locally: <code>poetry run uvicorn app.main:app --port 8000</code>
-                        </p>
-                        <p style="font-size: 0.85em; margin-top: 5px; opacity: 0.7;">
-                            Or deploy to Fly.io: <code>flyctl deploy</code>
-                        </p>
-                    </div>
-                `;
-                result.classList.add('show');
+                    lastError = error;
+                    console.error(`Failed to fetch from ${baseUrl}:`, error);
+                }
+            }
+            
+            if (loading) loading.classList.remove('show');
+            alert(`Error: ${lastError ? lastError.message : 'Failed to fetch. API might be unavailable.'}`);
+        }
+        
+        function checkSpamRulesOnly() {
+            checkSpam('rules_only');
+        }
+        
+        function displayResult(data) {
+            const result = document.getElementById('result');
+            const score = document.getElementById('score');
+            const reasons = document.getElementById('reasons');
+            
+            const isSpam = data.spam || data.is_spam || false;
+            const spamScore = data.score || data.confidence || 0;
+            const path = data.path || 'rules';
+            const mode = data.mode || 'managed';
+            
+            if (isSpam) {
+                score.innerHTML = `⚠️ SPAM DETECTED<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Score: <strong>${(spamScore * 100).toFixed(1)}%</strong> | Path: ${path} | Mode: ${mode}</small>`;
+                score.style.color = '#c00';
+                result.classList.add('spam');
+                result.classList.remove('safe');
+            } else {
+                score.innerHTML = `✅ SAFE<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Score: <strong>${(spamScore * 100).toFixed(1)}%</strong> | Path: ${path} | Mode: ${mode}</small>`;
+                score.style.color = '#0a0';
+                result.classList.add('safe');
+                result.classList.remove('spam');
+            }
+            
+            result.className = 'result show';
+            
+            if (data.reasons && data.reasons.length > 0) {
+                const reasonsList = data.reasons.map(r => 
+                    typeof r === 'string' ? r : `${r.code} (${r.text})`
+                ).join(', ');
+                reasons.innerHTML = `<strong>Reasons:</strong> ${reasonsList}`;
+            } else {
+                reasons.innerHTML = '';
             }
         }
         
-            function displayResult(data) {
-                if (!data || typeof data.is_spam === 'undefined') {
-                    const result = document.getElementById('result');
-                    result.innerHTML = `
-                        <div style="color: #e74c3c; padding: 20px; text-align: center;">
-                            <h3>⚠️ Invalid Response</h3>
-                            <p>API returned unexpected data format</p>
-                            <pre style="font-size: 0.8em; margin-top: 10px; text-align: left; background: #f5f5f5; padding: 10px; border-radius: 4px;">${JSON.stringify(data, null, 2)}</pre>
-                        </div>
-                    `;
-                    result.classList.add('show');
-                    return;
-                }
-            
-                const result = document.getElementById('result');
-                const score = document.getElementById('score');
-                const labels = document.getElementById('labels');
-                const layers = document.getElementById('layers');
-                const reasons = document.getElementById('reasons');
-                
-                const isSpam = data.is_spam || false;
-                const confidence = data.confidence || 0;
-                const reason = data.reason || "No specific reason";
-                
-                if (isSpam) {
-                    score.innerHTML = `⚠️ SPAM DETECTED<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Confidence: <strong>${(confidence * 100).toFixed(1)}%</strong></small>`;
-                    score.style.color = '#c00';
-                    result.classList.add('spam');
-                } else {
-                    score.innerHTML = `✅ SAFE<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Confidence: <strong>${(confidence * 100).toFixed(1)}%</strong></small>`;
-                    score.style.color = '#0a0';
-                    result.classList.add('safe');
-                }
-                
-                result.className = 'result show';
-                
-                labels.innerHTML = '';
-                layers.innerHTML = '';
-                
-                if (reason) {
-                    reasons.innerHTML = `<strong>Reason:</strong> ${reason}`;
-                } else {
-                    reasons.innerHTML = '';
-                }
+        // Setup event listeners
+        document.getElementById('text')?.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                checkSpam();
             }
-        
-            // Wait for DOM to be ready and setup event listeners
-            function setupEventListeners() {
-                const textElement = document.getElementById('text');
-                if (textElement) {
-                    textElement.addEventListener('keydown', function(e) {
-                        if (e.ctrlKey && e.key === 'Enter') {
-                            checkSpam();
-                        }
-                    });
-                }
-            }
-            
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', setupEventListeners);
-            } else {
-                setupEventListeners();
-            }
+        });
     </script>
 </body>
 </html>
-
