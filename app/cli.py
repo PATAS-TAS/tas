@@ -164,6 +164,156 @@ def alerts():
         click.echo()
 
 
+@cli.command()
+def quickstart():
+    """Quick start guide - generate .env and run example SDK calls."""
+    import os
+    from pathlib import Path
+    
+    click.echo("🚀 TAS Quick Start")
+    click.echo("=" * 50)
+    click.echo()
+    
+    # Check .env
+    env_file = Path(".env")
+    if not env_file.exists():
+        click.echo("📝 Creating .env file...")
+        if Path("env.example").exists():
+            import shutil
+            shutil.copy("env.example", ".env")
+        else:
+            env_file.write_text("""# TAS Configuration
+OPENAI_API_KEY=your-key-here
+LLM_MODE=managed
+DAILY_BUDGET_USD=25.0
+""")
+        click.echo("✅ Created .env file")
+        click.echo("   ⚠️  Please edit .env and set OPENAI_API_KEY")
+    else:
+        click.echo("✅ .env file exists")
+    
+    click.echo()
+    click.echo("📚 Example SDK Usage:")
+    click.echo()
+    
+    # Python example
+    click.echo("Python:")
+    click.echo("```python")
+    click.echo("from tas_sdk import TASClient")
+    click.echo("")
+    click.echo("client = TASClient(api_key='your-key')")
+    click.echo("result = client.classify('Spam message', lang='en')")
+    click.echo("print(f\"Spam: {result['spam']}\")")
+    click.echo("```")
+    click.echo()
+    
+    # cURL example
+    click.echo("cURL:")
+    click.echo("```bash")
+    click.echo("curl -X POST https://tas.fly.dev/v1/classify \\")
+    click.echo("  -H 'Content-Type: application/json' \\")
+    click.echo("  -H 'X-API-Key: your-key' \\")
+    click.echo("  -d '{\"text\": \"Spam message\", \"lang\": \"en\"}'")
+    click.echo("```")
+    click.echo()
+    
+    click.echo("📖 Full documentation: https://kiku-jw.github.io/tas/")
+    click.echo()
+
+
+@cli.command()
+@click.option('--max-llm', type=float, help='Maximum LLM hit rate (0-1, e.g., 0.15 for 15%%)')
+@click.option('--max-spend', type=float, help='Maximum daily spend in USD')
+@click.option('--dry-run', is_flag=True, help='Show what would be applied without making changes')
+def guard(max_llm: float, max_spend: float, dry_run: bool):
+    """Set budget guards and LLM limits."""
+    import json
+    from datetime import datetime
+    from pathlib import Path
+    
+    events_dir = Path("monitoring/events")
+    events_dir.mkdir(parents=True, exist_ok=True)
+    
+    current_metrics = metrics_collector.get_current_metrics()
+    changes = []
+    
+    if max_llm is not None:
+        if max_llm < 0 or max_llm > 1:
+            click.echo("❌ max-llm must be between 0 and 1 (e.g., 0.15 for 15%%)")
+            return
+        
+        current_llm = current_metrics.get('llm_hit_rate', 0)
+        if current_llm > max_llm:
+            changes.append({
+                "type": "llm_limit_exceeded",
+                "current": current_llm,
+                "limit": max_llm,
+                "action": "auto_degrade_to_rules_only"
+            })
+            click.echo(f"⚠️  LLM hit rate {current_llm:.1%} exceeds limit {max_llm:.1%}")
+            if not dry_run:
+                click.echo("   → Auto-degrading to rules-only mode")
+        else:
+            click.echo(f"✅ LLM hit rate {current_llm:.1%} within limit {max_llm:.1%}")
+    
+    if max_spend is not None:
+        if max_spend < 0:
+            click.echo("❌ max-spend must be positive")
+            return
+        
+        current_spend = current_metrics.get('llm_daily_cost_usd', 0)
+        if current_spend > max_spend:
+            changes.append({
+                "type": "budget_exceeded",
+                "current": current_spend,
+                "limit": max_spend,
+                "action": "auto_degrade_to_rules_only"
+            })
+            click.echo(f"⚠️  Daily spend ${current_spend:.2f} exceeds limit ${max_spend:.2f}")
+            if not dry_run:
+                click.echo("   → Auto-degrading to rules-only mode")
+        else:
+            click.echo(f"✅ Daily spend ${current_spend:.2f} within limit ${max_spend:.2f}")
+    
+    if not dry_run and changes:
+        # Apply budget limits
+        if max_spend:
+            metrics_collector.set_budget(daily=max_spend)
+        
+        # Log event
+        event = {
+            "timestamp": datetime.now().isoformat(),
+            "guard_settings": {
+                "max_llm": max_llm,
+                "max_spend": max_spend
+            },
+            "changes": changes,
+            "current_metrics": {
+                "llm_hit_rate": current_metrics.get('llm_hit_rate', 0),
+                "daily_cost": current_metrics.get('llm_daily_cost_usd', 0)
+            }
+        }
+        
+        event_file = events_dir / f"guard_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(event_file, 'w') as f:
+            json.dump(event, f, indent=2)
+        
+        click.echo(f"✅ Guard applied and logged to {event_file}")
+    elif dry_run:
+        click.echo()
+        click.echo("🔍 Dry-run mode - no changes applied")
+        if changes:
+            click.echo("   Would apply:")
+            for change in changes:
+                click.echo(f"   - {change['action']}")
+        else:
+            click.echo("   No changes needed")
+    
+    if not max_llm and not max_spend:
+        click.echo("Usage: tas guard --max-llm 0.15 --max-spend 25.0")
+        click.echo("       tas guard --max-llm 0.15 --max-spend 25.0 --dry-run")
+
+
 if __name__ == '__main__':
     cli()
 

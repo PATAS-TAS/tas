@@ -282,6 +282,8 @@
             <a href="#pricing">Pricing</a>
             <a href="#migration">Migration</a>
             <a href="#limits">Limits</a>
+            <a href="#faq">FAQ</a>
+            <a href="#troubleshooting">Troubleshooting</a>
             <a href="https://rapidapi.com" target="_blank">Try on RapidAPI →</a>
         </div>
         
@@ -408,6 +410,60 @@ curl -X POST https://tas.fly.dev/v1/classify \
                     <li>Timeout: 10s (single), 30s (batch)</li>
                     <li>Rate limits: Plan-specific (see Pricing)</li>
                 </ul>
+            </div>
+            
+            <div id="faq" class="section">
+                <h2>❓ FAQ</h2>
+                
+                <h3>BYO Keys</h3>
+                <p><strong>Q: Can I use my own OpenAI/Anthropic API key?</strong></p>
+                <p>A: Yes! Set <code>X-LLM-Provider</code> and <code>X-LLM-Key</code> headers, or use <code>llm_mode=byo</code>. Your key is never logged or stored.</p>
+                
+                <h3>LLM Modes</h3>
+                <p><strong>Q: What's the difference between managed, BYO, and rules_only?</strong></p>
+                <p>A: <code>managed</code> uses our LLM (you pay per request), <code>byo</code> uses your key, <code>rules_only</code> is fastest with no LLM costs.</p>
+                
+                <h3>Rate Limits</h3>
+                <p><strong>Q: What happens when I hit rate limits?</strong></p>
+                <p>A: You'll get HTTP 429 with <code>Retry-After</code> header. Upgrade your plan or wait for the reset window.</p>
+                
+                <h3>Response Format</h3>
+                <p><strong>Q: What do the reasons[] codes mean?</strong></p>
+                <p>A: Each reason has <code>code</code> (e.g., "url", "job_offer"), <code>text</code> (description), and <code>weight</code> (0-1 impact).</p>
+                
+                <h3>Error Codes</h3>
+                <p><strong>Q: What do 413 and 429 errors mean?</strong></p>
+                <p>A: 413 = Payload too large (max 256KB for batch). 429 = Rate limit exceeded (check <code>Retry-After</code> header).</p>
+                
+                <h3>Threshold Tuning</h3>
+                <p><strong>Q: Can I adjust the spam threshold?</strong></p>
+                <p>A: The API uses a fixed threshold (0.5). For custom thresholds, use the <code>score</code> field and apply your own logic.</p>
+                
+                <h3>Rules-Only Mode</h3>
+                <p><strong>Q: Can I use rules_only permanently?</strong></p>
+                <p>A: Yes! Set <code>X-LLM-Mode: rules_only</code> header or <code>LLM_MODE=rules_only</code> in config. This is the fastest and cheapest option.</p>
+            </div>
+            
+            <div id="troubleshooting" class="section">
+                <h2>🔧 Troubleshooting</h2>
+                
+                <h3>401 Unauthorized</h3>
+                <p>Check your API key in <code>X-API-Key</code> header. For RapidAPI, use the key from your dashboard.</p>
+                
+                <h3>429 Rate Limit</h3>
+                <p>You've exceeded your plan's rate limit. Check <code>X-RateLimit-Remaining</code> header. Upgrade plan or wait for reset.</p>
+                
+                <h3>413 Payload Too Large</h3>
+                <p>Batch payload exceeds 256KB. Reduce number of items or text length per item (max 2000 chars).</p>
+                
+                <h3>High Latency</h3>
+                <p>If P95 > 750ms, check LLM mode. Use <code>rules_only</code> for fastest response (< 200ms).</p>
+                
+                <h3>False Positives</h3>
+                <p>Submit feedback via <code>POST /v1/feedback</code> to help improve detection. Check <code>reasons[]</code> to understand why.</p>
+                
+                <h3>LLM Errors</h3>
+                <p>If LLM fails, API automatically falls back to rules_only mode. Check <code>mode</code> field in response.</p>
             </div>
         </div>
     </div>
