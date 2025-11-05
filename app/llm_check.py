@@ -36,56 +36,56 @@ class LLMCheck:
             if cached is not None:
                 return cached
 
-            prompt = f"""Analyze the following message for COMMERCIAL SPAM indicators. Focus ONLY on:
-- Buy/sell offers (куплю, продам, продаю, покупаю, обмен)
-- Job offers and work solicitations (работа, вакансия, заработок, job, work)
-- Service offers (repair, tutoring, services)
-- Real estate (квартира, дом, аренда, rent, sale)
-- Car sales (авто, машина, автомобиль)
-- Commercial promotions (акция, скидка, sale, discount)
-
-DO NOT flag:
-- Normal conversations
-- Personal messages
-- Non-commercial content
-- Toxicity or insults (not our focus)
-- Political content
-
-Message: "{text[:2000]}"
-
-Respond with JSON: {{"is_spam": boolean, "confidence": 0.0-1.0, "reasons": ["reason1", "reason2"]}}"""
+            # Truncate text to essential content (first 500 chars should be enough)
+            text_truncated = text[:500].strip()
+            
+            # Minimal prompt - only essential context
+            prompt = f'Is this commercial spam? "{text_truncated}"'
 
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a spam detection expert. Analyze messages and return JSON with is_spam, confidence, and reasons.",
+                        "content": "Detect commercial spam. Return JSON only.",
                     },
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.0,
-                max_tokens=120,
+                top_p=1.0,
+                max_tokens=80,
+                response_format={"type": "json_object"},
             )
 
             content = response.choices[0].message.content
             if not content:
                 return None
 
-            json_start = content.find("{")
-            json_end = content.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                json_str = content[json_start:json_end]
-                parsed = json.loads(json_str)
-                
+            # With response_format="json_object", content should be valid JSON
+            try:
+                parsed = json.loads(content)
                 result = {
                     "spam": 1.0 if parsed.get("is_spam") else 0.0,
                     "confidence": max(0.0, min(1.0, parsed.get("confidence", 0.5))),
-                    "reasons": parsed.get("reasons", []),
+                    "reasons": parsed.get("reasons", [])[:2],  # Limit to 2 reasons
                 }
                 self.cache[key] = result
                 return result
-            return None
+            except json.JSONDecodeError:
+                # Fallback: try to extract JSON if response_format didn't work
+                json_start = content.find("{")
+                json_end = content.rfind("}") + 1
+                if json_start >= 0 and json_end > json_start:
+                    json_str = content[json_start:json_end]
+                    parsed = json.loads(json_str)
+                    result = {
+                        "spam": 1.0 if parsed.get("is_spam") else 0.0,
+                        "confidence": max(0.0, min(1.0, parsed.get("confidence", 0.5))),
+                        "reasons": parsed.get("reasons", [])[:2],
+                    }
+                    self.cache[key] = result
+                    return result
+                return None
         except Exception as e:
             logger.error(f"LLM check error: {e}")
             return None

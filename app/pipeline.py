@@ -147,6 +147,15 @@ class MultiLayerPipeline:
 
         layers_used.append("rules")
 
+        # Early exit: if rules score is high enough (>0.8), skip LLM to save latency/cost
+        if rule_score >= 0.8:
+            final_score = rule_score
+            final_confidence = rule_score
+            all_reasons.extend(rule_reasons)
+            result = self._format_result(final_score, final_confidence, all_reasons, layers_used)
+            cache.set(text, result, lang)
+            return result
+
         if settings.llm_fallback and final_score < settings.rules_threshold:
             llm_result = await llm_check.check(text)
             if llm_result:
