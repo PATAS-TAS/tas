@@ -58,10 +58,29 @@ API will be available at `http://localhost:8000`
 
 ### API Usage
 
+**Using cURL:**
 ```bash
-curl -X POST http://localhost:8000/classify \
+curl -X POST http://localhost:8000/v1/classify \
   -H "Content-Type: application/json" \
   -d '{"text": "Earn money from home! Click here https://...", "lang": "en"}'
+```
+
+**Using Python SDK:**
+```python
+from tas_sdk import TASClient
+
+client = TASClient(api_key="your-api-key")
+result = client.classify("Spam message here", lang="en")
+print(f"Is spam: {result['is_spam']}")
+```
+
+**Using Node.js SDK:**
+```javascript
+const { TASClient } = require('tas-sdk');
+
+const client = new TASClient('your-api-key');
+client.classify('Spam message here', 'en')
+    .then(result => console.log(result));
 ```
 
 ### Response
@@ -159,6 +178,26 @@ Reports are saved to `reports/` directory:
 - **FPR/FNR** - False positive/negative rates
 - **Latency** - P50, P95, P99 percentiles
 - **Trends** - Historical comparison to detect degradation
+
+## SDKs
+
+Official SDKs are available for easy integration:
+
+- **Python SDK:** `sdks/python/` - Install with `pip install tas-sdk`
+- **Node.js SDK:** `sdks/nodejs/` - Install with `npm install tas-sdk`
+
+See [RAPIDAPI_DOCS.md](RAPIDAPI_DOCS.md) for complete API documentation and RapidAPI listing details.
+
+## API Versioning
+
+Current API version: **v1**
+
+All endpoints are prefixed with `/v1/`:
+- `/v1/classify` - Classify text
+- `/v1/health` - Health check
+- `/v1/version` - Version info
+
+Legacy endpoints without prefix are maintained for backward compatibility but deprecated.
 
 ## License
 

@@ -14,8 +14,12 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="TAS - Transmodal Anti-Spam API",
     description="Multi-layer transmodal spam detection: Rules → LLM. Processes text with unified scoring across layers.",
-    version="1.0.2",
+    version="1.0.3",
 )
+
+# API versioning router
+from fastapi import APIRouter
+v1_router = APIRouter(prefix="/v1", tags=["v1"])
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,8 +85,9 @@ async def root():
     }
 
 
-@app.post("/classify", response_model=ClassifyResponse)
-async def classify(request: ClassifyRequest, client_request: Request):
+# v1 endpoints
+@v1_router.post("/classify", response_model=ClassifyResponse)
+async def v1_classify(request: ClassifyRequest, client_request: Request):
     # Rate limiting (100 requests per minute per IP)
     client_ip = client_request.client.host if client_request.client else "unknown"
     allowed, remaining = rate_limiter.is_allowed(client_ip, max_requests=100, window_seconds=60)
@@ -126,8 +131,8 @@ async def classify(request: ClassifyRequest, client_request: Request):
         raise HTTPException(status_code=500, detail="Internal server error. Please try again later.")
 
 
-@app.get("/health")
-async def health():
+@v1_router.get("/health")
+async def v1_health():
     from app.pipeline import cache
     from app.llm_check import llm_check
     from app.rol import rol
@@ -149,6 +154,39 @@ async def health():
         "llm_cache": llm_metrics,
         "rule_orchestrator": rol_stats
     }
+
+
+@app.get("/version")
+async def version():
+    """Get API version."""
+    return {
+        "version": "1.0.3",
+        "api_version": "v1",
+        "name": "TAS - Transmodal Anti-Spam API"
+    }
+
+
+@v1_router.get("/version")
+async def v1_version():
+    """Get API version (v1 endpoint)."""
+    return {
+        "version": "1.0.3",
+        "api_version": "v1",
+        "name": "TAS - Transmodal Anti-Spam API"
+    }
+
+
+# Legacy endpoints (backward compatibility)
+@app.post("/classify", response_model=ClassifyResponse)
+async def classify(request: ClassifyRequest, client_request: Request):
+    """Legacy endpoint - use /v1/classify instead."""
+    return await v1_classify(request, client_request)
+
+
+@app.get("/health")
+async def health():
+    """Legacy endpoint - use /v1/health instead."""
+    return await v1_health()
 
 
 @app.get("/shadow-rules/metrics")
@@ -359,6 +397,9 @@ def _generate_recommendations(rule_stats: Dict[str, Dict[str, Any]]) -> List[str
     
     return recommendations[:10]  # Limit to top 10
 
+
+# Include v1 router
+app.include_router(v1_router)
 
 if __name__ == "__main__":
     import uvicorn
