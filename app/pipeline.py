@@ -67,12 +67,17 @@ class MultiLayerPipeline:
             lur_result = await lur.check(text)
             if lur_result["url_count"] > 0:
                 layers_used.append("lur")
-            if lur_result["url_risk_score"] > 0.3:
-                module_scores["lur"] = lur_result["url_risk_score"]
+            url_risk = lur_result["url_risk_score"]
+            if url_risk > 0.3:
+                # Use URL risk score directly (already 0-1)
+                module_scores["lur"] = url_risk
                 if lur_result["has_risky_tld"]:
                     all_reasons.append("Risky TLD detected")
                 if lur_result["has_short_domain"]:
                     all_reasons.append("Short URL domain")
+                if lur_result.get("has_legitimate_domain") and url_risk < 0.5:
+                    # Legitimate domains with low risk - reduce impact
+                    module_scores["lur"] = url_risk * 0.6
 
         # SIG: Signatures (fast check, no async needed)
         if settings.enable_sig:
