@@ -6,6 +6,13 @@ set -e
 
 API_KEY="${TAS_API_KEY:-}"
 BASE_URL="${TAS_BASE_URL:-https://tas.fly.dev}"
+
+# Support --staging flag
+if [ "$1" = "--staging" ]; then
+    BASE_URL="${TAS_STAGING_URL:-https://tas-staging.fly.dev}"
+    echo "🧪 Running on STAGING: $BASE_URL"
+fi
+
 REPORT_FILE="reports/D0_smoke.md"
 
 mkdir -p reports
