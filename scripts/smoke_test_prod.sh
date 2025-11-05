@@ -7,12 +7,23 @@ set -e
 API_KEY="${1:-${TAS_API_KEY}}"
 BASE_URL="${2:-https://tas.fly.dev}"
 
-if [ -z "$API_KEY" ]; then
-    echo "Error: API key required. Set TAS_API_KEY or pass as first argument."
-    exit 1
+# Support staging URL
+STAGING_URL="${3:-https://tas-staging.fly.dev}"
+USE_STAGING="${4:-false}"
+
+# Use staging if requested
+if [ "$USE_STAGING" = "true" ]; then
+    BASE_URL="$STAGING_URL"
+    echo "🧪 Running STAGING smoke tests..."
+else
+    echo "🚀 Running PRODUCTION smoke tests..."
 fi
 
-echo "🚀 Running production smoke tests..."
+if [ -z "$API_KEY" ] && [ "$USE_STAGING" = "false" ]; then
+    echo "⚠️  Warning: No API key provided. Some tests may fail."
+    echo "   Set TAS_API_KEY or pass as first argument."
+fi
+
 echo "Base URL: $BASE_URL"
 echo ""
 

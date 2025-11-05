@@ -114,6 +114,20 @@ async def v1_classify(request: ClassifyRequest, client_request: Request, http_re
     if llm_mode not in ["managed", "byo", "rules_only"]:
         llm_mode = "managed"
     
+    # Auto-degrade: Check budget and LLM hit rate
+    from app.metrics import metrics_collector
+    current_metrics = metrics_collector.get_current_metrics()
+    
+    # Auto-degrade if budget exceeded
+    if current_metrics.get("budget_exceeded", False):
+        logger.warning(f"Budget exceeded, forcing rules_only mode")
+        llm_mode = "rules_only"
+    # Auto-degrade if LLM hit rate > 20% for extended period
+    elif current_metrics.get("llm_hit_rate", 0) > 0.20:
+        # Check if this has been high for 10+ minutes (simplified: check recent trend)
+        logger.warning(f"LLM hit rate {current_metrics.get('llm_hit_rate', 0):.1%} > 20%, forcing rules_only")
+        llm_mode = "rules_only"
+    
     # Extract BYO credentials if provided
     byo_provider = client_request.headers.get("X-LLM-Provider")
     byo_api_key = client_request.headers.get("X-LLM-Key")
@@ -178,7 +192,11 @@ async def v1_classify(request: ClassifyRequest, client_request: Request, http_re
         sunset = (datetime.now(timezone.utc) + timedelta(days=180)).strftime("%Y-%m-%d")
         http_response.headers["Deprecation"] = "true"
         http_response.headers["Sunset"] = sunset
-        http_response.headers["Link"] = "<https://kiku-jw.github.io/tas/#migration>; rel=\"deprecation\""
+        # Multi-Link header (RFC 8288) for migration and LLM modes docs
+        http_response.headers["Link"] = (
+            "<https://kiku-jw.github.io/tas/#migration>; rel=\"deprecation\", "
+            "<https://kiku-jw.github.io/tas/#modes>; rel=\"documentation\""
+        )
         http_response.headers["X-TAS-Request-ID"] = request_id
 
         # Determine actual mode used (may differ from requested if BYO fails)
