@@ -7,6 +7,9 @@ import json
 import hashlib
 from cachetools import TTLCache
 import httpx
+import asyncio
+import time
+from datetime import datetime, timezone, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +50,10 @@ class LLMCheck:
         self.cache_hits = 0
         self.tokens_saved = 0
         self.model = "gpt-4o-mini"
+
+        # Circuit breaker state
+        self._failures_consecutive = 0
+        self._down_until: Optional[datetime] = None
         
         # Estimate tokens: ~4 chars per token
         self.avg_prompt_tokens = 50  # ~200 chars prompt
@@ -87,6 +94,28 @@ class LLMCheck:
     def get_metrics(self) -> Dict:
         """Get cache metrics."""
         hit_rate = (self.cache_hits / self.total_requests * 100) if self.total_requests > 0 else 0.0
+        down_remaining = 0.0
+        is_down = False
+        if self._down_until:
+            now = datetime.now(timezone.utc)
+            if now < self._down_until:
+                is_down = True
+                down_remaining = max(0.0, (self._down_until - now).total_seconds())
+            else:
+                self._down_until = None
+                self._failures_consecutive = 0
+                is_down = False
+                down_remaining = 0.0
+        # also mirror to global metrics
+        try:
+            metrics_collector.set_provider_health(
+                provider='llm',
+                up=not is_down,
+                down_seconds_remaining=down_remaining,
+                failures_consecutive=self._failures_consecutive
+            )
+        except Exception:
+            pass
         return {
             "total_requests": self.total_requests,
             "cache_hits": self.cache_hits,
@@ -96,7 +125,12 @@ class LLMCheck:
             "cache_size": len(self.cache),
             "cache_max_size": self.cache.maxsize,
             "llm_request_rate": round((1 - hit_rate / 100) * 100, 2),  # % of requests that hit LLM
-            "warmed_up": self._warmed_up
+            "warmed_up": self._warmed_up,
+            "provider_health": {
+                "up": not is_down,
+                "down_seconds_remaining": down_remaining,
+                "failures_consecutive": self._failures_consecutive,
+            }
         }
 
     async def check(self, text: str) -> Optional[Dict[str, float]]:
@@ -104,6 +138,17 @@ class LLMCheck:
             return None
 
         try:
+            # Circuit breaker: short-circuit when provider is down
+            if self._down_until:
+                now = datetime.now(timezone.utc)
+                if now < self._down_until:
+                    logger.warning(f"LLM provider down, {int((self._down_until - now).total_seconds())}s remaining")
+                    metrics_collector.set_provider_health('llm', up=False, down_seconds_remaining=(self._down_until - now).total_seconds(), failures_consecutive=self._failures_consecutive)
+                    return None
+                # window passed, reset
+                self._down_until = None
+                self._failures_consecutive = 0
+
             self.total_requests += 1
             key = self._cache_key(text)
             cached = self.cache.get(key)
@@ -128,20 +173,62 @@ class LLMCheck:
             # Minimal prompt - only essential context
             prompt = f'Is this commercial spam? "{text_truncated}"'
 
-            response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Detect commercial spam. Return JSON only.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.0,
-                top_p=1.0,
-                max_tokens=80,
-                response_format={"type": "json_object"},
-            )
+            # Retry logic with exponential backoff (0.5s, 1.0s, 2.0s)
+            max_retries = 3
+            backoff_delays = [0.5, 1.0, 2.0]
+            retry_count = 0
+            start_time = time.time()
+            last_error = None
+            response = None
+            
+            for attempt in range(max_retries):
+                try:
+                    response = await self.client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "Detect commercial spam. Return JSON only.",
+                            },
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.0,
+                        top_p=1.0,
+                        max_tokens=80,
+                        response_format={"type": "json_object"},
+                    )
+                    # Success - break out of retry loop
+                    if retry_count > 0:
+                        total_time = time.time() - start_time
+                        logger.info(f"LLM request succeeded after {retry_count} retries, total time: {total_time:.2f}s")
+                    break
+                except Exception as e:
+                    retry_count += 1
+                    last_error = e
+                    
+                    if attempt < max_retries - 1:
+                        # Wait before retry (exponential backoff)
+                        delay = backoff_delays[attempt]
+                        logger.warning(f"LLM request failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {delay}s...")
+                        await asyncio.sleep(delay)
+                    else:
+                        # All retries exhausted
+                        total_time = time.time() - start_time
+                        logger.error(f"LLM request failed after {max_retries} attempts, total time: {total_time:.2f}s. Last error: {last_error}")
+                        # Count a failure event for circuit breaker and possibly trip it
+                        self._failures_consecutive += 1
+                        if self._failures_consecutive >= 3:
+                            self._down_until = datetime.now(timezone.utc) + timedelta(seconds=120)
+                            logger.error("LLM provider marked DOWN for 120s due to consecutive failures")
+                            metrics_collector.set_provider_health('llm', up=False, down_seconds_remaining=120.0, failures_consecutive=self._failures_consecutive)
+                        else:
+                            metrics_collector.set_provider_health('llm', up=True, down_seconds_remaining=0.0, failures_consecutive=self._failures_consecutive)
+                        # Return None to trigger rules-only fallback in pipeline
+                        return None
+            
+            # If we get here, response was successful
+            if not response:
+                return None
 
             content = response.choices[0].message.content
             if not content:
@@ -175,6 +262,10 @@ class LLMCheck:
                     cached=False
                 )
                 
+                # success: reset circuit breaker
+                self._failures_consecutive = 0
+                self._down_until = None
+                metrics_collector.set_provider_health('llm', up=True, down_seconds_remaining=0.0, failures_consecutive=0)
                 return result
             except json.JSONDecodeError:
                 # Fallback: try to extract JSON if response_format didn't work
@@ -204,10 +295,24 @@ class LLMCheck:
                         cached=False
                     )
                     
+                    # success: reset circuit breaker
+                    self._failures_consecutive = 0
+                    self._down_until = None
+                    metrics_collector.set_provider_health('llm', up=True, down_seconds_remaining=0.0, failures_consecutive=0)
                     return result
                 return None
         except Exception as e:
-            logger.error(f"LLM check error: {e}")
+            # Log full stacktrace but do not crash callers
+            logger.exception("LLM check failed (unexpected error)")
+            # Count as failure event and maybe trip breaker
+            self._failures_consecutive += 1
+            if self._failures_consecutive >= 3:
+                self._down_until = datetime.now(timezone.utc) + timedelta(seconds=120)
+                logger.error("LLM provider marked DOWN for 120s due to consecutive failures")
+                metrics_collector.set_provider_health('llm', up=False, down_seconds_remaining=120.0, failures_consecutive=self._failures_consecutive)
+            else:
+                metrics_collector.set_provider_health('llm', up=True, down_seconds_remaining=0.0, failures_consecutive=self._failures_consecutive)
+            # Return None to trigger rules-only fallback in pipeline
             return None
 
 

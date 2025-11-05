@@ -261,7 +261,7 @@
             
             <div class="api-info">
                 <h3>API Endpoint</h3>
-                <p>POST <code>https://tas.fly.dev/classify</code></p>
+                <p>POST <code>https://tas.fly.dev/v1/classify</code></p>
                 <p style="margin-top: 10px;">
                     <a href="api-examples.html" style="color: #667eea; text-decoration: none;">📚 View API Examples →</a>
                 </p>
@@ -270,6 +270,47 @@
   "text": "Your text here",
   "lang": "en"
 }</code></pre>
+            </div>
+            
+            <div id="migration" style="margin-top: 40px; padding-top: 40px; border-top: 2px solid #667eea;">
+                <h2 style="color: #667eea; margin-bottom: 20px;">API Migration Guide</h2>
+                <p>We are introducing a new response schema alongside the legacy fields to enable a smooth migration.</p>
+                
+                <h3 style="margin-top: 25px;">Timeline</h3>
+                <ul style="margin-left: 20px; line-height: 1.8;">
+                    <li>Deprecation header: <code>Deprecation: true</code></li>
+                    <li>Sunset header: <code>Sunset: &lt;YYYY-MM-DD&gt;</code> (6 months from first release)</li>
+                    <li>Link header: <code>Link: &lt;https://kiku-jw.github.io/tas/#migration&gt;; rel="deprecation"</code></li>
+                    <li>Legacy fields removal: after Sunset date.</li>
+                </ul>
+                
+                <h3 style="margin-top: 25px;">New Response Schema</h3>
+                <p><strong>POST /v1/classify</strong> now returns BOTH formats:</p>
+                <ul style="margin-left: 20px; line-height: 1.8;">
+                    <li><strong>New:</strong> <code>spam</code>, <code>score</code>, <code>reasons[]</code> (with code, text, weight), <code>path</code>, <code>request_id</code></li>
+                    <li><strong>Legacy</strong> (to be removed after Sunset): <code>is_spam</code>, <code>confidence</code>, <code>reason</code></li>
+                </ul>
+                
+                <h3 style="margin-top: 25px;">Example Response</h3>
+                <pre style="background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto;"><code>{
+  "spam": true,
+  "score": 0.91,
+  "reasons": [
+    {"code": "commercial_trade_offer", "text": "Commercial trade offer", "weight": 0.4}
+  ],
+  "path": "rules",
+  "request_id": "r_01ab234cdef",
+  "is_spam": true,
+  "confidence": 0.91,
+  "reason": "Commercial trade offer"
+}</code></pre>
+                
+                <h3 style="margin-top: 25px;">Migration Tips</h3>
+                <ul style="margin-left: 20px; line-height: 1.8;">
+                    <li>Prefer <code>spam</code>, <code>score</code>, <code>reasons</code>, <code>path</code>, <code>request_id</code>.</li>
+                    <li>Keep reading legacy fields during the transition window.</li>
+                    <li>Use <code>/v1/batch</code> for efficient batch classification.</li>
+                </ul>
             </div>
         </div>
     </div>

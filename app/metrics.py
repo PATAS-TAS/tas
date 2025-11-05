@@ -84,6 +84,14 @@ class MetricsCollector:
             'Current P95 latency in seconds'
         )
         
+        # External providers health (1=up, 0=down)
+        self.provider_health_gauge = Gauge(
+            'tas_provider_health',
+            'External provider health status (1=up, 0=down)',
+            ['provider']
+        )
+        self._provider_health: Dict[str, Dict[str, Any]] = {}
+
         # Feedback metrics
         self.false_positives = Counter(
             'tas_false_positives_total',
@@ -96,11 +104,13 @@ class MetricsCollector:
         )
         
         # Internal tracking for sliding window calculations
-        self._latency_window = deque(maxlen=1000)  # Last 1000 requests
-        self._fp_window = deque(maxlen=1000)  # Last 1000 feedback entries
-        self._fn_window = deque(maxlen=1000)
-        self._tp_window = deque(maxlen=1000)
-        self._tn_window = deque(maxlen=1000)
+        self._window_max_size = 1000
+        self._trim_fraction = 0.10  # remove oldest 10% on overflow
+        self._latency_window = deque(maxlen=self._window_max_size)
+        self._fp_window = deque(maxlen=self._window_max_size)
+        self._fn_window = deque(maxlen=self._window_max_size)
+        self._tp_window = deque(maxlen=self._window_max_size)
+        self._tn_window = deque(maxlen=self._window_max_size)
         
         self._lock = threading.Lock()
         
@@ -127,7 +137,7 @@ class MetricsCollector:
         with self._lock:
             self.total_requests.inc()
             self.latency_histogram.observe(latency_seconds)
-            self._latency_window.append(latency_seconds)
+            self._append_with_trim(self._latency_window, latency_seconds)
             
             if is_spam:
                 self.spam_detected.inc()
@@ -179,16 +189,27 @@ class MetricsCollector:
             if total_llm_attempts > 0:
                 hit_rate = self.llm_cache_hits._value.get() / total_llm_attempts
                 self.llm_hit_rate_gauge.set(hit_rate)
+
+    def set_provider_health(self, provider: str, up: bool, down_seconds_remaining: float = 0.0, failures_consecutive: int = 0):
+        """Update provider health status for dashboards and Prometheus."""
+        with self._lock:
+            self.provider_health_gauge.labels(provider=provider).set(1.0 if up else 0.0)
+            self._provider_health[provider] = {
+                'up': up,
+                'down_seconds_remaining': max(0.0, down_seconds_remaining),
+                'failures_consecutive': failures_consecutive,
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            }
     
     def record_feedback(self, is_fp: bool):
         """Record feedback (false positive or false negative)."""
         with self._lock:
             if is_fp:
                 self.false_positives.inc()
-                self._fp_window.append(True)
+                self._append_with_trim(self._fp_window, True)
             else:
                 self.false_negatives.inc()
-                self._fn_window.append(True)
+                self._append_with_trim(self._fn_window, True)
             
             # Update FPR and Recall
             self._update_performance_metrics()
@@ -198,13 +219,22 @@ class MetricsCollector:
         with self._lock:
             # Add to windows
             for _ in range(tp):
-                self._tp_window.append(True)
+                self._append_with_trim(self._tp_window, True)
             for _ in range(fp):
-                self._fp_window.append(True)
+                self._append_with_trim(self._fp_window, True)
             for _ in range(tn):
-                self._tn_window.append(True)
+                self._append_with_trim(self._tn_window, True)
             for _ in range(fn):
-                self._fn_window.append(True)
+                self._append_with_trim(self._fn_window, True)
+
+    def _append_with_trim(self, dq: deque, value: Any):
+        """Append to deque and bulk-trim oldest 10% when at capacity."""
+        dq.append(value)
+        if len(dq) >= self._window_max_size:
+            trim = max(1, int(self._window_max_size * self._trim_fraction))
+            for _ in range(trim):
+                if dq:
+                    dq.popleft()
             
             self._update_performance_metrics()
     
@@ -271,6 +301,7 @@ class MetricsCollector:
                 "monthly_budget_usd": self.monthly_budget_usd,
                 "budget_warning": self._daily_cost > self.daily_budget_usd * 0.8,
                 "budget_exceeded": self._daily_cost > self.daily_budget_usd,
+                "provider_health": self._provider_health,
             }
     
     def check_alerts(self) -> List[Dict[str, Any]]:

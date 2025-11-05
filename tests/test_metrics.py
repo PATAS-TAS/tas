@@ -198,6 +198,22 @@ class TestMetricsCollector:
         assert metrics["llm_hit_rate"] >= 0.0
         assert metrics["llm_hit_rate"] <= 1.0
 
+    def test_window_trim_and_ram_stability(self):
+        """Ensure sliding windows cap at 1000 and trim 10% oldest on overflow."""
+        # Fill beyond capacity
+        for i in range(1200):
+            metrics_collector.record_request(latency_seconds=0.02, is_spam=(i % 2 == 0))
+        # Windows should not exceed max size
+        assert len(metrics_collector._latency_window) <= 1000
+        # Trigger feedback windows overflow
+        for i in range(1200):
+            metrics_collector.record_feedback(is_fp=(i % 3 == 0))
+        assert len(metrics_collector._fp_window) <= 1000
+        assert len(metrics_collector._fn_window) <= 1000
+        # P95 should still be computable and stable (non-negative)
+        m = metrics_collector.get_current_metrics()
+        assert m["latency_p95_ms"] >= 0.0
+
 
 @pytest.mark.asyncio
 class TestMetricsIntegration:

@@ -34,18 +34,30 @@ class MultiLayerPipeline:
 
     async def classify(self, text: str, lang: str = "en", sender_id: Optional[str] = None, message_id: Optional[str] = None) -> Dict:
         start_time = time.time()
-        text = text.strip()
-        if not text:
-            result = {
+        try:
+            text = text.strip()
+            if not text:
+                result = {
+                    "spam_score": 0.0,
+                    "confidence": 0.0,
+                    "reasons": [],
+                    "layers_used": [],
+                    "version": self.version,
+                }
+                latency = time.time() - start_time
+                metrics_collector.record_request(latency, False)
+                return result
+        except Exception:
+            logger.exception("Pipeline pre-check failed")
+            latency = time.time() - start_time
+            metrics_collector.record_request(latency, False)
+            return {
                 "spam_score": 0.0,
                 "confidence": 0.0,
-                "reasons": [],
+                "reasons": ["module_error"],
                 "layers_used": [],
                 "version": self.version,
             }
-            latency = time.time() - start_time
-            metrics_collector.record_request(latency, False)
-            return result
         
         cached = cache.get(text, lang)
         if cached:
@@ -90,7 +102,9 @@ class MultiLayerPipeline:
         )
         
         # Process RRS results
-        if rrs_result and not isinstance(rrs_result, Exception):
+        if isinstance(rrs_result, Exception):
+            logger.exception("RRS module error")
+        elif rrs_result:
             layers_used.append("rrs")
             if rrs_result["combined_score"] > 0.3:
                 module_scores["rrs"] = rrs_result["combined_score"]
@@ -98,7 +112,9 @@ class MultiLayerPipeline:
                     all_reasons.append("Burst pattern detected")
         
         # Process LUR results
-        if lur_result and not isinstance(lur_result, Exception):
+        if isinstance(lur_result, Exception):
+            logger.exception("LUR module error")
+        elif lur_result:
             if lur_result["url_count"] > 0:
                 layers_used.append("lur")
             url_risk = lur_result["url_risk_score"]
@@ -112,7 +128,9 @@ class MultiLayerPipeline:
                     module_scores["lur"] = url_risk * 0.6
         
         # Process SIG results
-        if sig_result and not isinstance(sig_result, Exception):
+        if isinstance(sig_result, Exception):
+            logger.exception("SIG module error")
+        elif sig_result:
             layers_used.append("sig")
             if sig_result.get("signature_score", 0.0) > 0.3:
                 module_scores["sig"] = sig_result["signature_score"]
@@ -209,7 +227,12 @@ class MultiLayerPipeline:
             return result
 
         if settings.llm_fallback and final_score < settings.rules_threshold:
-            llm_result = await llm_check.check(text)
+            try:
+                llm_result = await llm_check.check(text)
+            except Exception:
+                logger.exception("LLM fallback error")
+                llm_result = None
+
             if llm_result:
                 # LLM metrics are recorded in llm_check.check()
                 llm_spam = llm_result.get("spam", 0.0)
@@ -227,6 +250,11 @@ class MultiLayerPipeline:
                         all_reasons.extend(llm_reasons[:2])
 
                 layers_used.append("llm")
+            else:
+                # LLM failed after retries - fallback to rules-only
+                logger.info("LLM unavailable after retries, using rules-only classification")
+                final_score = rule_score
+                final_confidence = rule_score
         else:
             final_score = rule_score
             final_confidence = rule_score
@@ -237,6 +265,7 @@ class MultiLayerPipeline:
         is_spam = final_score >= settings.decision_threshold
         metrics_collector.record_request(latency, is_spam)
         return result
+        
 
     def _format_result(self, score: float, confidence: float, reasons: List[str], layers_used: List[str]) -> Dict:
         return {

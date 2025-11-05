@@ -27,11 +27,20 @@ class TASClient:
         self.base_url = base_url.rstrip("/")
         self.api_version = api_version
         self.session = requests.Session()
-        self.session.headers.update({
-            "X-RapidAPI-Key": api_key,
-            "X-RapidAPI-Host": "tas.fly.dev",
-            "Content-Type": "application/json"
-        })
+        # Support both RapidAPI and direct API key formats
+        if "x-api-key" in api_key.lower() or len(api_key) < 50:
+            # Direct API key
+            self.session.headers.update({
+                "x-api-key": api_key,
+                "Content-Type": "application/json"
+            })
+        else:
+            # RapidAPI format
+            self.session.headers.update({
+                "X-RapidAPI-Key": api_key,
+                "X-RapidAPI-Host": "tas.fly.dev",
+                "Content-Type": "application/json"
+            })
     
     def classify(
         self,
@@ -50,10 +59,13 @@ class TASClient:
             message_id: Optional message identifier
         
         Returns:
-            Dict with keys:
-            - is_spam (bool): True if classified as spam
-            - confidence (float): Confidence score (0.0-1.0)
-            - reason (str): Main reason for classification
+            Dict with keys (new schema):
+            - spam (bool): True if classified as spam
+            - score (float): Spam score (0.0-1.0)
+            - reasons (list): List of reason objects with code, text, weight
+            - path (str): Detection path ("rules" or "llm")
+            - request_id (str): Unique request identifier
+            - Legacy fields (deprecated): is_spam, confidence, reason
         
         Raises:
             requests.HTTPError: If API request fails
@@ -71,6 +83,44 @@ class TASClient:
             payload["message_id"] = message_id
         
         response = self.session.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        result = response.json()
+        
+        # Extract request_id from header if available
+        if "X-TAS-Request-ID" in response.headers:
+            result["request_id"] = response.headers["X-TAS-Request-ID"]
+        
+        return result
+    
+    def batch(
+        self,
+        texts: list,
+        lang: Optional[str] = "en"
+    ) -> list:
+        """
+        Batch classify multiple texts.
+        
+        Args:
+            texts: List of text messages to classify (max 100, each ≤ 2000 chars)
+            lang: Language code (default: "en")
+        
+        Returns:
+            List of classification result dicts (same format as classify())
+        
+        Raises:
+            requests.HTTPError: If API request fails or payload too large
+        """
+        url = f"{self.base_url}/{self.api_version}/batch"
+        
+        if len(texts) > 100:
+            raise ValueError("Maximum 100 texts per batch request")
+        
+        payload = [
+            {"text": text, "lang": lang}
+            for text in texts
+        ]
+        
+        response = self.session.post(url, json=payload, timeout=30)
         response.raise_for_status()
         return response.json()
     

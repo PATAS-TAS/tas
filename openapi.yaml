@@ -1,0 +1,367 @@
+openapi: 3.0.3
+info:
+  title: TAS - Fast & Safe Commercial Anti-Spam API
+  description: |
+    Fast & Safe commercial anti-spam API. Rules-first, LLM-assist on demand. 
+    Low FPR (< 5%), high precision (~95%), fast response (P95 200-700ms).
+    
+    **Features:**
+    - Three-layer detection: Rules → Signals → LLM fallback
+    - Low false positive rate (< 5%)
+    - High precision (~95%, F1 ~80%)
+    - Fast response times (P95: 200ms rules-only, 700ms with LLM)
+    - Batch classification support
+    - SDKs available for Python, Node.js, Go
+  version: 1.0.3
+  contact:
+    name: TAS API Support
+    url: https://github.com/kiku-jw/tas
+  license:
+    name: BUSL-1.1
+    url: https://github.com/kiku-jw/tas/blob/main/LICENSE
+
+servers:
+  - url: https://tas.fly.dev
+    description: Production server
+  - url: http://localhost:8000
+    description: Local development
+
+tags:
+  - name: Classification
+    description: Spam classification endpoints
+  - name: Health
+    description: Health and status endpoints
+  - name: Metrics
+    description: Performance metrics
+
+paths:
+  /v1/classify:
+    post:
+      tags:
+        - Classification
+      summary: Classify text as spam or not
+      description: |
+        Classify a single text message for commercial spam.
+        Returns both new schema (spam, score, reasons[], path, request_id) and legacy fields (is_spam, confidence, reason).
+        
+        **Deprecation Notice:** Legacy fields will be removed after Sunset date (6 months).
+        See migration guide: https://kiku-jw.github.io/tas/#migration
+      operationId: classify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassifyRequest'
+            examples:
+              basic:
+                value:
+                  text: "Скидки -70% сегодня, пишите в тг @sale_best!"
+                  lang: "ru"
+              english:
+                value:
+                  text: "Earn 5% per day, join now: bit.ly/xxx"
+                  lang: "en"
+      responses:
+        '200':
+          description: Classification result
+          headers:
+            Deprecation:
+              description: Indicates deprecated fields in response
+              schema:
+                type: string
+                example: "true"
+            Sunset:
+              description: Date when legacy fields will be removed
+              schema:
+                type: string
+                format: date
+                example: "2025-07-15"
+            Link:
+              description: Link to migration guide
+              schema:
+                type: string
+                example: "<https://kiku-jw.github.io/tas/#migration>; rel=\"deprecation\""
+            X-TAS-Request-ID:
+              description: Unique request identifier
+              schema:
+                type: string
+                example: "r_01ab234cdef"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassifyResponse'
+              examples:
+                spam:
+                  value:
+                    spam: true
+                    score: 0.91
+                    reasons:
+                      - code: "commercial_trade_offer"
+                        text: "Commercial trade offer"
+                        weight: 0.4
+                      - code: "sale_or_promotion"
+                        text: "Sale or promotion"
+                        weight: 0.35
+                    path: "rules"
+                    request_id: "r_01ab234cdef"
+                    is_spam: true
+                    confidence: 0.91
+                    reason: "Commercial trade offer and 1 more"
+                safe:
+                  value:
+                    spam: false
+                    score: 0.12
+                    reasons: []
+                    path: "rules"
+                    request_id: "r_789xyz01234"
+                    is_spam: false
+                    confidence: 0.12
+                    reason: "No specific reason"
+        '400':
+          description: Bad request (validation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/batch:
+    post:
+      tags:
+        - Classification
+      summary: Batch classify multiple texts
+      description: |
+        Classify up to 100 text messages in a single request.
+        Payload limit: 256 KB. Each text must be ≤ 2000 characters.
+      operationId: batchClassify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ClassifyRequest'
+              maxItems: 100
+            examples:
+              multiple:
+                value:
+                  - text: "Продам iPhone 12"
+                    lang: "ru"
+                  - text: "Hello, how are you?"
+                    lang: "en"
+      responses:
+        '200':
+          description: Array of classification results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClassifyResponse'
+        '400':
+          description: Bad request (too many items, payload too large, or text too long)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Payload too large (limit 256KB)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /v1/healthz:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint (alias)
+      operationId: healthz
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /v1/metrics:
+    get:
+      tags:
+        - Metrics
+      summary: Get performance metrics
+      operationId: metrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  tas_total_requests 1234
+                  tas_spam_detected 567
+                  tas_latency_p95_seconds 0.200
+
+components:
+  schemas:
+    ClassifyRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 8192
+          description: Text message to classify
+          example: "Скидки -70% сегодня, пишите в тг @sale_best!"
+        lang:
+          type: string
+          maxLength: 10
+          default: "en"
+          description: Language code (ISO 639-1)
+          example: "ru"
+        sender_id:
+          type: string
+          maxLength: 100
+          description: Optional sender identifier for reputation tracking
+          example: "user_12345"
+        message_id:
+          type: string
+          maxLength: 100
+          description: Optional message identifier for deduplication
+          example: "msg_67890"
+
+    Reason:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Machine-readable reason code
+          example: "commercial_trade_offer"
+        text:
+          type: string
+          description: Human-readable reason text
+          example: "Commercial trade offer"
+        weight:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Rule weight/score
+          example: 0.4
+
+    ClassifyResponse:
+      type: object
+      properties:
+        # New schema
+        spam:
+          type: boolean
+          description: Whether the text is classified as spam
+          example: true
+        score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Spam score (0.0 = safe, 1.0 = spam)
+          example: 0.91
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reason'
+          description: List of matched rules with codes and weights
+        path:
+          type: string
+          enum: [rules, llm]
+          description: Detection path used (rules-only or LLM-assisted)
+          example: "rules"
+        request_id:
+          type: string
+          description: Unique request identifier
+          example: "r_01ab234cdef"
+        # Legacy fields (deprecated)
+        is_spam:
+          type: boolean
+          deprecated: true
+          description: Legacy field - use 'spam' instead
+          example: true
+        confidence:
+          type: number
+          format: float
+          deprecated: true
+          description: Legacy field - use 'score' instead
+          example: 0.91
+        reason:
+          type: string
+          deprecated: true
+          description: Legacy field - use 'reasons' array instead
+          example: "Commercial trade offer and 1 more"
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "ok"
+        version:
+          type: string
+          example: "1.0.3"
+        build:
+          type: string
+          description: Build identifier
+          example: "a1b2c3d4e5f6"
+        ruleset_version:
+          type: string
+          description: Ruleset version
+          example: "1.0.3"
+        llm_status:
+          type: string
+          enum: [UP, DOWN, DEGRADED]
+          description: LLM provider status
+          example: "UP"
+        llm_enabled:
+          type: boolean
+          description: Whether LLM fallback is enabled
+          example: true
+        cache_size:
+          type: integer
+          description: Current cache size
+          example: 42
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error message
+          example: "Rate limit exceeded. Maximum 100 requests per minute."
+
