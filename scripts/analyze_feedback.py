@@ -9,7 +9,7 @@ import sys
 import argparse
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from collections import defaultdict
 import logging
 

@@ -35,7 +35,10 @@ class FeedbackCollector:
     
     def __init__(self):
         self.feedback_db = FeedbackDB()
-        self.pipeline = MultiLayerPipeline()
+        try:
+            self.pipeline = MultiLayerPipeline()
+        except ImportError:
+            self.pipeline = None
         self.collection_dir = Path("data/collected")
         self.collection_dir.mkdir(parents=True, exist_ok=True)
     
@@ -49,6 +52,9 @@ class FeedbackCollector:
         Collect shadow data - classify without affecting production.
         Use for A/B testing and model improvement.
         """
+        if not self.pipeline:
+            raise RuntimeError("Pipeline not available. Install app dependencies.")
+        
         results = []
         
         for text in texts:

@@ -18,21 +18,21 @@ mkdir -p rules/suggestions
 
 # 1. Export training dataset from feedback database
 echo "1️⃣  Exporting training dataset..."
-python scripts/collect_feedback.py --mode export --output data/training_dataset.json || {
+python3 scripts/collect_feedback.py --mode export --output data/training_dataset.json 2>/dev/null || {
     echo "⚠️  No feedback data available yet"
 }
 
 # 2. Analyze feedback and generate recommendations
 echo ""
 echo "2️⃣  Analyzing feedback data..."
-python scripts/analyze_feedback.py --output reports/feedback_analysis/latest.json || {
+python3 scripts/analyze_feedback.py --output reports/feedback_analysis/latest.json 2>/dev/null || {
     echo "⚠️  Insufficient feedback data for analysis"
 }
 
 # 3. Generate rule improvement suggestions
 echo ""
 echo "3️⃣  Generating rule improvement suggestions..."
-python scripts/improve_rules.py --output rules/suggestions/latest.json || {
+python3 scripts/improve_rules.py --output rules/suggestions/latest.json 2>/dev/null || {
     echo "⚠️  No problematic rules to improve"
 }
 
@@ -49,7 +49,9 @@ echo ""
 # Check feedback database status
 if [ -f feedback.db ]; then
     echo "📊 Feedback database status:"
-    python -c "
+    python3 -c "
+import sys
+sys.path.insert(0, '.')
 from app.feedback_db import FeedbackDB
 db = FeedbackDB()
 summary = db.get_summary()
