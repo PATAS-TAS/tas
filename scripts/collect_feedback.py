@@ -23,8 +23,13 @@ import logging
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.feedback_db import FeedbackDB
-from app.pipeline import MultiLayerPipeline
-from app.config import settings
+
+# Lazy import for pipeline (only needed for shadow mode)
+MultiLayerPipeline = None
+try:
+    from app.pipeline import MultiLayerPipeline
+except ImportError:
+    pass
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,10 +40,12 @@ class FeedbackCollector:
     
     def __init__(self):
         self.feedback_db = FeedbackDB()
-        try:
-            self.pipeline = MultiLayerPipeline()
-        except ImportError:
-            self.pipeline = None
+        self.pipeline = None
+        if MultiLayerPipeline:
+            try:
+                self.pipeline = MultiLayerPipeline()
+            except Exception:
+                pass
         self.collection_dir = Path("data/collected")
         self.collection_dir.mkdir(parents=True, exist_ok=True)
     
