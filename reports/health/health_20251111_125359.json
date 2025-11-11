@@ -1,0 +1,28 @@
+{
+  "timestamp": "2025-11-11T12:53:59.513183+00:00",
+  "overall_status": "healthy",
+  "feedback": {
+    "status": "healthy",
+    "summary": {
+      "total_feedback": 0,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "unique_rules": 0
+    },
+    "issues": [],
+    "warnings": [
+      "No feedback collected yet - system waiting for data"
+    ]
+  },
+  "automation": {
+    "status": "healthy",
+    "issues": [],
+    "warnings": []
+  },
+  "database": {
+    "status": "healthy",
+    "size_mb": 0.03,
+    "issues": [],
+    "warnings": []
+  }
+}

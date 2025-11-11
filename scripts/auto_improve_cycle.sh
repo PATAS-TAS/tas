@@ -49,18 +49,27 @@ python3 scripts/auto_improve.py --dry-run >> "$LOG_FILE" 2>&1
 DRY_RUN_OUTPUT=$(python3 scripts/auto_improve.py --dry-run 2>&1)
 if echo "$DRY_RUN_OUTPUT" | grep -q "Applied: [1-9]"; then
     echo ""
-    echo "5️⃣  Applying safe improvements..."
-    python3 scripts/auto_improve.py >> "$LOG_FILE" 2>&1 || {
-        echo "❌ Failed to apply improvements"
-        exit 1
-    }
+    echo "5️⃣  Applying safe improvements (with quality gates)..."
     
-    # Step 6: Test quality after improvements
-    echo ""
-    echo "6️⃣  Testing quality after improvements..."
-    python3 scripts/auto_test_quality.py >> "$LOG_FILE" 2>&1 || {
-        echo "⚠️  Quality test failed or insufficient data"
-    }
+    # Use enhanced version if available, fallback to standard
+    if [ -f "scripts/auto_improve_enhanced.py" ]; then
+        python3 scripts/auto_improve_enhanced.py >> "$LOG_FILE" 2>&1 || {
+            echo "❌ Failed to apply improvements"
+            exit 1
+        }
+    else
+        python3 scripts/auto_improve.py >> "$LOG_FILE" 2>&1 || {
+            echo "❌ Failed to apply improvements"
+            exit 1
+        }
+        
+        # Step 6: Test quality after improvements
+        echo ""
+        echo "6️⃣  Testing quality after improvements..."
+        python3 scripts/auto_test_quality.py >> "$LOG_FILE" 2>&1 || {
+            echo "⚠️  Quality test failed or insufficient data"
+        }
+    fi
 else
     echo "   No safe improvements to apply automatically"
 fi

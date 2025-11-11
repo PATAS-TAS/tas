@@ -36,8 +36,11 @@ DAILY_COLLECTION="0 2 * * * cd $PROJECT_DIR && $PROJECT_DIR/scripts/run_data_col
 # Weekly auto-improvement (Sunday 3 AM UTC)
 WEEKLY_IMPROVE="0 3 * * 0 cd $PROJECT_DIR && $PROJECT_DIR/scripts/auto_improve_cycle.sh >> $CRON_LOG 2>&1"
 
+# Daily health monitoring (6 AM UTC)
+DAILY_HEALTH="0 6 * * * cd $PROJECT_DIR && python3 $PROJECT_DIR/scripts/monitor_health.py >> $CRON_LOG 2>&1"
+
 # Add cron jobs
-(crontab -l 2>/dev/null; echo "$DAILY_COLLECTION"; echo "$WEEKLY_IMPROVE") | crontab -
+(crontab -l 2>/dev/null; echo "$DAILY_COLLECTION"; echo "$WEEKLY_IMPROVE"; echo "$DAILY_HEALTH") | crontab -
 
 echo "✅ Cron jobs added:"
 echo ""
@@ -46,6 +49,9 @@ echo "   $DAILY_COLLECTION"
 echo ""
 echo "Weekly auto-improvement (Sunday 3 AM UTC):"
 echo "   $WEEKLY_IMPROVE"
+echo ""
+echo "Daily health monitoring (6 AM UTC):"
+echo "   $DAILY_HEALTH"
 echo ""
 echo "📋 Current crontab:"
 crontab -l
