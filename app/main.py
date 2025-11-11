@@ -147,7 +147,8 @@ async def v1_classify(request: ClassifyRequest, client_request: Request, http_re
             message_id=request.message_id,
             llm_mode=llm_mode,
             byo_provider=byo_provider,
-            byo_api_key=byo_api_key
+            byo_api_key=byo_api_key,
+            image_url=request.image_url
         )
         # Dual-format response
         spam_score = result.get("spam_score", 0.0)
@@ -578,6 +579,7 @@ def _generate_recommendations(rule_stats: Dict[str, Dict[str, Any]]) -> List[str
 
 # Include v1 router
 app.include_router(v1_router)
+app.include_router(v1_vision_router)
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional
 from app.regex_patterns import regex_patterns
 from app.llm_check import llm_check
+from app.vision_check import vision_check
 from app.config import settings
 from app.cache import ClassificationCache
 from app.rrs import rrs
@@ -222,6 +223,36 @@ class MultiLayerPipeline:
             return result
 
         layers_used.append("rules")
+
+        # Vision check (if image provided) - runs in parallel with LLM decision
+        vision_result = None
+        if settings.vision_enabled and (image_path or image_bytes or image_url):
+            try:
+                vision_result = await vision_check.check_image(
+                    image_path=image_path,
+                    image_bytes=image_bytes,
+                    image_url=image_url
+                )
+                if vision_result:
+                    vision_score = vision_result.get("spam_score", 0.0)
+                    vision_reasons = vision_result.get("reasons", [])
+                    detected_text = vision_result.get("detected_text", "")
+                    
+                    # If vision detects spam, boost score
+                    if vision_score > 0.5:
+                        rule_score = max(rule_score, vision_score * 0.8)
+                        all_reasons.extend([f"Vision: {r}" for r in vision_reasons[:2]])
+                        layers_used.append("vision")
+                        
+                        # If vision found text, also check it with rules
+                        if detected_text and len(detected_text) > 10:
+                            text_to_check = f"{text} {detected_text}"
+                            vision_rule_results = regex_patterns.check(text_to_check)
+                            if vision_rule_results:
+                                vision_rule_score = max(score for _, score in vision_rule_results)
+                                rule_score = max(rule_score, vision_rule_score * 0.7)
+            except Exception:
+                logger.exception("Vision check error, continuing without vision")
 
         # Early exit: if rules score is high enough (>0.8), skip LLM to save latency/cost
         if rule_score >= 0.8:

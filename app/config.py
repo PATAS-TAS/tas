@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -28,6 +29,12 @@ class Settings(BaseSettings):
     # PII and retention settings
     pii_redaction_enabled: bool = True
     data_retention_days: int = 7  # 0 for immediate deletion
+    
+    # Vision/Transmodal settings
+    vision_enabled: bool = False  # Enable image analysis
+    openrouter_api_key: Optional[str] = None  # OpenRouter API key for vision models
+    vision_model: str = "openai/gpt-4o-mini"  # Vision model to use
+    app_url: str = "https://tas.fly.dev"  # App URL for OpenRouter referer
     
     model_config = ConfigDict(
         env_file=".env",
