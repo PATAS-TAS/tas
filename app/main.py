@@ -68,6 +68,7 @@ class ClassifyRequest(BaseModel):
     lang: Optional[str] = Field(default="en", max_length=10)
     sender_id: Optional[str] = Field(default=None, max_length=100)
     message_id: Optional[str] = Field(default=None, max_length=100)
+    image_url: Optional[str] = Field(default=None, description="URL to image for vision analysis")
 
 
 class ClassifyResponse(BaseModel):
