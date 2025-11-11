@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
+from app.v1_vision import v1_vision_router
 from app.pipeline import pipeline
 from app.config import settings
 from app.rate_limit import rate_limiter

@@ -41,7 +41,10 @@ class MultiLayerPipeline:
         message_id: Optional[str] = None,
         llm_mode: str = "managed",
         byo_provider: Optional[str] = None,
-        byo_api_key: Optional[str] = None
+        byo_api_key: Optional[str] = None,
+        image_path: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        image_url: Optional[str] = None
     ) -> Dict:
         start_time = time.time()
         try:

@@ -10,7 +10,6 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 import httpx
 from app.config import settings
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
