@@ -1,37 +1,111 @@
-from fastapi import FastAPI, HTTPException, Query, Request, Response, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
-from app.v1_vision import v1_vision_router
-from app.pipeline import pipeline
-from app.config import settings
-from app.rate_limit import rate_limiter
+"""
+TAS - Transmodal Anti-Spam API.
+
+Main FastAPI application module providing REST API endpoints for spam classification.
+"""
+import hashlib
 import logging
+import os
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
+from typing import Any, AsyncGenerator, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+from app.config import settings
+from app.constants import (
+    API_VERSION,
+    AUTO_DEGRADE_LLM_HIT_RATE,
+    DEFAULT_RATE_LIMIT_REQUESTS,
+    DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
+    MAX_RESPONSE_REASONS,
+)
+from app.deps import get_feedback_db
+from app.feedback_db import FeedbackDB
+from app.llm_check import llm_check
+from app.metrics import metrics_collector
+from app.pipeline import cache, pipeline
+from app.rate_limit import rate_limiter
+from app.regex_patterns import regex_patterns
+from app.rol import rol
+from app.v1_vision import v1_vision_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # API versioning router
-from fastapi import APIRouter
-from contextlib import asynccontextmanager
-
 v1_router = APIRouter(prefix="/v1", tags=["v1"])
 
 
+# =============================================================================
+# Request/Response Models
+# =============================================================================
+
+
+class ClassifyRequest(BaseModel):
+    """Request model for text classification."""
+
+    text: str = Field(..., min_length=1, max_length=8192, description="Text to classify")
+    lang: Optional[str] = Field(default="en", max_length=10, description="Language code")
+    sender_id: Optional[str] = Field(default=None, max_length=100, description="Sender ID")
+    message_id: Optional[str] = Field(default=None, max_length=100, description="Message ID")
+    image_url: Optional[str] = Field(
+        default=None, description="URL to image for vision analysis"
+    )
+
+
+class ClassifyResponse(BaseModel):
+    """Response model for text classification (legacy format)."""
+
+    is_spam: bool
+    confidence: float
+    reason: str
+
+
+class ShadowRuleFeedback(BaseModel):
+    """Feedback for shadow rule testing."""
+
+    rule_id: str
+    predicted_spam: bool
+    actual_spam: bool
+
+
+class FeedbackRequest(BaseModel):
+    """Request model for submitting feedback."""
+
+    text: str = Field(..., min_length=1, max_length=8192)
+    predicted_spam: bool = Field(..., description="What TAS predicted")
+    actual_spam: bool = Field(..., description="What it actually was")
+    sender_id: Optional[str] = Field(default=None, max_length=100)
+    message_id: Optional[str] = Field(default=None, max_length=100)
+    lang: Optional[str] = Field(default=None, max_length=10)
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
+
+
+# =============================================================================
+# Lifespan Management
+# =============================================================================
+
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup/shutdown events."""
-    from app.llm_check import llm_check
-    from app.pipeline import pipeline
-    
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """
+    Lifespan context manager for startup/shutdown events.
+
+    Handles:
+    - LLM connection warm-up
+    - Rules pre-loading
+    """
     logger.info("Starting up TAS API...")
-    
+
     # Warm-up LLM connection if enabled
     if llm_check.enabled:
         logger.info("Warming up LLM connection...")
         await llm_check.warmup()
-    
+
     # Pre-load rules if ROL is enabled
     if settings.enable_rol:
         try:
@@ -39,18 +113,23 @@ async def lifespan(app: FastAPI):
             logger.info("Rules pre-loaded successfully")
         except Exception as e:
             logger.warning(f"Rules pre-load failed: {e}")
-    
+
     logger.info("TAS API ready")
-    
+
     yield
-    
+
     logger.info("Shutting down TAS API...")
 
 
+# =============================================================================
+# FastAPI Application
+# =============================================================================
+
 app = FastAPI(
     title="TAS - Transmodal Anti-Spam API",
-    description="Multi-layer transmodal spam detection: Rules → LLM. Processes text with unified scoring across layers.",
-    version="1.0.3",
+    description="Multi-layer transmodal spam detection: Rules → LLM. "
+    "Processes text with unified scoring across layers.",
+    version=API_VERSION,
     lifespan=lifespan,
 )
 
@@ -63,27 +142,147 @@ app.add_middleware(
 )
 
 
-class ClassifyRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=8192)
-    lang: Optional[str] = Field(default="en", max_length=10)
-    sender_id: Optional[str] = Field(default=None, max_length=100)
-    message_id: Optional[str] = Field(default=None, max_length=100)
-    image_url: Optional[str] = Field(default=None, description="URL to image for vision analysis")
+# =============================================================================
+# Helper Functions
+# =============================================================================
 
 
-class ClassifyResponse(BaseModel):
-    is_spam: bool
-    confidence: float
-    reason: str
+def _determine_llm_mode(request: Request) -> str:
+    """
+    Determine LLM mode from request headers and auto-degrade if needed.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        LLM mode string: "managed", "byo", or "rules_only"
+    """
+    llm_mode = request.headers.get("X-LLM-Mode", settings.llm_mode).lower()
+    if llm_mode not in ["managed", "byo", "rules_only"]:
+        llm_mode = "managed"
+
+    # Auto-degrade: Check budget and LLM hit rate
+    current_metrics = metrics_collector.get_current_metrics()
+
+    # Auto-degrade if budget exceeded
+    if current_metrics.get("budget_exceeded", False):
+        logger.warning("Budget exceeded, forcing rules_only mode")
+        return "rules_only"
+
+    # Auto-degrade if LLM hit rate > 20%
+    if current_metrics.get("llm_hit_rate", 0) > AUTO_DEGRADE_LLM_HIT_RATE:
+        logger.warning(
+            f"LLM hit rate {current_metrics.get('llm_hit_rate', 0):.1%} > 20%, "
+            "forcing rules_only"
+        )
+        return "rules_only"
+
+    return llm_mode
 
 
+def _enhance_reasons(reasons_raw: List[str]) -> List[Dict[str, Any]]:
+    """
+    Enhance reason strings with code and weight.
+
+    Args:
+        reasons_raw: List of reason strings
+
+    Returns:
+        List of enhanced reason dictionaries
+    """
+    reasons_enhanced = []
+    for reason_text in reasons_raw[:MAX_RESPONSE_REASONS]:
+        weight = 0.0
+        code = reason_text.lower().replace(" ", "_").replace("-", "_")
+        for pattern, name, pattern_weight in regex_patterns.patterns:
+            if name == reason_text:
+                weight = pattern_weight
+                code = name.lower().replace(" ", "_").replace("-", "_")
+                break
+        reasons_enhanced.append({
+            "code": code,
+            "text": reason_text,
+            "weight": round(weight, 3)
+        })
+    return reasons_enhanced
+
+
+def _generate_request_id(message_id: Optional[str], text: str) -> str:
+    """
+    Generate unique request ID.
+
+    Args:
+        message_id: Optional message identifier
+        text: Request text
+
+    Returns:
+        Request ID string
+    """
+    rid_source = message_id or text[:64]
+    return "r_" + hashlib.md5(rid_source.encode()).hexdigest()[:12]
+
+
+def _add_deprecation_headers(response: Response, request_id: str) -> None:
+    """
+    Add deprecation headers to response.
+
+    Args:
+        response: FastAPI Response object
+        request_id: Request ID string
+    """
+    sunset = (datetime.now(timezone.utc) + timedelta(days=180)).strftime("%Y-%m-%d")
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = sunset
+    response.headers["Link"] = (
+        '<https://kiku-jw.github.io/tas/#migration>; rel="deprecation", '
+        '<https://kiku-jw.github.io/tas/#modes>; rel="documentation"'
+    )
+    response.headers["X-TAS-Request-ID"] = request_id
+
+
+def _generate_recommendations(rule_stats: Dict[str, Dict[str, Any]]) -> List[str]:
+    """
+    Generate recommendations based on rule statistics.
+
+    Args:
+        rule_stats: Dictionary of rule statistics
+
+    Returns:
+        List of recommendation strings
+    """
+    recommendations = []
+
+    for rule_name, stats in rule_stats.items():
+        fpr = stats.get("false_positive_rate", 0.0)
+        fp_count = stats.get("false_positives", 0)
+        fn_count = stats.get("false_negatives", 0)
+
+        if fpr > 0.10 and fp_count >= 5:
+            recommendations.append(
+                f"Rule '{rule_name}' has high FPR ({fpr:.1%}) with {fp_count} FPs. "
+                f"Consider refining the pattern or adding negative context checks."
+            )
+
+        if fn_count >= 10:
+            recommendations.append(
+                f"Rule '{rule_name}' has {fn_count} false negatives. "
+                f"Consider expanding the pattern or lowering the score threshold."
+            )
+
+    return recommendations[:10]
+
+
+# =============================================================================
+# Root Endpoint
+# =============================================================================
 
 
 @app.get("/")
-async def root():
+async def root() -> Dict[str, Any]:
+    """Get API information."""
     return {
         "name": "TAS - Transmodal Anti-Spam API",
-        "version": "1.0.3",
+        "version": API_VERSION,
         "description": "Commercial spam detection API for messengers, forums, and marketplaces.",
         "endpoints": {
             "classify": "/classify",
@@ -95,55 +294,62 @@ async def root():
     }
 
 
-# v1 endpoints
+# =============================================================================
+# V1 Classification Endpoints
+# =============================================================================
+
+
 @v1_router.post("/classify")
-async def v1_classify(request: ClassifyRequest, client_request: Request, http_response: Response):
-    # Rate limiting (100 requests per minute per IP)
+async def v1_classify(
+    request: ClassifyRequest,
+    client_request: Request,
+    http_response: Response
+) -> Dict[str, Any]:
+    """
+    Classify text for spam.
+
+    Args:
+        request: Classification request
+        client_request: FastAPI request object
+        http_response: FastAPI response object
+
+    Returns:
+        Classification result with spam score and reasons
+    """
+    # Rate limiting
     client_ip = client_request.client.host if client_request.client else "unknown"
-    allowed, remaining = rate_limiter.is_allowed(client_ip, max_requests=100, window_seconds=60)
-    
+    allowed, _ = rate_limiter.is_allowed(
+        client_ip,
+        max_requests=DEFAULT_RATE_LIMIT_REQUESTS,
+        window_seconds=DEFAULT_RATE_LIMIT_WINDOW_SECONDS
+    )
+
     if not allowed:
         raise HTTPException(
             status_code=429,
-            detail=f"Rate limit exceeded. Maximum 100 requests per minute.",
+            detail="Rate limit exceeded. Maximum 100 requests per minute.",
             headers={"X-RateLimit-Remaining": "0", "Retry-After": "60"}
         )
-    
+
     rate_limiter.record_request(client_ip, "classify")
-    
-    # Determine LLM mode from header or config default
-    llm_mode = client_request.headers.get("X-LLM-Mode", settings.llm_mode).lower()
-    if llm_mode not in ["managed", "byo", "rules_only"]:
-        llm_mode = "managed"
-    
-    # Auto-degrade: Check budget and LLM hit rate
-    from app.metrics import metrics_collector
-    current_metrics = metrics_collector.get_current_metrics()
-    
-    # Auto-degrade if budget exceeded
-    if current_metrics.get("budget_exceeded", False):
-        logger.warning(f"Budget exceeded, forcing rules_only mode")
-        llm_mode = "rules_only"
-    # Auto-degrade if LLM hit rate > 20% for extended period
-    elif current_metrics.get("llm_hit_rate", 0) > 0.20:
-        # Check if this has been high for 10+ minutes (simplified: check recent trend)
-        logger.warning(f"LLM hit rate {current_metrics.get('llm_hit_rate', 0):.1%} > 20%, forcing rules_only")
-        llm_mode = "rules_only"
-    
+
+    # Determine LLM mode
+    llm_mode = _determine_llm_mode(client_request)
+
     # Extract BYO credentials if provided
     byo_provider = client_request.headers.get("X-LLM-Provider")
     byo_api_key = client_request.headers.get("X-LLM-Key")
-    
+
     # BYO mode requires provider and key
     if llm_mode == "byo" and (not byo_provider or not byo_api_key):
         raise HTTPException(
             status_code=400,
             detail="BYO mode requires X-LLM-Provider and X-LLM-Key headers"
         )
-    
+
     try:
         result = await pipeline.classify(
-            request.text, 
+            request.text,
             request.lang or "en",
             sender_id=request.sender_id,
             message_id=request.message_id,
@@ -152,64 +358,35 @@ async def v1_classify(request: ClassifyRequest, client_request: Request, http_re
             byo_api_key=byo_api_key,
             image_url=request.image_url
         )
-        # Dual-format response
+
         spam_score = result.get("spam_score", 0.0)
         confidence = result.get("confidence", 0.0)
         reasons_raw = result.get("reasons", [])
         layers_used = result.get("layers_used", [])
-        
-        # Enhance reasons with code and weight
-        from app.regex_patterns import regex_patterns
-        reasons_enhanced = []
-        for reason_text in reasons_raw[:5]:
-            # Find matching pattern to get weight
-            weight = 0.0
-            code = reason_text.lower().replace(" ", "_").replace("-", "_")
-            for pattern, name, pattern_weight in regex_patterns.patterns:
-                if name == reason_text:
-                    weight = pattern_weight
-                    code = name.lower().replace(" ", "_").replace("-", "_")
-                    break
-            reasons_enhanced.append({
-                "code": code,
-                "text": reason_text,
-                "weight": round(weight, 3)
-            })
-        
-        # Legacy reasons format (strings)
-        reasons = reasons_raw
+
+        # Enhance reasons
+        reasons_enhanced = _enhance_reasons(reasons_raw)
 
         # Determine main reason (legacy)
-        main_reason = reasons[0] if reasons else "No specific reason"
-        if len(reasons) > 1:
-            main_reason = f"{reasons[0]} and {len(reasons)-1} more"
+        main_reason = reasons_raw[0] if reasons_raw else "No specific reason"
+        if len(reasons_raw) > 1:
+            main_reason = f"{reasons_raw[0]} and {len(reasons_raw) - 1} more"
 
-        # Derive path and request_id
+        # Generate request ID and path
         path = "llm" if "llm" in layers_used else "rules"
-        import hashlib
-        rid_source = request.message_id or request.text[:64]
-        request_id = "r_" + hashlib.md5(rid_source.encode()).hexdigest()[:12]
+        request_id = _generate_request_id(request.message_id, request.text)
 
-        # Deprecation headers (6 months window)
-        from datetime import datetime, timedelta, timezone
-        sunset = (datetime.now(timezone.utc) + timedelta(days=180)).strftime("%Y-%m-%d")
-        http_response.headers["Deprecation"] = "true"
-        http_response.headers["Sunset"] = sunset
-        # Multi-Link header (RFC 8288) for migration and LLM modes docs
-        http_response.headers["Link"] = (
-            "<https://kiku-jw.github.io/tas/#migration>; rel=\"deprecation\", "
-            "<https://kiku-jw.github.io/tas/#modes>; rel=\"documentation\""
-        )
-        http_response.headers["X-TAS-Request-ID"] = request_id
+        # Add deprecation headers
+        _add_deprecation_headers(http_response, request_id)
 
-        # Determine actual mode used (may differ from requested if BYO fails)
+        # Determine actual mode used
         actual_mode = result.get("llm_mode", llm_mode)
-        
+
         return {
             # New schema
             "spam": spam_score >= settings.decision_threshold,
             "score": round(spam_score, 3),
-            "reasons": reasons_enhanced,  # Enhanced with code and weight
+            "reasons": reasons_enhanced,
             "path": path,
             "mode": actual_mode,
             "request_id": request_id,
@@ -222,7 +399,6 @@ async def v1_classify(request: ClassifyRequest, client_request: Request, http_re
         logger.warning(f"Validation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        # Graceful degradation: log stacktrace and return safe response with HTTP 200
         logger.error(f"Classification error: {e}", exc_info=True)
         return {
             "is_spam": False,
@@ -230,20 +406,62 @@ async def v1_classify(request: ClassifyRequest, client_request: Request, http_re
             "reason": "module_error",
             "spam": False,
             "score": 0.0,
-            "reasons": ["module_error"],
+            "reasons": [{"code": "module_error", "text": "module_error", "weight": 0.0}],
             "path": "rules",
             "request_id": "r_error"
         }
 
 
+@v1_router.post("/batch")
+async def v1_batch(
+    requests: List[ClassifyRequest],
+    client_request: Request
+) -> List[Dict[str, Any]]:
+    """
+    Batch classification endpoint.
+
+    Args:
+        requests: List of classification requests
+        client_request: FastAPI request object
+
+    Returns:
+        List of classification results
+    """
+    if len(requests) == 0:
+        return []
+    if len(requests) > 100:
+        raise HTTPException(status_code=400, detail="Too many items (limit 100)")
+
+    # Per-item validation
+    for i, item in enumerate(requests):
+        if len(item.text) > 2000:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Item {i} text too long (limit 2000 chars)"
+            )
+
+    results = []
+    for item in requests:
+        http_response = Response()
+        res = await v1_classify(item, client_request, http_response)
+        results.append(res)
+    return results
+
+
+# =============================================================================
+# Health Endpoints
+# =============================================================================
+
+
 @v1_router.get("/health")
-async def v1_health(metrics = Depends(__import__('app.deps', fromlist=['get_metrics']).get_metrics)):
-    from app.pipeline import cache, pipeline
-    from app.llm_check import llm_check
-    from app.rol import rol
-    import os
-    
-    llm_metrics = {}
+async def v1_health() -> Dict[str, Any]:
+    """
+    Get API health status.
+
+    Returns:
+        Health status with component information
+    """
+    llm_metrics: Dict[str, Any] = {}
     llm_status = "DOWN"
     if llm_check.enabled:
         llm_metrics = llm_check.get_metrics()
@@ -252,24 +470,24 @@ async def v1_health(metrics = Depends(__import__('app.deps', fromlist=['get_metr
             llm_status = "UP"
         elif provider_health.get("down_seconds_remaining", 0) > 0:
             llm_status = "DEGRADED"
-        else:
-            llm_status = "DOWN"
-    
-    rol_stats = {}
-    ruleset_version = "1.0.3"
+
+    rol_stats: Dict[str, Any] = {}
+    ruleset_version = API_VERSION
     if settings.enable_rol:
         rol_stats = rol.get_rule_stats()
-        ruleset_version = getattr(rol, "ruleset_version", "1.0.3")
-    
+        ruleset_version = getattr(rol, "ruleset_version", API_VERSION)
+
     build = os.getenv("BUILD_ID", os.getenv("GITHUB_SHA", "dev"))[:12]
-    
+
     return {
         "status": "ok",
-        "version": "1.0.3",
+        "version": API_VERSION,
         "build": build,
         "ruleset_version": ruleset_version,
         "ml_model": "disabled",
-        "llm_enabled": bool(getattr(settings, "patas_openai_api_key", "") or settings.openai_api_key) and settings.llm_fallback,
+        "llm_enabled": bool(
+            getattr(settings, "patas_openai_api_key", "") or settings.openai_api_key
+        ) and settings.llm_fallback,
         "llm_status": llm_status,
         "cache_size": cache.size(),
         "llm_cache": llm_metrics,
@@ -278,15 +496,19 @@ async def v1_health(metrics = Depends(__import__('app.deps', fromlist=['get_metr
 
 
 @v1_router.get("/healthz")
-async def v1_healthz():
+async def v1_healthz() -> Dict[str, Any]:
+    """Kubernetes-style health check."""
     return await v1_health()
 
 
+# =============================================================================
+# Metrics Endpoints
+# =============================================================================
+
+
 @app.get("/metrics")
-async def metrics():
+async def metrics() -> Response:
     """Prometheus metrics endpoint."""
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-    
     return Response(
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST
@@ -294,57 +516,68 @@ async def metrics():
 
 
 @v1_router.get("/metrics")
-async def v1_metrics():
+async def v1_metrics() -> Response:
     """Prometheus metrics endpoint (v1)."""
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-    
     return Response(
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST
     )
 
 
+# =============================================================================
+# Version Endpoints
+# =============================================================================
+
+
 @app.get("/version")
-async def version():
+async def version() -> Dict[str, str]:
     """Get API version."""
     return {
-        "version": "1.0.3",
+        "version": API_VERSION,
         "api_version": "v1",
         "name": "TAS - Transmodal Anti-Spam API"
     }
 
 
 @v1_router.get("/version")
-async def v1_version():
+async def v1_version() -> Dict[str, str]:
     """Get API version (v1 endpoint)."""
     return {
-        "version": "1.0.3",
+        "version": API_VERSION,
         "api_version": "v1",
         "name": "TAS - Transmodal Anti-Spam API"
     }
 
 
-# Legacy endpoints (backward compatibility)
+# =============================================================================
+# Legacy Endpoints (Backward Compatibility)
+# =============================================================================
+
+
 @app.post("/classify", response_model=ClassifyResponse)
-async def classify(request: ClassifyRequest, client_request: Request):
+async def classify(request: ClassifyRequest, client_request: Request) -> Dict[str, Any]:
     """Legacy endpoint - use /v1/classify instead."""
-    return await v1_classify(request, client_request)
+    http_response = Response()
+    return await v1_classify(request, client_request, http_response)
 
 
 @app.get("/health")
-async def health():
+async def health() -> Dict[str, Any]:
     """Legacy endpoint - use /v1/health instead."""
     return await v1_health()
 
 
+# =============================================================================
+# Shadow Rules Endpoints
+# =============================================================================
+
+
 @app.get("/shadow-rules/metrics")
-async def get_shadow_metrics():
+async def get_shadow_metrics() -> Dict[str, Any]:
     """Get shadow rules metrics (precision/recall per rule)."""
-    from app.rol import rol
-    
     if not settings.enable_rol:
         raise HTTPException(status_code=400, detail="Rule orchestrator is disabled")
-    
+
     return {
         "summary": rol.get_shadow_summary(),
         "per_rule": rol.get_shadow_metrics(),
@@ -353,43 +586,33 @@ async def get_shadow_metrics():
 
 
 @app.post("/shadow-rules/enable")
-async def enable_shadow_rules(ruleset: Dict):
+async def enable_shadow_rules(ruleset: Dict[str, Any]) -> Dict[str, Any]:
     """Enable shadow rules for testing."""
-    from app.rol import rol
-    
     if not settings.enable_rol:
         raise HTTPException(status_code=400, detail="Rule orchestrator is disabled")
-    
+
     rol.enable_shadow_rules(ruleset)
     return {"status": "enabled", "rules_count": len(rol.shadow_patterns)}
 
 
 @app.post("/shadow-rules/canary")
-async def set_canary_percentage(percentage: float = Query(..., ge=0.0, le=1.0)):
+async def set_canary_percentage(
+    percentage: float = Query(..., ge=0.0, le=1.0)
+) -> Dict[str, float]:
     """Set canary rollout percentage (0.0-1.0)."""
-    from app.rol import rol
-    
     if not settings.enable_rol:
         raise HTTPException(status_code=400, detail="Rule orchestrator is disabled")
-    
+
     rol.set_canary_percentage(percentage)
     return {"canary_percentage": percentage * 100}
 
 
-class ShadowRuleFeedback(BaseModel):
-    rule_id: str
-    predicted_spam: bool
-    actual_spam: bool
-
-
 @app.post("/shadow-rules/feedback")
-async def record_shadow_feedback(feedback: ShadowRuleFeedback):
+async def record_shadow_feedback(feedback: ShadowRuleFeedback) -> Dict[str, str]:
     """Record feedback for shadow rule (for metrics calculation)."""
-    from app.rol import rol
-    
     if not settings.enable_rol:
         raise HTTPException(status_code=400, detail="Rule orchestrator is disabled")
-    
+
     rol.record_shadow_result(
         feedback.rule_id,
         feedback.predicted_spam,
@@ -398,48 +621,38 @@ async def record_shadow_feedback(feedback: ShadowRuleFeedback):
     return {"status": "recorded", "rule_id": feedback.rule_id}
 
 
-class FeedbackRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=8192)
-    predicted_spam: bool = Field(..., description="What TAS predicted")
-    actual_spam: bool = Field(..., description="What it actually was")
-    sender_id: Optional[str] = Field(default=None, max_length=100)
-    message_id: Optional[str] = Field(default=None, max_length=100)
-    lang: Optional[str] = Field(default=None, max_length=10)
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
-
-
-from app.deps import get_feedback_db
+# =============================================================================
+# Feedback Endpoints
+# =============================================================================
 
 
 @app.post("/feedback")
-async def submit_feedback(feedback: FeedbackRequest, feedback_db = Depends(get_feedback_db)):
+async def submit_feedback(
+    feedback: FeedbackRequest,
+    feedback_db: FeedbackDB = Depends(get_feedback_db)
+) -> Dict[str, Any]:
     """
     Submit feedback for FP/FN examples from production.
-    
-    This endpoint allows production systems to report false positives (FP) or false negatives (FN).
-    Feedback is stored in a database and used to generate reports on rule performance.
+
+    This endpoint allows production systems to report false positives (FP)
+    or false negatives (FN). Feedback is stored in a database and used
+    to generate reports on rule performance.
     """
     try:
-        # Get the original classification result to extract reasons and matched rules
         result = await pipeline.classify(
             feedback.text,
             feedback.lang or "en",
             sender_id=feedback.sender_id,
             message_id=feedback.message_id
         )
-        
+
         spam_score = result.get("spam_score", 0.0)
         confidence = result.get("confidence", 0.0)
         reasons = result.get("reasons", [])
-        
-        # Extract matched rule names from reasons
-        # Reasons format: "Reason name" or "Reason name and X more"
-        matched_rules = []
-        for reason in reasons:
-            # Clean up reason strings to extract rule names
-            rule_name = reason.split(" and ")[0].strip()
-            matched_rules.append(rule_name)
-        
+
+        # Extract matched rule names
+        matched_rules = [reason.split(" and ")[0].strip() for reason in reasons]
+
         # Add feedback to database
         feedback_id = feedback_db.add_feedback(
             text=feedback.text,
@@ -454,14 +667,13 @@ async def submit_feedback(feedback: FeedbackRequest, feedback_db = Depends(get_f
             lang=feedback.lang,
             metadata=feedback.metadata
         )
-        
+
         # Record feedback in metrics
-        from app.metrics import metrics_collector
         is_fp = feedback.predicted_spam and not feedback.actual_spam
         metrics_collector.record_feedback(is_fp=is_fp)
-        
-        error_type = "FP" if (feedback.predicted_spam and not feedback.actual_spam) else "FN"
-        
+
+        error_type = "FP" if is_fp else "FN"
+
         return {
             "status": "recorded",
             "feedback_id": feedback_id,
@@ -470,34 +682,37 @@ async def submit_feedback(feedback: FeedbackRequest, feedback_db = Depends(get_f
         }
     except Exception as e:
         logger.error(f"Error recording feedback: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to record feedback: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to record feedback: {str(e)}"
+        )
 
 
 @app.get("/feedback/report")
-async def get_feedback_report(format: Optional[str] = Query("json", pattern="^(json|html)$")):
+async def get_feedback_report(
+    format: Optional[str] = Query("json", pattern="^(json|html)$")
+) -> Dict[str, Any]:
     """
     Get feedback report showing FP/FN per rule.
-    
+
     Formats:
     - json: JSON API response
     - html: Generate and save HTML report file
     """
     from app.feedback_db import feedback_db
     from app.feedback_reporter import generate_html_report
-    
+
     rule_stats = feedback_db.get_rule_stats()
     summary = feedback_db.get_summary()
-    
+
     if format == "html":
-        # Generate HTML report file
         report_file = generate_html_report()
         return {
             "status": "generated",
             "report_file": str(report_file),
             "message": "HTML report generated successfully"
         }
-    
-    # JSON response
+
     return {
         "summary": summary,
         "per_rule": rule_stats,
@@ -510,16 +725,16 @@ async def get_feedback_entries(
     error_type: Optional[str] = Query(None, pattern="^(fp|fn)$"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0)
-):
+) -> Dict[str, Any]:
     """Get feedback entries (FP or FN examples)."""
     from app.feedback_db import feedback_db
-    
+
     entries = feedback_db.get_feedback(
         error_type=error_type,
         limit=limit,
         offset=offset
     )
-    
+
     return {
         "entries": entries,
         "count": len(entries),
@@ -528,58 +743,10 @@ async def get_feedback_entries(
     }
 
 
-# Batch classification
-@v1_router.post("/batch")
-async def v1_batch(requests: List[ClassifyRequest], client_request: Request):
-    from fastapi import Response as FastAPIResponse
-    
-    # Note: Payload size cap (256 KB) should be enforced at load balancer/nginx level
-    # FastAPI body parsing happens before this function, so we validate counts/sizes here
-    
-    if len(requests) == 0:
-        return []
-    if len(requests) > 100:
-        raise HTTPException(status_code=400, detail="Too many items (limit 100)")
+# =============================================================================
+# Router Registration
+# =============================================================================
 
-    # Per-item validation: text length <= 2000
-    for i, item in enumerate(requests):
-        if len(item.text) > 2000:
-            raise HTTPException(status_code=400, detail=f"Item {i} text too long (limit 2000 chars)")
-
-    results = []
-    for item in requests:
-        # Create a Response object for each item to collect headers
-        http_response = FastAPIResponse()
-        res = await v1_classify(item, client_request, http_response)
-        results.append(res)
-    return results
-
-
-def _generate_recommendations(rule_stats: Dict[str, Dict[str, Any]]) -> List[str]:
-    """Generate recommendations based on rule statistics."""
-    recommendations = []
-    
-    for rule_name, stats in rule_stats.items():
-        fpr = stats.get("false_positive_rate", 0.0)
-        fp_count = stats.get("false_positives", 0)
-        fn_count = stats.get("false_negatives", 0)
-        
-        if fpr > 0.10 and fp_count >= 5:
-            recommendations.append(
-                f"Rule '{rule_name}' has high FPR ({fpr:.1%}) with {fp_count} FPs. "
-                f"Consider refining the pattern or adding negative context checks."
-            )
-        
-        if fn_count >= 10:
-            recommendations.append(
-                f"Rule '{rule_name}' has {fn_count} false negatives. "
-                f"Consider expanding the pattern or lowering the score threshold."
-            )
-    
-    return recommendations[:10]  # Limit to top 10
-
-
-# Include v1 router
 app.include_router(v1_router)
 app.include_router(v1_vision_router)
 
