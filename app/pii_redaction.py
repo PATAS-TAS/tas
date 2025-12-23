@@ -14,6 +14,7 @@ class PIIRedactor:
     EMAIL_PATTERN = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
     PHONE_PATTERN = re.compile(r'(\+?\d{1,3}[-.\s]?)?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}')
     URL_PATTERN = re.compile(r'https?://[^\s]+|www\.[^\s]+')
+    URL_REDACT_PATTERN = re.compile(r'(https?://[^\s/]+)([^\s]*)?')
     CREDIT_CARD_PATTERN = re.compile(r'\b\d{4}[-.\s]?\d{4}[-.\s]?\d{4}[-.\s]?\d{4}\b')
     IP_PATTERN = re.compile(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b')
     
@@ -35,7 +36,7 @@ class PIIRedactor:
         
         # Redact URLs (but keep domain for spam detection)
         # Only redact query parameters and paths
-        result = re.sub(r'(https?://[^\s/]+)([^\s]*)?', r'\1[PATH_REDACTED]', result)
+        result = self.URL_REDACT_PATTERN.sub(r'\1[PATH_REDACTED]', result)
         
         # Redact credit cards
         result = self.CREDIT_CARD_PATTERN.sub('[CARD_REDACTED]', result)

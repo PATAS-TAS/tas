@@ -4,6 +4,21 @@ from typing import List, Tuple
 
 class RegexPatterns:
     def __init__(self):
+        # Pre-compile negative context patterns into a single regex for performance
+        self.negative_context_pattern = re.compile(
+            r"|".join([
+                r"\b(?:я|мы|он|она|они)\s+(?:работаю|работаем|работает|работают)",
+                r"\b(?:в\s+прошлом|в\s+прошлом\s+году|каждый\s+день|в\s+магазине)",
+                r"\b(?:свой|старый|продал|продали|купил|купили)\b",
+                r"\b(?:ищу|ищем|ищет)\s+(?:работу|работа)\b",
+                r"\b(?:звоню|звони|звоним)\s+(?:маме|мама|другу|друзья)\b",
+                r"\b(?:привет|hello|hi|hey|здравствуй|добрый\s+день|спасибо|thanks|thank\s+you|пожалуйста|please)\b",
+                r"\b(?:как\s+дела|how\s+are\s+you|what's\s+up|что\s+нового)\b",
+                r"\b(?:давай\s+встретимся|let's\s+meet|встреча|meeting)\b",
+                r"\b(?:завтра|tomorrow|сегодня|today|вчера|yesterday)\b",
+            ])
+        )
+
         self.patterns: List[Tuple[re.Pattern, str, float]] = [
             (re.compile(r"(?i)\b(?:https?://|www\.)[\w\-]+(\.[\w\-]+)+(?:/[\w\-._~:/?#[\]@!$&'()*+,;=%]*)?", re.IGNORECASE), "Contains URL", 0.35),
             (re.compile(r"(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})|(?:\+\d{1,3}[-.\s]?)?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}", re.IGNORECASE), "Contains phone number", 0.35),
@@ -42,18 +57,7 @@ class RegexPatterns:
         text_lower = text.lower()
         
         # Negative context checks (whitelist patterns)
-        negative_contexts = [
-            r"\b(?:я|мы|он|она|они)\s+(?:работаю|работаем|работает|работают)",
-            r"\b(?:в\s+прошлом|в\s+прошлом\s+году|каждый\s+день|в\s+магазине)",
-            r"\b(?:свой|старый|продал|продали|купил|купили)\b",
-            r"\b(?:ищу|ищем|ищет)\s+(?:работу|работа)\b",
-            r"\b(?:звоню|звони|звоним)\s+(?:маме|мама|другу|друзья)\b",
-            r"\b(?:привет|hello|hi|hey|здравствуй|добрый\s+день|спасибо|thanks|thank\s+you|пожалуйста|please)\b",
-            r"\b(?:как\s+дела|how\s+are\s+you|what's\s+up|что\s+нового)\b",
-            r"\b(?:давай\s+встретимся|let's\s+meet|встреча|meeting)\b",
-            r"\b(?:завтра|tomorrow|сегодня|today|вчера|yesterday)\b",
-        ]
-        has_negative_context = any(re.search(pattern, text_lower) for pattern in negative_contexts)
+        has_negative_context = bool(self.negative_context_pattern.search(text_lower))
         
         for pattern, reason, base_score in self.patterns:
             matches = pattern.findall(text)
