@@ -33,6 +33,7 @@ from app.constants import (
     MAX_RESPONSE_REASONS,
     MAX_LLM_REASONS,
     COMMERCIAL_KEYWORDS,
+    NEGATIVE_CONTEXT_PHRASES,
     API_VERSION,
 )
 
@@ -229,17 +230,10 @@ class MultiLayerPipeline:
             text_lower = text.lower()
 
             # Check for negative context (not a spam offer)
-            negative_context = any([
-                "в прошлом" in text_lower,
-                "в прошлом году" in text_lower,
-                "каждый день" in text_lower,
-                "в магазине" in text_lower,
-                "свой" in text_lower,
-                "старый" in text_lower,
-                "ищу работу" in text_lower,
-                "работаю" in text_lower,
-                "работаем" in text_lower,
-            ])
+            # Use generator expression for short-circuiting
+            negative_context = any(
+                phrase in text_lower for phrase in NEGATIVE_CONTEXT_PHRASES
+            )
 
             if not negative_context:
                 if word_count <= 5:

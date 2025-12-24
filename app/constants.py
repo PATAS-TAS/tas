@@ -164,6 +164,18 @@ HIGH_RISK_PATTERNS: Final[tuple[str, ...]] = (
     "Referral/affiliate scheme",
 )
 
+# Negative context phrases (not a spam offer)
+NEGATIVE_CONTEXT_PHRASES: Final[tuple[str, ...]] = (
+    "в прошлом",
+    "каждый день",
+    "в магазине",
+    "свой",
+    "старый",
+    "ищу работу",
+    "работаю",
+    "работаем",
+)
+
 # =============================================================================
 # API Versioning
 # =============================================================================
