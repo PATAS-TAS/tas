@@ -1,0 +1,219 @@
+{
+  "info": {
+    "name": "TAS API",
+    "description": "Fast & Safe Commercial Anti-Spam API collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.3"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://tas.fly.dev",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "YOUR_API_KEY",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Classification",
+      "item": [
+        {
+          "name": "Classify Single Text",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Скидки -70% сегодня, пишите в тг @sale_best!\",\n  \"lang\": \"ru\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/classify",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "classify"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Batch Classify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"text\": \"Продам iPhone 12\",\n    \"lang\": \"ru\"\n  },\n  {\n    \"text\": \"Hello, how are you?\",\n    \"lang\": \"en\"\n  }\n]"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/batch",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "batch"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/health",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Healthz (Alias)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/healthz",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "healthz"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "metrics"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Error Scenarios",
+      "item": [
+        {
+          "name": "400 - Invalid Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/classify",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "classify"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "401 - Missing API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Test message\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/classify",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "classify"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "429 - Rate Limit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Test message\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/classify",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "classify"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "413 - Payload Too Large",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[{\"text\": \"" + "x".repeat(300000) + "\"}]"
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/batch",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "batch"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
+

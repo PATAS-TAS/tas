@@ -1,0 +1,40 @@
+# Prometheus configuration for TAS monitoring
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'tas-production'
+    environment: 'production'
+
+scrape_configs:
+  - job_name: 'tas-api'
+    static_configs:
+      - targets: ['tas.fly.dev:443']
+        labels:
+          instance: 'production'
+          region: 'global'
+    metrics_path: '/v1/metrics'
+    scheme: 'https'
+    scrape_interval: 15s
+    
+  - job_name: 'tas-health'
+    static_configs:
+      - targets: ['tas.fly.dev:443']
+        labels:
+          instance: 'production'
+          region: 'global'
+    metrics_path: '/v1/health'
+    scheme: 'https'
+    scrape_interval: 30s
+    
+  # Local development (optional)
+  - job_name: 'tas-local'
+    static_configs:
+      - targets: ['localhost:8000']
+        labels:
+          instance: 'local'
+          environment: 'development'
+    metrics_path: '/v1/metrics'
+    scheme: 'http'
+    scrape_interval: 30s
+

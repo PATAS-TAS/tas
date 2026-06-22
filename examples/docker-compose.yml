@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  python-example:
+    build:
+      context: ./python
+      dockerfile: Dockerfile
+    environment:
+      - TAS_API_KEY=${TAS_API_KEY:-your-api-key}
+      - TAS_BASE_URL=${TAS_BASE_URL:-https://tas.fly.dev}
+    command: python client.py
+
+  node-example:
+    build:
+      context: ./node
+      dockerfile: Dockerfile
+    environment:
+      - TAS_API_KEY=${TAS_API_KEY:-your-api-key}
+      - TAS_BASE_URL=${TAS_BASE_URL:-https://tas.fly.dev}
+    command: node client.js
+
+  go-example:
+    build:
+      context: ./go
+      dockerfile: Dockerfile
+    environment:
+      - TAS_API_KEY=${TAS_API_KEY:-your-api-key}
+      - TAS_BASE_URL=${TAS_BASE_URL:-https://tas.fly.dev}
+    command: ./client
+
+  php-example:
+    build:
+      context: ./php
+      dockerfile: Dockerfile
+    environment:
+      - TAS_API_KEY=${TAS_API_KEY:-your-api-key}
+      - TAS_BASE_URL=${TAS_BASE_URL:-https://tas.fly.dev}
+    command: php client.php
+
+  java-example:
+    build:
+      context: ./java
+      dockerfile: Dockerfile
+    environment:
+      - TAS_API_KEY=${TAS_API_KEY:-your-api-key}
+      - TAS_BASE_URL=${TAS_BASE_URL:-https://tas.fly.dev}
+    command: java Client
+

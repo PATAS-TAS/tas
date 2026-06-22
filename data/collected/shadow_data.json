@@ -1,0 +1,8 @@
+{
+  "rules": {},
+  "summary": {
+    "total_fp": 0,
+    "total_fn": 0,
+    "rules_with_sufficient_data": 0
+  }
+}

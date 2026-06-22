@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TAS - Fast & Safe Commercial Anti-Spam API</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 1.3em;
+            margin-top: 15px;
+            font-weight: 300;
+        }
+        
+        .header p {
+            opacity: 0.85;
+            font-size: 1.1em;
+            margin-top: 10px;
+        }
+        
+        .value-prop {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            text-align: left;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .value-prop h3 {
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        
+        .value-prop ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .value-prop li {
+            padding: 5px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        
+        .value-prop li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4caf50;
+            font-weight: bold;
+        }
+        
+        .nav {
+            background: #f8f9fa;
+            padding: 15px 40px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .nav a {
+            color: #667eea;
+            text-decoration: none;
+            margin-right: 20px;
+            font-weight: 500;
+        }
+        
+        .nav a:hover {
+            text-decoration: underline;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .section:last-child {
+            border-bottom: none;
+        }
+        
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        
+        .section h3 {
+            color: #495057;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .input-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        .input-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .button-secondary {
+            background: #6c757d;
+            margin-left: 10px;
+        }
+        
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .result.show {
+            display: block;
+        }
+        
+        .result.spam {
+            background: #fee;
+            border: 2px solid #fcc;
+        }
+        
+        .result.safe {
+            background: #efe;
+            border: 2px solid #cfc;
+        }
+        
+        .score {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        pre {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        
+        code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .example-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+        
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .kpi-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .kpi-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .kpi-label {
+            color: #6c757d;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚫 TAS</h1>
+            <p class="subtitle">Stop commercial spam in your app without expensive LLM calls</p>
+            <p style="font-size: 1em; margin-top: 15px; opacity: 0.9;">
+                Fast, accurate, cost-effective API that detects spam in 200ms using smart rules, only calling LLM when needed
+            </p>
+            <div class="value-prop">
+                <h3>Why TAS?</h3>
+                <ul>
+                    <li>85% of requests handled by fast rules (< 200ms, $0 cost)</li>
+                    <li>15% use LLM only when needed (< 700ms)</li>
+                    <li>95% cost savings vs pure LLM solutions</li>
+                    <li>76% recall, < 5% false positives, 95% precision</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="nav">
+            <a href="#quickstart">Quick Start</a>
+            <a href="#modes">LLM Modes</a>
+            <a href="#pricing">Pricing</a>
+            <a href="#migration">Migration</a>
+            <a href="#limits">Limits</a>
+            <a href="#faq">FAQ</a>
+            <a href="#troubleshooting">Troubleshooting</a>
+            <a href="https://rapidapi.com" target="_blank">Try on RapidAPI →</a>
+        </div>
+        
+        <div class="content">
+            <div id="quickstart" class="section">
+                <h2>🚀 Quick Start</h2>
+                <p>Test TAS spam detection right here:</p>
+                
+                <div class="input-group">
+                    <label for="text">Enter text to check:</label>
+                    <textarea id="text" placeholder="Enter message text here..."></textarea>
+                </div>
+                
+                <button onclick="checkSpam()">Check for Spam</button>
+                <button class="button-secondary" onclick="checkSpamRulesOnly()">Try rules_only (no key)</button>
+                
+                <div class="result" id="result">
+                    <div class="score" id="score"></div>
+                    <div id="reasons"></div>
+                </div>
+                
+                <h3 style="margin-top: 30px;">cURL Example</h3>
+                <div class="example-box">
+                    <pre><code>curl -X POST https://tas.fly.dev/v1/classify \
+  -H "x-api-key: YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Скидки -70% сегодня, пишите в тг @sale_best!", "lang": "ru"}'</code></pre>
+                </div>
+                
+                <h3>Bash Example</h3>
+                <div class="example-box">
+                    <pre><code>#!/bin/bash
+API_KEY="YOUR_KEY"
+TEXT="Скидки -70% сегодня!"
+
+curl -X POST https://tas.fly.dev/v1/classify \
+  -H "x-api-key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"text\": \"$TEXT\", \"lang\": \"ru\"}"</code></pre>
+                </div>
+            </div>
+            
+            <div id="modes" class="section">
+                <h2>🔧 LLM Modes</h2>
+                <p>TAS supports three modes for LLM usage:</p>
+                
+                <h3>Managed (Default)</h3>
+                <p>Uses TAS-managed LLM credentials. No configuration needed.</p>
+                <pre><code>curl -H "x-api-key: YOUR_KEY" ...</code></pre>
+                
+                <h3>BYO (Bring Your Own)</h3>
+                <p>Use your own LLM provider credentials for cost control and compliance.</p>
+                <pre><code>curl -H "X-LLM-Mode: byo" \
+     -H "X-LLM-Provider: openai" \
+     -H "X-LLM-Key: sk-your-key" ...</code></pre>
+                
+                <h3>Rules-Only</h3>
+                <p>Fastest mode, no LLM costs. P95 ~200ms.</p>
+                <pre><code>curl -H "X-LLM-Mode: rules_only" ...</code></pre>
+                
+                <p><a href="LLM_MODES.md">Full documentation →</a></p>
+            </div>
+            
+            <div id="pricing" class="section">
+                <h2>💰 Pricing</h2>
+                
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-value">4.8%</div>
+                        <div class="kpi-label">False Positive Rate</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-value">76.2%</div>
+                        <div class="kpi-label">Recall</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-value">198ms</div>
+                        <div class="kpi-label">P95 (rules-only)</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-value">687ms</div>
+                        <div class="kpi-label">P95 (with LLM)</div>
+                    </div>
+                </div>
+                
+                <h3>Plans</h3>
+                <ul style="line-height: 2;">
+                    <li><strong>Free</strong>: 1,000 req/month, 2 rps, rules-only</li>
+                    <li><strong>Starter $9/mo</strong>: 50k req, LLM ≤ 5%, overage +20% CPM</li>
+                    <li><strong>Growth $49/mo</strong>: 500k req, LLM ≤ 10%, overage +20% CPM</li>
+                    <li><strong>Pro $199/mo</strong>: 3M req, LLM ≤ 15%, overage +20% CPM</li>
+                    <li><strong>Enterprise</strong>: Custom volume, SLA, dedicated instances</li>
+                </ul>
+                
+                <p><a href="PRICING_LIMITS.md">Full pricing details →</a></p>
+            </div>
+            
+            <div id="migration" class="section">
+                <h2>📦 API Migration</h2>
+                <p>We are introducing a new response schema alongside legacy fields.</p>
+                
+                <h3>New Response Format</h3>
+                <pre><code>{
+  "spam": true,
+  "score": 0.91,
+  "reasons": [{"code": "...", "text": "...", "weight": 0.4}],
+  "path": "rules",
+  "mode": "managed",
+  "request_id": "r_01ab234cdef"
+}</code></pre>
+                
+                <h3>Legacy Fields (Deprecated)</h3>
+                <p>Fields <code>is_spam</code>, <code>confidence</code>, <code>reason</code> will be removed after Sunset date (6 months).</p>
+                
+                <p><a href="MIGRATION.md">Migration guide →</a></p>
+            </div>
+            
+            <div id="limits" class="section">
+                <h2>⚙️ Limits</h2>
+                <ul style="line-height: 2;">
+                    <li>Single request: 1-8,192 characters</li>
+                    <li>Batch request: Up to 100 items, 256 KB payload</li>
+                    <li>Per-item text: ≤ 2,000 characters in batch</li>
+                    <li>Timeout: 10s (single), 30s (batch)</li>
+                    <li>Rate limits: Plan-specific (see Pricing)</li>
+                </ul>
+            </div>
+            
+            <div id="faq" class="section">
+                <h2>❓ FAQ</h2>
+                
+                <h3>BYO Keys</h3>
+                <p><strong>Q: Can I use my own OpenAI/Anthropic API key?</strong></p>
+                <p>A: Yes! Set <code>X-LLM-Provider</code> and <code>X-LLM-Key</code> headers, or use <code>llm_mode=byo</code>. Your key is never logged or stored.</p>
+                
+                <h3>LLM Modes</h3>
+                <p><strong>Q: What's the difference between managed, BYO, and rules_only?</strong></p>
+                <p>A: <code>managed</code> uses our LLM (you pay per request), <code>byo</code> uses your key, <code>rules_only</code> is fastest with no LLM costs.</p>
+                
+                <h3>Rate Limits</h3>
+                <p><strong>Q: What happens when I hit rate limits?</strong></p>
+                <p>A: You'll get HTTP 429 with <code>Retry-After</code> header. Upgrade your plan or wait for the reset window.</p>
+                
+                <h3>Response Format</h3>
+                <p><strong>Q: What do the reasons[] codes mean?</strong></p>
+                <p>A: Each reason has <code>code</code> (e.g., "url", "job_offer"), <code>text</code> (description), and <code>weight</code> (0-1 impact).</p>
+                
+                <h3>Error Codes</h3>
+                <p><strong>Q: What do 413 and 429 errors mean?</strong></p>
+                <p>A: 413 = Payload too large (max 256KB for batch). 429 = Rate limit exceeded (check <code>Retry-After</code> header).</p>
+                
+                <h3>Threshold Tuning</h3>
+                <p><strong>Q: Can I adjust the spam threshold?</strong></p>
+                <p>A: The API uses a fixed threshold (0.5). For custom thresholds, use the <code>score</code> field and apply your own logic.</p>
+                
+                <h3>Rules-Only Mode</h3>
+                <p><strong>Q: Can I use rules_only permanently?</strong></p>
+                <p>A: Yes! Set <code>X-LLM-Mode: rules_only</code> header or <code>LLM_MODE=rules_only</code> in config. This is the fastest and cheapest option.</p>
+            </div>
+            
+            <div id="troubleshooting" class="section">
+                <h2>🔧 Troubleshooting</h2>
+                
+                <h3>401 Unauthorized</h3>
+                <p>Check your API key in <code>X-API-Key</code> header. For RapidAPI, use the key from your dashboard.</p>
+                
+                <h3>429 Rate Limit</h3>
+                <p>You've exceeded your plan's rate limit. Check <code>X-RateLimit-Remaining</code> header. Upgrade plan or wait for reset.</p>
+                
+                <h3>413 Payload Too Large</h3>
+                <p>Batch payload exceeds 256KB. Reduce number of items or text length per item (max 2000 chars).</p>
+                
+                <h3>High Latency</h3>
+                <p>If P95 > 750ms, check LLM mode. Use <code>rules_only</code> for fastest response (< 200ms).</p>
+                
+                <h3>False Positives</h3>
+                <p>Submit feedback via <code>POST /v1/feedback</code> to help improve detection. Check <code>reasons[]</code> to understand why.</p>
+                
+                <h3>LLM Errors</h3>
+                <p>If LLM fails, API automatically falls back to rules_only mode. Check <code>mode</code> field in response.</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URLS = [
+            "https://tas.fly.dev",
+            "http://localhost:8000"
+        ];
+        
+        async function checkSpam(mode = null) {
+            const text = document.getElementById('text').value.trim();
+            if (!text) {
+                alert('Please enter text to check');
+                return;
+            }
+            
+            const loading = document.getElementById('loading');
+            if (loading) loading.classList.add('show');
+            
+            const result = document.getElementById('result');
+            result.classList.remove('show');
+            
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            
+            if (mode === 'rules_only') {
+                headers['X-LLM-Mode'] = 'rules_only';
+            } else {
+                // Try to get API key from localStorage or prompt
+                const apiKey = localStorage.getItem('tas_api_key') || prompt('Enter your TAS API key (or leave empty for demo):');
+                if (apiKey) {
+                    headers['x-api-key'] = apiKey;
+                    localStorage.setItem('tas_api_key', apiKey);
+                }
+            }
+            
+            let lastError = null;
+            for (const baseUrl of API_URLS) {
+                try {
+                    const response = await fetch(`${baseUrl}/v1/classify`, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({ text: text, lang: 'en' })
+                    });
+                    
+                    if (!response.ok) {
+                        if (response.status === 429 && mode === 'rules_only') {
+                            alert('Rate limit exceeded. Please wait a moment and try again.');
+                            return;
+                        }
+                        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                    }
+                    
+                    const data = await response.json();
+                    displayResult(data);
+                    
+                    if (loading) loading.classList.remove('show');
+                    return;
+                } catch (error) {
+                    lastError = error;
+                    console.error(`Failed to fetch from ${baseUrl}:`, error);
+                }
+            }
+            
+            if (loading) loading.classList.remove('show');
+            alert(`Error: ${lastError ? lastError.message : 'Failed to fetch. API might be unavailable.'}`);
+        }
+        
+        function checkSpamRulesOnly() {
+            checkSpam('rules_only');
+        }
+        
+        function displayResult(data) {
+            const result = document.getElementById('result');
+            const score = document.getElementById('score');
+            const reasons = document.getElementById('reasons');
+            
+            const isSpam = data.spam || data.is_spam || false;
+            const spamScore = data.score || data.confidence || 0;
+            const path = data.path || 'rules';
+            const mode = data.mode || 'managed';
+            
+            if (isSpam) {
+                score.innerHTML = `⚠️ SPAM DETECTED<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Score: <strong>${(spamScore * 100).toFixed(1)}%</strong> | Path: ${path} | Mode: ${mode}</small>`;
+                score.style.color = '#c00';
+                result.classList.add('spam');
+                result.classList.remove('safe');
+            } else {
+                score.innerHTML = `✅ SAFE<br><small style="font-size: 0.7em; opacity: 0.8; font-weight: normal;">Score: <strong>${(spamScore * 100).toFixed(1)}%</strong> | Path: ${path} | Mode: ${mode}</small>`;
+                score.style.color = '#0a0';
+                result.classList.add('safe');
+                result.classList.remove('spam');
+            }
+            
+            result.className = 'result show';
+            
+            if (data.reasons && data.reasons.length > 0) {
+                const reasonsList = data.reasons.map(r => 
+                    typeof r === 'string' ? r : `${r.code} (${r.text})`
+                ).join(', ');
+                reasons.innerHTML = `<strong>Reasons:</strong> ${reasonsList}`;
+            } else {
+                reasons.innerHTML = '';
+            }
+        }
+        
+        // Setup event listeners
+        document.getElementById('text')?.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                checkSpam();
+            }
+        });
+    </script>
+</body>
+</html>

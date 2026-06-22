@@ -1,0 +1,32 @@
+{
+  "name": "tas-sdk",
+  "version": "1.0.0",
+  "description": "Node.js SDK for TAS (Transmodal Anti-Spam) API",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "spam",
+    "anti-spam",
+    "content-moderation",
+    "api",
+    "sdk"
+  ],
+  "author": "TAS Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kiku-jw/tas.git"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
+

@@ -1,0 +1,70 @@
+[tool.poetry]
+name = "tas"
+version = "1.0.0"
+description = "Transmodal Anti-Spam REST API - Multi-layer transmodal spam detection service"
+authors = ["KikuAI Lab"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+pydantic = "^2.5.0"
+pydantic-settings = "^2.1.0"
+openai = "^1.6.0"
+python-multipart = "^0.0.6"
+cachetools = "^5.3.2"
+httpx = "^0.25.0"
+pandas = "^2.3.3"
+prometheus-client = "^0.19.0"
+click = "^8.1.7"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-asyncio = "^0.21.1"
+pytest-cov = "^4.1.0"
+httpx = "^0.25.0"
+ruff = "^0.1.6"
+mypy = "^1.7.0"
+matplotlib = "^3.8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.poetry.scripts]
+tas = "app.cli:cli"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+show_error_codes = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--ignore=tests/e2e --ignore=tests/chaos --cov=app --cov-report=term-missing --cov-fail-under=60"
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

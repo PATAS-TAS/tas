@@ -1,0 +1,59 @@
+# Reports directory (keep structure, ignore content)
+reports/*.json
+reports/**/*.json
+reports/*.html
+reports/**/*.html
+reports/*.png
+reports/**/*.png
+reports/*.log
+reports/**/*.log
+!reports/.gitkeep
+coverage.xml
+release/*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.venv
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+reports/*.log
+
+# Process files
+*.pid
+reports/*.pid
+
+# Temporary files
+*.txt
+reports/*.txt
+evaluation_results.txt
+
+# Office documents
+*.docx
+
+# Database
+*.db
+*.db-journal
+feedback.db
