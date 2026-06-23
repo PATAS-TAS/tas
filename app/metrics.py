@@ -106,11 +106,11 @@ class MetricsCollector:
         # Internal tracking for sliding window calculations
         self._window_max_size = 1000
         self._trim_fraction = 0.10  # remove oldest 10% on overflow
-        self._latency_window = deque(maxlen=self._window_max_size)
-        self._fp_window = deque(maxlen=self._window_max_size)
-        self._fn_window = deque(maxlen=self._window_max_size)
-        self._tp_window = deque(maxlen=self._window_max_size)
-        self._tn_window = deque(maxlen=self._window_max_size)
+        self._latency_window: deque[float] = deque(maxlen=self._window_max_size)
+        self._fp_window: deque[bool] = deque(maxlen=self._window_max_size)
+        self._fn_window: deque[bool] = deque(maxlen=self._window_max_size)
+        self._tp_window: deque[bool] = deque(maxlen=self._window_max_size)
+        self._tn_window: deque[bool] = deque(maxlen=self._window_max_size)
         
         self._lock = threading.Lock()
         
@@ -227,7 +227,7 @@ class MetricsCollector:
             for _ in range(fn):
                 self._append_with_trim(self._fn_window, True)
 
-    def _append_with_trim(self, dq: deque, value: Any):
+    def _append_with_trim(self, dq: deque[Any], value: Any):
         """Append to deque and bulk-trim oldest 10% when at capacity."""
         dq.append(value)
         if len(dq) >= self._window_max_size:
@@ -360,4 +360,3 @@ class MetricsCollector:
 
 # Global metrics instance
 metrics_collector = MetricsCollector()
-

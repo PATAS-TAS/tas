@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from app.llm_check import LLMCheck
     from app.rrs import ReputationRateSentinel
     from app.lur import LinkURLRisk
-    from app.sig import SignatureChecker
+    from app.sig import Signatures
     from app.rol import RuleOrchestrator
     from app.qzn import Quarantine
 
@@ -136,7 +136,7 @@ def get_lur(request: Request) -> "LinkURLRisk":
     return request.app.state.lur
 
 
-def get_sig(request: Request) -> "SignatureChecker":
+def get_sig(request: Request) -> "Signatures":
     """
     Get the Signature Checker instance.
 
@@ -144,7 +144,7 @@ def get_sig(request: Request) -> "SignatureChecker":
         request: FastAPI request object
 
     Returns:
-        SignatureChecker instance
+        Signatures instance
     """
     if not hasattr(request.app.state, "sig") or request.app.state.sig is None:
         from app.sig import sig
@@ -182,5 +182,4 @@ def get_qzn(request: Request) -> "Quarantine":
         from app.qzn import qzn
         request.app.state.qzn = qzn
     return request.app.state.qzn
-
 

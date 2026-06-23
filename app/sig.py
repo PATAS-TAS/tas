@@ -1,5 +1,5 @@
 import hashlib
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 from cachetools import TTLCache
 import logging
 
@@ -8,11 +8,11 @@ logger = logging.getLogger(__name__)
 
 class Signatures:
     def __init__(self, max_size: int = 10000, ttl: int = 86400):
-        self.signature_cache: TTLCache[str, Dict] = TTLCache(maxsize=max_size, ttl=ttl)
+        self.signature_cache: TTLCache[str, Dict[str, Any]] = TTLCache(maxsize=max_size, ttl=ttl)
         self.known_spam_signatures: Set[str] = set()
         self.shingle_size = 3
         
-    def generate_shingles(self, text: str, size: int = None) -> List[str]:
+    def generate_shingles(self, text: str, size: Optional[int] = None) -> List[str]:
         """Generate shingles (n-grams) from text."""
         if size is None:
             size = self.shingle_size
@@ -47,7 +47,7 @@ class Signatures:
         key_words = [w for w in words if any(kw in w for kw in commercial_keywords)]
         return key_words[:5]
     
-    def get_signature(self, text: str) -> Dict[str, any]:
+    def get_signature(self, text: str) -> Dict[str, Any]:
         """Get signature and metadata for message."""
         if text in self.signature_cache:
             return self.signature_cache[text]
@@ -67,7 +67,7 @@ class Signatures:
         self.signature_cache[text] = result
         return result
     
-    def check_against_known(self, text: str) -> Dict[str, float]:
+    def check_against_known(self, text: str) -> Dict[str, Any]:
         """Check if message signature matches known spam signatures."""
         sig_data = self.get_signature(text)
         signature = sig_data["signature"]
@@ -117,7 +117,7 @@ class Signatures:
         self.known_spam_signatures.update(signatures)
         logger.info(f"Loaded {len(signatures)} spam signatures from PATAS")
     
-    def check(self, text: str) -> Dict[str, float]:
+    def check(self, text: str) -> Dict[str, Any]:
         """Check message signature for spam indicators."""
         sig_data = self.get_signature(text)
         match_result = self.check_against_known(text)
@@ -132,4 +132,3 @@ class Signatures:
 
 
 sig = Signatures()
-

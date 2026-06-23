@@ -103,9 +103,14 @@ class MultiLayerPipeline:
             return_exceptions=True
         )
 
-        rrs_result = results[0] if not isinstance(results[0], Exception) else None
-        lur_result = results[1] if not isinstance(results[1], Exception) else None
-        sig_result = results[2] if not isinstance(results[2], Exception) else None
+        def ok_result(value: object) -> Optional[Dict[str, Any]]:
+            if isinstance(value, dict):
+                return value
+            return None
+
+        rrs_result = ok_result(results[0])
+        lur_result = ok_result(results[1])
+        sig_result = ok_result(results[2])
 
         # Log exceptions
         if isinstance(results[0], Exception):
@@ -351,9 +356,26 @@ class MultiLayerPipeline:
                 logger.exception("LLM fallback error")
 
         if llm_result:
-            llm_spam = llm_result.get("spam", 0.0)
-            llm_confidence = llm_result.get("confidence", 0.0)
-            llm_reasons = llm_result.get("reasons", [])
+            raw_spam = llm_result.get("spam", 0.0)
+            raw_confidence = llm_result.get("confidence", 0.0)
+            raw_reasons = llm_result.get("reasons", [])
+            llm_spam = (
+                raw_spam
+                if isinstance(raw_spam, float)
+                else float(raw_spam)
+                if isinstance(raw_spam, int)
+                else 0.0
+            )
+            llm_confidence = (
+                raw_confidence
+                if isinstance(raw_confidence, float)
+                else float(raw_confidence)
+                if isinstance(raw_confidence, int)
+                else 0.0
+            )
+            llm_reasons: List[str] = (
+                [str(reason) for reason in raw_reasons] if isinstance(raw_reasons, list) else []
+            )
 
             if llm_spam > LLM_SPAM_THRESHOLD:
                 final_score = llm_spam

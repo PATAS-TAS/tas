@@ -4,6 +4,7 @@ Feedback reporter - generates reports on FP/FN per rule.
 import json
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Any, Dict
 from app.feedback_db import feedback_db
 
 
@@ -21,7 +22,7 @@ def generate_rule_report() -> Path:
     fn_entries = feedback_db.get_feedback(error_type="fn", limit=50)
     
     # Generate report
-    report = {
+    report: Dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "summary": summary,
         "rules": []
@@ -38,7 +39,7 @@ def generate_rule_report() -> Path:
     )
     
     for rule_name, stats in sorted_rules:
-        rule_report = {
+        rule_report: Dict[str, Any] = {
             "rule_name": rule_name,
             "statistics": stats,
             "issues": []
@@ -260,4 +261,3 @@ def generate_html_report() -> Path:
         f.write(html)
     
     return report_file
-

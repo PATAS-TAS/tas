@@ -1,5 +1,5 @@
 from openai import AsyncOpenAI
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from app.config import settings
 from app.metrics import metrics_collector
 import logging
@@ -19,6 +19,7 @@ class LLMCheck:
         api_key = settings.patas_openai_api_key or settings.openai_api_key
         self.enabled = bool(api_key)
         self._warmed_up = False
+        self.client: Optional[AsyncOpenAI]
         
         if self.enabled:
             # Configure HTTP client with persistent connections and keep-alive
@@ -40,7 +41,7 @@ class LLMCheck:
             self.client = None
         
         # Cache to avoid repeated LLM calls for same content (LRU + TTL)
-        self.cache: TTLCache[str, Dict] = TTLCache(
+        self.cache: TTLCache[str, Dict[str, Any]] = TTLCache(
             maxsize=getattr(settings, "llm_cache_size", 5000),
             ttl=getattr(settings, "llm_cache_ttl", 86400),
         )
@@ -91,7 +92,7 @@ class LLMCheck:
             logger.warning(f"LLM warm-up failed: {e}")
             return False
     
-    def get_metrics(self) -> Dict:
+    def get_metrics(self) -> Dict[str, Any]:
         """Get cache metrics."""
         hit_rate = (self.cache_hits / self.total_requests * 100) if self.total_requests > 0 else 0.0
         down_remaining = 0.0
@@ -138,7 +139,7 @@ class LLMCheck:
         text: str, 
         byo_provider: Optional[str] = None,
         byo_api_key: Optional[str] = None
-    ) -> Optional[Dict[str, float]]:
+    ) -> Optional[Dict[str, Any]]:
         # BYO mode: create temporary client
         client_to_use = self.client
         if byo_provider and byo_api_key:

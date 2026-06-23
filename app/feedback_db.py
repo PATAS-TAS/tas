@@ -112,6 +112,9 @@ class FeedbackDB:
         ))
         
         feedback_id = cursor.lastrowid
+        if feedback_id is None:
+            conn.close()
+            raise RuntimeError("SQLite did not return a feedback id")
         
         # Update rule statistics
         if matched_rules:
@@ -166,7 +169,7 @@ class FeedbackDB:
         cursor = conn.cursor()
         
         query = "SELECT * FROM feedback WHERE 1=1"
-        params = []
+        params: List[Any] = []
         
         if error_type:
             query += " AND error_type = ?"
