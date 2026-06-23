@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
-from app.rule_importer import RuleImporter, rule_importer
+from app.rule_importer import rule_importer
 import logging
 import hashlib
 from collections import defaultdict

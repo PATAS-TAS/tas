@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta, timezone
 from cachetools import TTLCache
 import logging
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class Quarantine:
     def __init__(self, max_size: int = 10000, default_ttl: int = 3600):
-        self.quarantine_cache: TTLCache[str, Dict] = TTLCache(maxsize=max_size, ttl=default_ttl * 2)
+        self.quarantine_cache: TTLCache[str, Dict[str, Any]] = TTLCache(maxsize=max_size, ttl=default_ttl * 2)
         self.default_ttl = default_ttl
         self.statuses = {
             "quarantined": 0,
@@ -16,7 +16,9 @@ class Quarantine:
             "banned": 2
         }
         
-    def add_to_quarantine(self, message_id: str, text: str, score: float, ttl: Optional[int] = None) -> Dict:
+    def add_to_quarantine(
+        self, message_id: str, text: str, score: float, ttl: Optional[int] = None
+    ) -> Dict[str, Any]:
         """Add message to quarantine."""
         if ttl is None:
             ttl = self.default_ttl
@@ -35,7 +37,7 @@ class Quarantine:
         logger.info(f"Message {message_id} quarantined (score: {score:.2f}, TTL: {ttl}s)")
         return entry
     
-    def get_quarantine_status(self, message_id: str) -> Optional[Dict]:
+    def get_quarantine_status(self, message_id: str) -> Optional[Dict[str, Any]]:
         """Get quarantine status for message."""
         return self.quarantine_cache.get(message_id)
     
@@ -93,10 +95,15 @@ class Quarantine:
         
         return stats
     
-    def check(self, message_id: str, text: str, score: float) -> Dict[str, any]:
+    def check(self, message_id: str, text: str, score: float) -> Dict[str, Any]:
         """Check if message should be quarantined."""
         if self.is_quarantined(message_id):
             entry = self.get_quarantine_status(message_id)
+            if entry is None:
+                return {
+                    "is_quarantined": False,
+                    "status": "allowed"
+                }
             return {
                 "is_quarantined": True,
                 "status": entry.get("status"),
@@ -119,4 +126,3 @@ class Quarantine:
 
 
 qzn = Quarantine()
-

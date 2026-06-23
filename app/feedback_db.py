@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
-from collections import defaultdict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -113,6 +112,9 @@ class FeedbackDB:
         ))
         
         feedback_id = cursor.lastrowid
+        if feedback_id is None:
+            conn.close()
+            raise RuntimeError("SQLite did not return a feedback id")
         
         # Update rule statistics
         if matched_rules:
@@ -167,7 +169,7 @@ class FeedbackDB:
         cursor = conn.cursor()
         
         query = "SELECT * FROM feedback WHERE 1=1"
-        params = []
+        params: List[Any] = []
         
         if error_type:
             query += " AND error_type = ?"
@@ -229,7 +231,6 @@ class FeedbackDB:
             fp = row["false_positives"]
             fn = row["false_negatives"]
             tn = row["true_negatives"]
-            total = tp + fp + fn + tn
             
             precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
             recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
@@ -280,4 +281,3 @@ class FeedbackDB:
 
 # Global instance
 feedback_db = FeedbackDB()
-

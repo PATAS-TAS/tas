@@ -5,9 +5,7 @@ Analyzes images for commercial spam text using OpenRouter vision models.
 
 import base64
 import logging
-from pathlib import Path
 from typing import Optional, Dict, Any
-from datetime import datetime, timezone
 import httpx
 from app.config import settings
 

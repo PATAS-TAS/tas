@@ -1,10 +1,9 @@
 """
 Simple LRU cache for text classification results.
 """
-from cachetools import LRUCache, TTLCache
+from cachetools import TTLCache
 from typing import Optional, Dict
 import hashlib
-import time
 
 
 class ClassificationCache:

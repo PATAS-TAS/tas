@@ -10,8 +10,7 @@ from typing import Dict, Any
 # Add app to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.metrics import metrics_collector
-from app.config import settings
+from app.metrics import metrics_collector  # noqa: E402
 
 
 @click.group()
@@ -104,9 +103,9 @@ def _print_table(metrics: Dict[str, Any], alerts: list):
     click.echo(f"  Total Cost:          ${total_cost:.2f}")
     
     if metrics['budget_warning']:
-        click.echo(f"  ⚠️  Warning: Daily cost is above 80% of budget")
+        click.echo("  ⚠️  Warning: Daily cost is above 80% of budget")
     if metrics['budget_exceeded']:
-        click.echo(f"  🔴 Critical: Daily cost exceeds budget!")
+        click.echo("  🔴 Critical: Daily cost exceeds budget!")
     click.echo()
     
     # Alerts
@@ -130,7 +129,7 @@ def budget(daily: float, monthly: float):
     """Set cost budgets."""
     if daily is None and monthly is None:
         current = metrics_collector.get_current_metrics()
-        click.echo(f"Current budgets:")
+        click.echo("Current budgets:")
         click.echo(f"  Daily:   ${current['daily_budget_usd']:.2f}")
         click.echo(f"  Monthly: ${current['monthly_budget_usd']:.2f}")
         return
@@ -167,7 +166,6 @@ def alerts():
 @cli.command()
 def quickstart():
     """Quick start guide - generate .env and run example SDK calls."""
-    import os
     from pathlib import Path
     
     click.echo("🚀 TAS Quick Start")
@@ -316,4 +314,3 @@ def guard(max_llm: float, max_spend: float, dry_run: bool):
 
 if __name__ == '__main__':
     cli()
-

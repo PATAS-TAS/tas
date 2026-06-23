@@ -1,5 +1,4 @@
-from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
@@ -35,8 +34,9 @@ class Settings(BaseSettings):
     openrouter_api_key: Optional[str] = None  # OpenRouter API key for vision models
     vision_model: str = "openai/gpt-4o-mini"  # Vision model to use
     app_url: str = "https://tas.fly.dev"  # App URL for OpenRouter referer
+    model_name: str = "cointegrated/rubert-tiny2"
     
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
         extra="ignore"
@@ -44,4 +44,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
