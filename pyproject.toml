@@ -8,26 +8,26 @@ packages = [{include = "app"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-fastapi = "^0.104.1"
-uvicorn = {extras = ["standard"], version = "^0.24.0"}
-pydantic = "^2.5.0"
-pydantic-settings = "^2.1.0"
+fastapi = "^0.139.2"
+uvicorn = {extras = ["standard"], version = "^0.51.0"}
+pydantic = "^2.13.4"
+pydantic-settings = "^2.14.2"
 openai = "^1.6.0"
-python-multipart = "^0.0.6"
+python-multipart = "^0.0.32"
 cachetools = "^5.3.2"
-httpx = "^0.25.0"
+httpx = "^0.28.1"
 pandas = "^2.3.3"
-prometheus-client = "^0.19.0"
-click = "^8.1.7"
+prometheus-client = "^0.25.0"
+click = "^8.4.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
 pytest-asyncio = "^0.21.1"
 pytest-cov = "^4.1.0"
-httpx = "^0.25.0"
-ruff = "^0.1.6"
+httpx = "^0.28.1"
+ruff = "^0.15.22"
 mypy = "^1.7.0"
-matplotlib = "^3.8.0"
+matplotlib = "^3.10.9"
 
 [build-system]
 requires = ["poetry-core"]
